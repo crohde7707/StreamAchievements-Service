@@ -1,0 +1,6 @@
+node_modules
+configs/keys.js
+npm-debug*
+package-lock.json
+example-messages
+bigbrother.js
