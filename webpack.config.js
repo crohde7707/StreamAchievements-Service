@@ -8,7 +8,7 @@ const serverConfig = {
   },
   output: {
     path: path.resolve(__dirname, "./dist"),
-    filename: "bundle.js"
+    filename: "bundle.[hash].js"
   },
   externals: [nodeExternals()],
 };
