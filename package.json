@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "nodemon ./server/main.js",
     "server": "node ./server/main.js",
-    "start": "node ./dist/bundle.*.js",
+    "start": "webpack -p --config ./webpack.config.js --progress; node ./dist/bundle.*.js",
     "build": "webpack --config ./webpack.config.js",
-    "heroku-postbuild": "webpack -p --config ./webpack.config.js --progress"
+    "heroku-postbuild": "webpack -p --config ./webpack.config.js --progress",
+    "aws-start": "heroku-postbuild && start"
   },
   "keywords": [],
   "author": "",
