@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon ./server/main.js",
     "server": "node ./server/main.js",
-    "start": "node ./dist/bundle.*.js",
+    "start": "node ./dist/server.js",
     "build": "webpack -p --config ./webpack.config.js --progress",
     "heroku-postbuild": "webpack -p --config ./webpack.config.js --progress"
   },
