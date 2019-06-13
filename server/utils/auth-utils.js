@@ -23,7 +23,7 @@ const isAuthorized = async (req, res, next) => {
 	} else {
 		res.clearCookie('etid'); //set path to streamachievements.com when ready
 		res.status(401);
-		res.redirect('http://localhost:3000');
+		res.redirect('http://streamachievements.com');
 	}
 }
 

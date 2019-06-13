@@ -15,7 +15,7 @@ let patreonOAuth = patreon.oauth;
 
 let patreonOauthClient = patreonOAuth(keys.patreon2.clientID, keys.patreon2.clientSecret);
 
-const CALLBACK_URL = 'http://localhost:5000/auth/patreon/redirect';
+const CALLBACK_URL = 'http://api.streamachievements.com/auth/patreon/redirect';
 const PATREON_IDENTITY_API = 'https://www.patreon.com/api/oauth2/v2/identity?include=memberships&fields%5Buser%5D=thumb_url,vanity';
 const SILVER_TIER_ID = '3497636';
 const GOLD_TIER_ID = '3497710';
@@ -42,7 +42,7 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 		console.log('cookie exists', cookie);
 	} 
 
-	res.redirect('http://localhost:3000/home');
+	res.redirect('http://streamachievements.com/home');
 
 });
 
@@ -133,7 +133,7 @@ router.get('/patreon/redirect', isAuthorized, (req, res) => {
 
 		req.user.save().then(savedUser => {
 			//2604384
-			res.redirect('http://localhost:3000/profile');
+			res.redirect('http://streamachievements.com/profile');
 		});
 
 	});
@@ -222,7 +222,7 @@ let patreonSync = (user, etid) => {
 router.get('/logout', (req, res) => {
 	req.logout();
 	res.clearCookie('etid');
-	res.redirect('http://localhost:3000/');
+	res.redirect('http://streamachievements.com/');
 });
 
 module.exports = router;

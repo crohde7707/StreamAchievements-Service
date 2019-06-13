@@ -7,24 +7,12 @@ const Cryptr = require('cryptr');
 const cryptr = new Cryptr(keys.session.cookieKey);
 
 const SESSION_SECRET = process.env.SESSION_SECRET;
-const CALLBACK_URL = 'http://localhost:5000/auth/twitch/redirect';
+const CALLBACK_URL = 'http://api.streamachievements.com/auth/twitch/redirect';
 
 passport.serializeUser((user, done) => {
 	console.log("serializeUser");
 	done(null, user);
 });
-
-// passport.deserializeUser((etid, done) => {
-// 	console.log("deserializeUser");
-// 	User.findOne({'integration.twitch.etid': etid}).then((foundUser) => {
-// 		if(foundUser) {
-// 			console.log(foundUser);
-// 			done(null, foundUser);
-// 		} else {
-// 			done(null, null);
-// 		}
-// 	});
-// });
 
 passport.use(
 	new TwitchStrategy({
