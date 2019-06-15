@@ -8,6 +8,7 @@ const passportSetup = require('./configs/passport-setup');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 const refresh = require('./utils/refresh-cookie').refreshCookie;
+const allowAccess = require('./utils/access-utils').allowAccess;
 
 //let io = module.exports.io = require('socket.io');
 //let SocketManager = require('./SocketManager').initSocket;
@@ -46,14 +47,8 @@ app.use(passport.session());
 
 app.use(express.static('public'));
 
-app.use((req, res, next) => {
-	res.header("Access-Control-Allow-Origin", "http://streamachievements.com");
-	res.header("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-	next();
-});
-
-app.use('/auth', refresh, authRoutes);
-app.use('/api', refresh, apiRoutes);
+app.use('/auth', [allowAccess, refresh], authRoutes);
+app.use('/api', [allowAccess, refresh], apiRoutes);
 
 app.use(express.static(path.join(__dirname, 'client/build')));
 
