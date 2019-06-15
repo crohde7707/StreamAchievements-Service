@@ -46,6 +46,12 @@ app.use(passport.session());
 
 app.use(express.static('public'));
 
+app.use((req, res, next) => {
+	res.header("Access-Control-Allow-Origin", "http://streamachievements.com");
+	res.header("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+	next();
+});
+
 app.use('/auth', refresh, authRoutes);
 app.use('/api', refresh, apiRoutes);
 
