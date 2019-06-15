@@ -36,13 +36,16 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 	if (cookie === undefined || cookie !== req.user.integration.twitch.etid) {
 		let etid = cryptr.encrypt(req.user.integration.twitch.etid);
 		// no: set a new cookie
-		res.cookie('etid', etid, { maxAge: 24 * 60 * 60 * 1000, httpOnly: false, domain: '.streamachievements.com' });
+		console.log(etid);
+		res.cookie('etid', etid, { maxAge: 24 * 60 * 60 * 1000, httpOnly: false, domain: 'streamachievements.com' });
+		res.cookie('etid2', 'foobar', { httpOnly: false, domain: 'streamachievements.com' });
+		res.cookie('etid3', 'baz', {httpOnly: false, domain: '.streamachievements.com'});
 	} else {
 		// yes, cookie was already present 
 		console.log('cookie exists', cookie);
 	} 
 
-	res.redirect('http://streamachievements.com/home');
+	res.redirect('http://www.streamachievements.com/home');
 
 });
 
