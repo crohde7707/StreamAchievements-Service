@@ -43,8 +43,67 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 		console.log('cookie exists', cookie);
 	} 
 
-	res.redirect('http://www.streamachievements.com/home');
+	//Check if user is a patron, and call out if so
+	let patreonInfo = req.user.integration.patreon;
+	let patreonPromise;
 
+	if(patreon) {
+		if(patreon.status === 'lifetime') {
+			//User either owner or granted lifetime access
+			patreonPromise = Promise.resolve();
+		} else {
+			let patreonPromise = new Promise((resolve, reject) => {
+
+				let longID = patreon.id;
+
+				axios.get(`https://www.patreon.com/api/oauth2/v2/members/${longID}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
+					headers: {
+						Authorization: `Bearer ${patreon.at}`
+					}
+				}).then(res => {
+					
+					//active_patron, declined_patron, former_patron, null
+					let patron_status = res.data.data.attributes.patron_status;
+					let is_follower = res.data.data.attributes.is_follower;
+					let tiers = res.data.data.relationships.currently_entitled_tiers;
+					let isGold = tiers.data.map(tier => tier.id).indexOf(GOLD_TIER_ID) >= 0;
+
+					resolve({
+						id: patreon.id,
+						thumb_url: patreon.thumb_url,
+						vanity: patreon.vanity,
+						at: patreon.at,
+						rt: patreon.rt,
+						is_follower,
+						status: patron_status,
+						is_gold: isGold
+					});
+				});
+			});
+		}
+	} else {
+		patreonPromise = Promise.resolve();
+	}
+
+	patreonPromise.then((update) => {
+
+		if(update) {
+			let {id, thumb_url, vanity, at, rt, is_follower, status, is_gold} = patreonData;
+
+			let integration = Object.assign({}, req.user.integration);
+
+			integration.patreon = {id, thumb_url, vanity, at, rt, is_follower, status, is_gold};
+
+			req.user.integration = integration;
+
+			req.user.save().then(savedUser => {
+				res.redirect('http://streamachievements.com/home');
+			});
+		} else {
+			res.redirect('http://www.streamachievements.com/home');		
+		}
+	});
+	
 });
 
 router.get('/patreon', isAuthorized, (req, res) => {

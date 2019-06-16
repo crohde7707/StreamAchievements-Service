@@ -206,7 +206,7 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 								return ach
 							})
 						} else {
-							earned = [];
+							retAchievements = [];
 						}
 
 						res.json({
@@ -667,11 +667,6 @@ router.post('/verify', isAuthorized, (req, res) => {
 					expired: true
 				});
 			} else {
-				// Token.deleteOne({uid: req.user._id, token}).then(err => {
-				// 	res.json({
-				// 		verified: true
-				// 	});
-				// });
 				new Channel({
 					owner: req.user.name,
 					twitchID: req.user.integration.twitch.etid,
@@ -682,9 +677,11 @@ router.post('/verify', isAuthorized, (req, res) => {
 				}).save().then((newChannel) => {
 					req.user.channelID = newChannel.id;
 					req.user.save().then((savedUser) => {
-						res.json({
-							verified: true
-						});
+						Token.deleteOne({uid: req.user._id, token}).then(err => {
+							res.json({
+								verified: true
+							});	
+						})
 					});
 				});
 			}
