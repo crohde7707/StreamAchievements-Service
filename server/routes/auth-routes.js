@@ -38,8 +38,6 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 		// no: set a new cookie
 		console.log(etid);
 		res.cookie('etid', etid, { maxAge: 24 * 60 * 60 * 1000, httpOnly: false, domain: 'streamachievements.com' });
-		res.cookie('etid2', 'foobar', { httpOnly: false, domain: 'streamachievements.com' });
-		res.cookie('etid3', 'baz', {httpOnly: false, domain: '.streamachievements.com'});
 	} else {
 		// yes, cookie was already present 
 		console.log('cookie exists', cookie);
@@ -224,7 +222,7 @@ let patreonSync = (user, etid) => {
 
 router.get('/logout', (req, res) => {
 	req.logout();
-	res.clearCookie('etid');
+	res.clearCookie('etid', { domain: 'streamachievements.com' });
 	res.redirect('http://streamachievements.com/');
 });
 
