@@ -18,7 +18,7 @@ const isAuthorized = async (req, res, next) => {
 			
 	if(foundUser) {
 		req.user = foundUser;
-		res.cookie('etid', req.cookies.etid, { maxAge: 24 * 60 * 60 * 1000, httpOnly: false });
+		res.cookie('etid', req.cookies.etid, { maxAge: 24 * 60 * 60 * 1000, httpOnly: false, domain: 'streamachievements.com' });
 		next();
 	} else {
 		res.clearCookie('etid'); //set path to streamachievements.com when ready
@@ -35,6 +35,7 @@ const isAdminAuthorized = async (req, res, next) => {
 	if(foundUser) {
 		if(foundUser.type = 'admin') {
 			res.user = foundUser;
+			res.cookie('etid', req.cookies.etid, { maxAge: 24 * 60 * 60 * 1000, httpOnly: false, domain: 'streamachievements.com' });
 			next();
 		} else {
 			res.status(401);
