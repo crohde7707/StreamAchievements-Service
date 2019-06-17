@@ -25,7 +25,7 @@ app.use(cookieParser());
 app.use(bodyParser({limit: '50mb', extended: true}));
 
 // connect to mongodb
-mongoose.connect(precess.env.MDB, {useNewUrlParser: true}, () => {
+mongoose.connect(process.env.MDB, {useNewUrlParser: true}, () => {
 	console.log('connected to mongodb');
 });
 
