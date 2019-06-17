@@ -206,7 +206,7 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 								return ach
 							})
 						} else {
-							retAchievements = [];
+							retAchievements = foundAchievements;
 						}
 
 						res.json({
