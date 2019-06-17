@@ -47,18 +47,18 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 	let patreonInfo = req.user.integration.patreon;
 	let patreonPromise;
 
-	if(patreon) {
-		if(patreon.status === 'lifetime') {
+	if(patreonInfo) {
+		if(patreonInfo.status === 'lifetime') {
 			//User either owner or granted lifetime access
 			patreonPromise = Promise.resolve();
 		} else {
 			let patreonPromise = new Promise((resolve, reject) => {
 
-				let longID = patreon.id;
+				let longID = patreonInfo.id;
 
 				axios.get(`https://www.patreon.com/api/oauth2/v2/members/${longID}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
 					headers: {
-						Authorization: `Bearer ${patreon.at}`
+						Authorization: `Bearer ${patreonInfo.at}`
 					}
 				}).then(res => {
 					
@@ -69,11 +69,11 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 					let isGold = tiers.data.map(tier => tier.id).indexOf(GOLD_TIER_ID) >= 0;
 
 					resolve({
-						id: patreon.id,
-						thumb_url: patreon.thumb_url,
-						vanity: patreon.vanity,
-						at: patreon.at,
-						rt: patreon.rt,
+						id: patreonInfo.id,
+						thumb_url: patreonInfo.thumb_url,
+						vanity: patreonInfo.vanity,
+						at: patreonInfo.at,
+						rt: patreonInfo.rt,
 						is_follower,
 						status: patron_status,
 						is_gold: isGold
@@ -88,7 +88,7 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 	patreonPromise.then((update) => {
 
 		if(update) {
-			let {id, thumb_url, vanity, at, rt, is_follower, status, is_gold} = patreonData;
+			let {id, thumb_url, vanity, at, rt, is_follower, status, is_gold} = update;
 
 			let integration = Object.assign({}, req.user.integration);
 
