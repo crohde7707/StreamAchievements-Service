@@ -1,12 +1,11 @@
-const keys = require('../configs/keys');
 const Image = require('../models/image-model');
 
 let cloudinary = require('cloudinary').v2;
 
 cloudinary.config({
-	cloud_name: keys.cloudinary.name,
-	api_key: keys.cloudinary.apiKey,
-	api_secret: keys.cloudinary.apiSecret
+	cloud_name: process.env.CLDNAME,
+	api_key: process.env.CLDKEY,
+	api_secret: process.env.CLDS
 });
 
 let uploadImage = (blob, fileName, channelName, type) => {

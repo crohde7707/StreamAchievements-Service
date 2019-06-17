@@ -3,7 +3,6 @@ const path = require('path');
 const mongoose = require('mongoose');
 const cookieSession = require('cookie-session');
 const passport = require('passport');
-const keys = require('./configs/keys');
 const passportSetup = require('./configs/passport-setup');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
@@ -26,14 +25,14 @@ app.use(cookieParser());
 app.use(bodyParser({limit: '50mb', extended: true}));
 
 // connect to mongodb
-mongoose.connect(keys.mongodb.dbURI, {useNewUrlParser: true}, () => {
+mongoose.connect(precess.env.MDB, {useNewUrlParser: true}, () => {
 	console.log('connected to mongodb');
 });
 
 app.use(cookieSession({
 	name: 'e2tid',
 	maxAge: 1000,
-	keys: keys.session.cookieKey,
+	keys: process.env.SCK,
 	cookie: {
 		httpOnly: true,
 		expires: new Date(Date.now() + 60 * 60 * 1000)

@@ -1,9 +1,8 @@
 const router = require('express').Router();
 const passport = require('passport');
-const keys = require('../configs/keys');
 const Cryptr = require('cryptr');
 const axios = require('axios');
-const cryptr = new Cryptr(keys.session.cookieKey);
+const cryptr = new Cryptr(process.env.SCK);
 const isAuthorized = require('../utils/auth-utils').isAuthorized;
 const User = require('../models/user-model');
 
@@ -13,9 +12,8 @@ let patreon = require('patreon');
 let patreonAPI = patreon.patreon;
 let patreonOAuth = patreon.oauth;
 
-let patreonOauthClient = patreonOAuth(keys.patreon2.clientID, keys.patreon2.clientSecret);
+let patreonOauthClient = patreonOAuth(process.env.PCID, process.env.PCS);
 
-const CALLBACK_URL = 'http://api.streamachievements.com/auth/patreon/redirect';
 const PATREON_IDENTITY_API = 'https://www.patreon.com/api/oauth2/v2/identity?include=memberships&fields%5Buser%5D=thumb_url,vanity';
 const SILVER_TIER_ID = '3497636';
 const GOLD_TIER_ID = '3497710';
@@ -100,8 +98,8 @@ router.get('/patreon', isAuthorized, (req, res) => {
 
 	let patreonURL = 'https://www.patreon.com/oauth2/authorize?';
 	patreonURL += 'response_type=code&';
-	patreonURL += 'client_id=' + keys.patreon2.clientID + '&';
-	patreonURL += 'redirect_uri=' + CALLBACK_URL;
+	patreonURL += 'client_id=' + process.env.PCID + '&';
+	patreonURL += 'redirect_uri=' + process.env.PPR;
 	patreonURL += '&scope=campaigns%20identity%20identity%5Bemail%5D%20campaigns.members'
 
 	res.redirect(patreonURL);
@@ -110,7 +108,7 @@ router.get('/patreon', isAuthorized, (req, res) => {
 router.get('/patreon/redirect', isAuthorized, (req, res) => {
 	let oauthGrantCode = req.query.code;
 
-	return patreonOauthClient.getTokens(oauthGrantCode, CALLBACK_URL).then(tokenResponse => {
+	return patreonOauthClient.getTokens(oauthGrantCode, process.env.PPR).then(tokenResponse => {
 		let patreonAPIClient = patreonAPI(tokenResponse.access_token)
 		let etid = (req.cookies.etid);
 

@@ -1,7 +1,6 @@
 const User = require('../models/user-model');
-const keys = require('../configs/keys');
 const Cryptr = require('cryptr');
-const cryptr = new Cryptr(keys.session.cookieKey);
+const cryptr = new Cryptr(process.env.SCK);
 
 const authCheck = (req, res, next) => {
 	if(!req.user) {

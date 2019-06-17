@@ -1,29 +1,20 @@
 const passport = require('passport');
 const TwitchStrategy = require('passport-twitch').Strategy;
-const keys = require('./keys');
 const User = require('../models/user-model');
 const Cryptr = require('cryptr');
-
-const cryptr = new Cryptr(keys.session.cookieKey);
-
-const SESSION_SECRET = process.env.SESSION_SECRET;
-const CALLBACK_URL = 'http://api.streamachievements.com/auth/twitch/redirect';
+const cryptr = new Cryptr(process.env.SCK);
 
 passport.serializeUser((user, done) => {
-	console.log("serializeUser");
 	done(null, user);
 });
 
 passport.use(
 	new TwitchStrategy({
 		//options for strategy
-		clientID: keys.twitch.clientID,
-		clientSecret: keys.twitch.clientSecret,
-		callbackURL: CALLBACK_URL
+		clientID: process.env.TCID,
+		clientSecret: process.env.TCS,
+		callbackURL: process.env.TPR
 	}, (accessToken, refreshToken, profile, done) => {
-
-		console.log(profile);
-
 		let e_token = cryptr.encrypt(accessToken);
 		let e_refresh = cryptr.encrypt(refreshToken);
 
