@@ -29,19 +29,9 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 
 	req.session.user = req.user;
 
-	//req.session.save();
-
 	//Set Cookie
-	var cookie = req.cookies['etid'];
-	if (cookie === undefined || cookie !== req.user.integration.twitch.etid) {
-		let etid = cryptr.encrypt(req.user.integration.twitch.etid);
-		// no: set a new cookie
-		console.log(etid);
-		res.cookie('etid', etid, { maxAge: 24 * 60 * 60 * 1000, httpOnly: false, domain: 'streamachievements.com' });
-	} else {
-		// yes, cookie was already present 
-		console.log('cookie exists', cookie);
-	} 
+	let etid = cryptr.encrypt(req.user.integration.twitch.etid);
+	res.cookie('etid', etid, { maxAge: 24 * 60 * 60 * 1000, httpOnly: false, domain: 'streamachievements.com' });
 
 	//Check if user is a patron, and call out if so
 	let patreonInfo = req.user.integration.patreon;
@@ -84,10 +74,10 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 	} else {
 		patreonPromise = Promise.resolve();
 	}
+	console.log('about to resolve patreon promise');
+	Promise.all([patreonPromise]).then(update => {
 
-	patreonPromise.then((update) => {
-
-		if(update) {
+		if(update.length > 0) {
 			let {id, thumb_url, vanity, at, rt, is_follower, status, is_gold} = update;
 
 			let integration = Object.assign({}, req.user.integration);
