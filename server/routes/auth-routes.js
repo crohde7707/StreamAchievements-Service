@@ -29,7 +29,14 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 
 	//Set Cookie
 	let etid = cryptr.encrypt(req.user.integration.twitch.etid);
-	res.cookie('etid', etid, { maxAge: 24 * 60 * 60 * 1000, httpOnly: false, domain: 'streamachievements.com' });
+
+	if(process.env.NODE_ENV === 'production') {
+		console.log('setting etid for production');
+		res.cookie('etid', etid, { maxAge: 24 * 60 * 60 * 1000, httpOnly: false, domain: 'streamachievements.com' });
+	} else {
+		console.log('setting etid cookie');
+		res.cookie('etid', etid, { maxAge: 24 * 60 * 60 * 1000, httpOnly: false });
+	}
 
 	//Check if user is a patron, and call out if so
 	let patreonInfo = req.user.integration.patreon;
@@ -43,10 +50,11 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 			let patreonPromise = new Promise((resolve, reject) => {
 
 				let longID = patreonInfo.id;
+				let at = cryptr.decrypt(patreonInfo.at);
 
 				axios.get(`https://www.patreon.com/api/oauth2/v2/members/${longID}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
 					headers: {
-						Authorization: `Bearer ${patreonInfo.at}`
+						Authorization: `Bearer ${at}`
 					}
 				}).then(res => {
 					
@@ -85,10 +93,10 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 			req.user.integration = integration;
 
 			req.user.save().then(savedUser => {
-				res.redirect('http://streamachievements.com/home');
+				res.redirect(process.env.WEB_DOMAIN + 'home');
 			});
 		} else {
-			res.redirect('http://www.streamachievements.com/home');		
+			res.redirect(process.env.WEB_DOMAIN + 'home');		
 		}
 	});
 	
@@ -269,8 +277,14 @@ let patreonSync = (user, etid) => {
 
 router.get('/logout', (req, res) => {
 	req.logout();
-	res.clearCookie('etid', { domain: 'streamachievements.com' });
-	res.redirect('http://streamachievements.com/');
+	if(process.env.NODE_ENV === 'production') {
+		res.clearCookie('etid', { domain: 'streamachievements.com' });
+	} else {
+		res.clearCookie('etid');
+	}
+
+	res.redirect(process.env.WEB_DOMAIN);
+	
 });
 
 module.exports = router;
