@@ -42,63 +42,48 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 	let patreonInfo = req.user.integration.patreon;
 	let patreonPromise;
 
-	if(patreonInfo) {
-		if(patreonInfo.status === 'lifetime') {
-			//User either owner or granted lifetime access
-			patreonPromise = Promise.resolve();
-		} else {
-			let patreonPromise = new Promise((resolve, reject) => {
+	if(patreonInfo && patreonInfo.status !== 'lifetime') {
+		let longID = patreonInfo.id;
+		let at = cryptr.decrypt(patreonInfo.at);
+		console.log(at);
+		console.log(patreonInfo);
 
-				let longID = patreonInfo.id;
-				let at = cryptr.decrypt(patreonInfo.at);
+		axios.get(`https://www.patreon.com/api/oauth2/v2/members/${longID}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
+			headers: {
+				Authorization: `Bearer ${at}`
+			}
+		}).then(response => {
+			console.log(response.data.data);
+			//active_patron, declined_patron, former_patron, null
+			let patron_status = response.data.data.attributes.patron_status;
+			let is_follower = response.data.data.attributes.is_follower;
+			let tiers = response.data.data.relationships.currently_entitled_tiers;
+			let isGold = tiers.data.map(tier => tier.id).indexOf(GOLD_TIER_ID) >= 0;
 
-				axios.get(`https://www.patreon.com/api/oauth2/v2/members/${longID}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
-					headers: {
-						Authorization: `Bearer ${at}`
-					}
-				}).then(res => {
-					
-					//active_patron, declined_patron, former_patron, null
-					let patron_status = res.data.data.attributes.patron_status;
-					let is_follower = res.data.data.attributes.is_follower;
-					let tiers = res.data.data.relationships.currently_entitled_tiers;
-					let isGold = tiers.data.map(tier => tier.id).indexOf(GOLD_TIER_ID) >= 0;
-
-					resolve({
-						id: patreonInfo.id,
-						thumb_url: patreonInfo.thumb_url,
-						vanity: patreonInfo.vanity,
-						at: patreonInfo.at,
-						rt: patreonInfo.rt,
-						is_follower,
-						status: patron_status,
-						is_gold: isGold
-					});
-				});
-			});
-		}
-	} else {
-		patreonPromise = Promise.resolve();
-	}
-	console.log('about to resolve patreon promise');
-	Promise.all([patreonPromise]).then(update => {
-
-		if(update.length > 0) {
-			let {id, thumb_url, vanity, at, rt, is_follower, status, is_gold} = update;
+			let patreonUpdate = {
+				id: patreonInfo.id,
+				thumb_url: patreonInfo.thumb_url,
+				vanity: patreonInfo.vanity,
+				at: patreonInfo.at,
+				rt: patreonInfo.rt,
+				is_follower,
+				status: patron_status,
+				is_gold: isGold
+			};
 
 			let integration = Object.assign({}, req.user.integration);
 
-			integration.patreon = {id, thumb_url, vanity, at, rt, is_follower, status, is_gold};
+			integration.patreon = {...patreonUpdate};
 
 			req.user.integration = integration;
 
 			req.user.save().then(savedUser => {
 				res.redirect(process.env.WEB_DOMAIN + 'home');
 			});
-		} else {
-			res.redirect(process.env.WEB_DOMAIN + 'home');		
-		}
-	});
+		});
+	} else {
+		res.redirect(process.env.WEB_DOMAIN + 'home');		
+	}
 	
 });
 
