@@ -182,11 +182,9 @@ router.get('/patreon/redirect', isAuthorized, (req, res) => {
 
 router.post('/patreon/sync', isAuthorized, (req, res) => {
 	
-	patreonSync(req.user, req.cookies.etid).then((user) => {
-		res.json({
-			message: 'return back updated patreon data to store'
-		});
-	})
+	patreonSync(req.user, req.cookies.etid).then((patreonData) => {
+		res.json(patreonData);
+	});
 });
 
 let patreonSync = (user, etid) => {
@@ -249,7 +247,13 @@ let patreonSync = (user, etid) => {
 
 						user.save().then(savedUser => {
 							//2604384
-							resolve(savedUser);
+							resolve({
+								vanity: savedUser.integration.patreon.vanity,
+								thumb_url: savedUser.integration.patreon.thumb_url,
+								follower: savedUser.integration.patreon.is_follower,
+								status: savedUser.integration.patreon.status,
+								gold: savedUser.integration.patreon.is_gold
+							});
 						});
 					});
 				}
