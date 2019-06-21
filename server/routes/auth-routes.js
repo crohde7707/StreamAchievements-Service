@@ -31,11 +31,9 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 	let etid = cryptr.encrypt(req.user.integration.twitch.etid);
 
 	if(process.env.NODE_ENV === 'production') {
-		console.log('setting etid for production');
-		res.cookie('etid', etid, { maxAge: 24 * 60 * 60 * 1000, httpOnly: false, domain: 'streamachievements.com' });
+		res.cookie('etid', etid, { maxAge: 4 * 60 * 60 * 1000, httpOnly: false, domain: 'streamachievements.com' });
 	} else {
-		console.log('setting etid cookie');
-		res.cookie('etid', etid, { maxAge: 24 * 60 * 60 * 1000, httpOnly: false });
+		res.cookie('etid', etid, { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
 	}
 
 	//Check if user is a patron, and call out if so
@@ -53,7 +51,6 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 				Authorization: `Bearer ${at}`
 			}
 		}).then(response => {
-			console.log(response.data.data);
 			//active_patron, declined_patron, former_patron, null
 			let patron_status = response.data.data.attributes.patron_status;
 			let is_follower = response.data.data.attributes.is_follower;
@@ -76,13 +73,17 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 			integration.patreon = {...patreonUpdate};
 
 			req.user.integration = integration;
-
+			req.user.lastLogin = Date.now();
 			req.user.save().then(savedUser => {
 				res.redirect(process.env.WEB_DOMAIN + 'home');
-			});
+			});			
 		});
 	} else {
-		res.redirect(process.env.WEB_DOMAIN + 'home');		
+		req.user.lastLogin = Date.now();
+
+		req.user.save().then(savedUser => {
+			res.redirect(process.env.WEB_DOMAIN + 'home');
+		});	
 	}
 	
 });

@@ -18,7 +18,8 @@ const userSchema = new Schema({
 			]
 		}
 	],
-	integration: Object
+	integration: Object,
+	lastLogin: Date
 });
 
 const User = mongoose.model("user", userSchema);
