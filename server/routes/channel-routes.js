@@ -16,6 +16,9 @@ const Image = require('../models/image-model');
 const Token = require('../models/token-model');
 const {uploadImage, destroyImage} = require('../utils/image-utils');
 
+const DEFAULT_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png";
+const HIDDEN_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811887/hidden-icon.png";
+
 const imgURLRegex = /^https:\/\/res\.cloudinary\.com\/phirehero\/.*\.(png|jpg|jpeg)$/gm;
 
 router.get("/create", isAuthorized, (req, res) => {
@@ -32,7 +35,11 @@ router.get("/create", isAuthorized, (req, res) => {
 				theme: '',
 				logo: req.user.logo,
 				achievements: [],
-				members: []
+				members: [],
+				icons: {
+					default: DEFAULT_ICON,
+					hidden: HIDDEN_ICON
+				}
 			}).save().then((newChannel) => {
 				req.user.channelID = newChannel.id;
 				req.user.save().then((savedUser) => {
@@ -369,20 +376,16 @@ router.post('/preferences', isAuthorized, (req, res) => {
 		
 		let defaultPromise, hiddenPromise;
 		//upload images if needed
-		
+		console.log(req.body);
 		defaultPromise = new Promise((resolve, reject) => {
 			if(req.body.defaultIcon && validDataUrl(req.body.defaultIcon)) {
 				//got an image to upload
 				uploadImage(req.body.defaultIcon, req.body.defaultIconName, existingChannel.owner, 'default').then(iconImg => {
-					existingChannel.icons = existingChannel.icons || {};
-					existingChannel.icons.default = iconImg.url
-					resolve();
+					resolve(iconImg.url);
 				});
 			} else if(req.body.defaultImage && imgURLRegex.test(req.body.defaultImage)) {
-				//check if URL before setting it
-				existingChannel.icons = existingChannel.icons || {};
-				existingChannel.icons.default = req.body.defaultImage;
-				resolve();
+				console.log('successful match');
+				resolve(req.body.defaultImage);
 			} else {
 				resolve();
 			}
@@ -392,23 +395,37 @@ router.post('/preferences', isAuthorized, (req, res) => {
 			if(req.body.hiddenIcon && validDataUrl(req.body.hiddenIcon)) {
 				//got an image to upload
 				uploadImage(req.body.hiddenIcon, req.body.hiddenIconName, existingChannel.owner, 'hidden').then(iconImg => {
-					existingChannel.icons = existingChannel.icons || {};
-					existingChannel.icons.hidden = iconImg.url
-					resolve();
+					resolve(iconImg.url);
 				});
 			} else if(req.body.hiddenImage && imgURLRegex.test(req.body.hiddenImage)) {
-				//check if URL before setting it
-				existingChannel.icons = existingChannel.icons || {};
-				existingChannel.icons.hidden = req.body.hiddenImage;
-				resolve();
+				resolve(req.body.hiddenImage);
 			} else {
 				resolve();
 			}
 		});
 
-		Promise.all([defaultPromise, hiddenPromise]).then(() => {
+		Promise.all([defaultPromise, hiddenPromise]).then((icons) => {
+
+			let iconsUpdate = {
+				default: existingChannel.icons.default,
+				hidden: existingChannel.icons.hidden
+			};
+
+			if(icons[0]) {
+				iconsUpdate.default = icons[0];
+			}
+
+			if(icons[1]) {
+				iconsUpdate.hidden = icons[1];
+			}
+
+			existingChannel.icons = iconsUpdate;
+
 			existingChannel.save().then(savedChannel => {
-				console.log(savedChannel.icons);
+
+				if(icons[0] !== savedChannel.icons.default) {
+					console.log('uh oh');
+				}
 
 				Image.find({channel: existingChannel.owner}).then(foundImages => {
 					if(foundImages) {
@@ -485,10 +502,12 @@ router.post('/image', isAuthorized, (req, res) => {
 				Channel.findOne({twitchID: req.user.integration.twitch.etid}).then(existingChannel => {
 					
 					let icons = {...existingChannel.icons};
-					delete icons[image.type];
+					if(image.type === 'default') {
+						icons.default = DEFAULT_ICON
+					} else if(image.type === 'hidden') {
+						icons.hidden = HIDDEN_ICON
+					}
 					existingChannel.icons = icons;
-					console.log('hya');
-
 					existingChannel.save().then(savedChannel => {
 						resolve(savedChannel);
 					});
