@@ -9,7 +9,7 @@ const bodyParser = require('body-parser');
 const refresh = require('./utils/refresh-cookie').refreshCookie;
 const allowAccess = require('./utils/access-utils').allowAccess;
 
-let io = module.exports.io = require('socket.io');
+let io = require('socket.io');
 //let SocketManager = require('./SocketManager').initSocket;
 
 let authRoutes = require('./routes/auth-routes');
@@ -53,14 +53,16 @@ app.use(express.static(path.join(__dirname, 'client/build')));
 
 let server = app.listen(port);
 
-//let WebSockets = io.listen(server);
+let WebSockets = io.listen(server);
 
 //WebSockets.sockets.on('connection', SocketManager);
 
 //module.exports.WebSockets = WebSockets;
-io.listen(process.env.IRC_WS_PORT);
+//io.listen(process.env.IRC_WS_PORT);
 
-io.on('connection', function (socket) {
+console.log(port);
+
+WebSockets.on('connection', function (socket) {
     console.log('connected:', socket.client.id);
     
     socket.emit('new-channel', 'phirehero has joined the frey');
