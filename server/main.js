@@ -9,7 +9,7 @@ const bodyParser = require('body-parser');
 const refresh = require('./utils/refresh-cookie').refreshCookie;
 const allowAccess = require('./utils/access-utils').allowAccess;
 
-//let io = module.exports.io = require('socket.io');
+let io = module.exports.io = require('socket.io');
 //let SocketManager = require('./SocketManager').initSocket;
 
 let authRoutes = require('./routes/auth-routes');
@@ -58,5 +58,13 @@ let server = app.listen(port);
 //WebSockets.sockets.on('connection', SocketManager);
 
 //module.exports.WebSockets = WebSockets;
+io.listen(process.env.IRC_WS_PORT);
+
+io.on('connection', function (socket) {
+    console.log('connected:', socket.client.id);
+    
+    socket.emit('new-channel', 'phirehero has joined the frey');
+    console.log('message sent to IRC');
+});
 
 console.log(`Express app listening on port ${port}`)
