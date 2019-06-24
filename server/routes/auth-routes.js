@@ -43,12 +43,10 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 	if(patreonInfo && patreonInfo.status !== 'lifetime') {
 		let longID = patreonInfo.id;
 		let at = cryptr.decrypt(patreonInfo.at);
-		console.log(at);
-		console.log(patreonInfo);
 
 		axios.get(`https://www.patreon.com/api/oauth2/v2/members/${longID}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
 			headers: {
-				Authorization: `Bearer ${at}`
+				Authorization: `Bearer ${process.env.PAT}`
 			}
 		}).then(response => {
 			//active_patron, declined_patron, former_patron, null
@@ -78,7 +76,47 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 				res.redirect(process.env.WEB_DOMAIN + 'home');
 			});			
 		}).catch(error => {
-			console.log(error);
+			if(error.response.status === 401) {
+				let rt = cryptr.decrypt(patreonInfo.rt);
+				axios.post(`https://www.patreon.com/api/oauth2/token?grant_type=refresh_token&refresh_token=${rt}&client_id=${process.env.PCID}&client_secret=${process.env.PCS}`)
+					.then(response => {
+						let newAT = cryptr.encrypt(response.at);
+						let newRT = cryptr.encrypt(response.rt);
+
+						axios.get(`https://www.patreon.com/api/oauth2/v2/members/${longID}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
+							headers: {
+								Authorization: `Bearer ${response.at}`
+							}
+						}).then(response => {
+							//active_patron, declined_patron, former_patron, null
+							let patron_status = response.data.data.attributes.patron_status;
+							let is_follower = response.data.data.attributes.is_follower;
+							let tiers = response.data.data.relationships.currently_entitled_tiers;
+							let isGold = tiers.data.map(tier => tier.id).indexOf(GOLD_TIER_ID) >= 0;
+
+							let patreonUpdate = {
+								id: patreonInfo.id,
+								thumb_url: patreonInfo.thumb_url,
+								vanity: patreonInfo.vanity,
+								at: newAT,
+								rt: newRT,
+								is_follower,
+								status: patron_status,
+								is_gold: isGold
+							};
+
+							let integration = Object.assign({}, req.user.integration);
+
+							integration.patreon = {...patreonUpdate};
+
+							req.user.integration = integration;
+							req.user.lastLogin = Date.now();
+							req.user.save().then(savedUser => {
+								res.redirect(process.env.WEB_DOMAIN + 'home');
+							});			
+						})
+					});
+			}
 		});
 	} else {
 		req.user.lastLogin = Date.now();
