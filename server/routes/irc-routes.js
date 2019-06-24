@@ -31,4 +31,12 @@ router.get('/channels', (req, res) => {
 	});
 });
 
+router.get('/listeners', (req, res) => {
+	//pagination: limit, start
+	//Find all listeners, and return back the limit, + handle offset of data if there is more
+	res.json({
+		listeners: []
+	});
+});
+
 module.exports = router;
