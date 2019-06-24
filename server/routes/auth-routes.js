@@ -77,6 +77,8 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 			req.user.save().then(savedUser => {
 				res.redirect(process.env.WEB_DOMAIN + 'home');
 			});			
+		}).catch(error => {
+			console.log(error);
 		});
 	} else {
 		req.user.lastLogin = Date.now();
