@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 const listenerSchema = new Schema({
+	uid: String,
 	channel: String,
 	code: String,
 	type: String,

@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const passport = require('passport');
+const uuid = require('uuid/v1');
 
 const User = require('../models/user-model');
 const Channel = require('../models/channel-model');
@@ -9,6 +10,7 @@ const Queue = require('../models/queue-model');
 const Notice = require('../models/notice-model');
 const Image = require('../models/image-model');
 const {isAuthorized} = require('../utils/auth-utils');
+const {emitNewListener, emitUpdateListener, emitRemoveListener} = require('../utils/socket-utils');
 
 const uploadImage = require('../utils/image-utils').uploadImage;
 const mongoose = require('mongoose');
@@ -76,6 +78,16 @@ let updatedAchievement = (existingAchievement, updates, listenerUpdates, iconImg
 			Achievement.findOneAndUpdate({ _id: existingAchievement._id }, { $set: updates }, {new:true}).then((updatedAchievement) => {
 				if(Object.keys(listenerUpdates).length > 0) {
 					Listener.findOneAndUpdate({ _id: updatedAchievement.listener }, { $set: listenerUpdates }, { new: true }).then((updatedListener) => {
+						
+						emitUpdateListener({
+							uid: updatedListener.uid,
+							achievement: updatedListener.achievement,
+							type: updatedListener.type,
+							code: updatedListener.code,
+							query: updatedListener.query,
+							bot: updatedListener.bot,
+							condition: updatedListener.condition
+						});
 
 						let merge = combineAchievementAndListeners(updatedAchievement, updatedListener);
 
@@ -227,7 +239,8 @@ router.post("/create", isAuthorized, (req, res) => {
 
 						let listenerData = {
 							channel: existingChannel.owner,
-							code: req.body.code
+							code: req.body.code,
+							uid: uuid()
 						};
 
 						if(listenerData.code !== '0') {
@@ -240,7 +253,7 @@ router.post("/create", isAuthorized, (req, res) => {
 								listenerData.bot = req.body.bot;
 								listenerData.condition = req.body.condition;
 							}
-						}				
+						}
 
 						Listener.findOne(listenerData).then(foundListener => {
 							if(foundListener) {
@@ -257,9 +270,19 @@ router.post("/create", isAuthorized, (req, res) => {
 										new Achievement(achData).save().then((newAchievement) => {
 											console.log('new achievement in DB');
 											listenerData.achievement = newAchievement.id;
+											
 											//create listener for achievement
 											new Listener(listenerData).save().then(newListener => {
-												console.log("new listener in DB");
+												
+												emitNewListener({
+													uid: listenerData.uid,
+													achievement: listenerData.achievement,
+													type: listenerData.type,
+													code: listenerData.code,
+													query: listenerData.query,
+													bot: listenerData.bot,
+													condition: listenerData.condition
+												});
 
 												newAchievement.listener = newListener.id;
 												newAchievement.save().then(updatedAchievement => {
@@ -276,11 +299,20 @@ router.post("/create", isAuthorized, (req, res) => {
 									});	
 								} else {
 									new Achievement(achData).save().then((newAchievement) => {
-										console.log('new achievement in DB');
+										
 										listenerData.achievement = newAchievement.id;
 										//create listener for achievement
 										new Listener(listenerData).save().then(newListener => {
-											console.log("new listener in DB");
+											
+											emitNewListener({
+												uid: listenerData.uid,
+												achievement: listenerData.achievement,
+												type: listenerData.type,
+												code: listenerData.code,
+												query: listenerData.query,
+												bot: listenerData.bot,
+												condition: listenerData.condition
+											});
 
 											newAchievement.listener = newListener.id;
 											newAchievement.save().then(updatedAchievement => {
@@ -330,6 +362,17 @@ router.post("/delete", isAuthorized, (req, res) => {
 
 						Listener.findOne(listenerQuery).then(existingListener => {
 							if(existingListener) {
+
+								emitRemoveListener({
+									uid: existingListener.uid,
+									achievement: existingListener.achievement,
+									type: existingListener.type,
+									code: existingListener.code,
+									query: existingListener.query,
+									bot: existingListener.bot,
+									condition: existingListener.condition
+								});
+
 								Listener.deleteOne(listenerQuery).then(err => {
 									res.json({
 										deleted:true

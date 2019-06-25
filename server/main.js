@@ -3,6 +3,7 @@ const path = require('path');
 const mongoose = require('mongoose');
 const cookieSession = require('cookie-session');
 const passport = require('passport');
+const Socket = require('./models/socket-model');
 const passportSetup = require('./configs/passport-setup');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
@@ -55,15 +56,26 @@ let server = app.listen(port);
 
 let WebSockets = io.listen(server);
 
-//WebSockets.sockets.on('connection', SocketManager);
-
-//module.exports.WebSockets = WebSockets;
-//io.listen(process.env.IRC_WS_PORT);
-
 console.log(port);
+
+app.set('ws', WebSockets);
 
 WebSockets.on('connection', function (socket) {
     console.log('connected:', socket.client.id);
+
+    socket.on('handshake', function(data) {
+    	if(data.name = "SAIRC") {
+    		console.log("Hello, SAIRC");
+    		app.set('IRCSOCKET', socket.id);
+    		
+    		// new Socket({
+    		// 	socketID: ,
+    		// 	name: "SAIRC"
+    		// }).save().then(savedSocket => {
+
+    		// });
+    	}
+    });
     
     socket.emit('new-channel', 'phirehero has joined the frey');
     console.log('message sent to IRC');

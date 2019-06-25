@@ -44,7 +44,7 @@ router.get('/users', isAdminAuthorized, (req, res) => {
 });
 
 router.get("/user", isAuthorized, (req, res) => {
-	
+
 	setTimeout(() => {
 		if(timeout) {
 			console.log('timeout');

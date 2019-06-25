@@ -15,6 +15,7 @@ const Listener = require('../models/listener-model');
 const Image = require('../models/image-model');
 const Token = require('../models/token-model');
 const {uploadImage, destroyImage} = require('../utils/image-utils');
+const {emitNewChannel} = require('../utils/socket-utils');
 
 const DEFAULT_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png";
 const HIDDEN_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811887/hidden-icon.png";
@@ -41,6 +42,18 @@ router.get("/create", isAuthorized, (req, res) => {
 					hidden: HIDDEN_ICON
 				}
 			}).save().then((newChannel) => {
+				let fullAccess = false;
+
+				if(req.user.integration && req.user.integration.patreon && (req.user.integration.patreon.type === 'forever' || req.user.integration.patreon.is_gold)) {
+					fullAccess = true;
+				}
+
+				emitNewChannel({
+					name: req.user.name,
+					'full-access': fullAccess,
+					online: false
+				});
+				
 				req.user.channelID = newChannel.id;
 				req.user.save().then((savedUser) => {
 					res.json({
