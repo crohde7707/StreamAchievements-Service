@@ -199,48 +199,58 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 
 	if(channel) {
 		Channel.findOne({owner: channel}).then((foundChannel) => {
-				if(foundChannel) {
-					
-					Achievement.find({channel: channel}).then((foundAchievements) => {
+			if(foundChannel) {
+				
+				Achievement.find({channel: channel}).then((foundAchievements) => {
 
-						let joined = foundChannel.members.includes(req.user.id);
-						let earned, retAchievements;
+					let joined = foundChannel.members.includes(req.user.id);
+					let earned, retAchievements;
 
-						if(joined) {
-							earnedAchievements = req.user.channels.filter((channel) => {
-								return (channel.channelID === foundChannel.id)
-							})[0];
+					if(joined) {
+						earnedAchievements = req.user.channels.filter((channel) => {
+							return (channel.channelID === foundChannel.id)
+						})[0];
 
-							earned = earnedAchievements.achievements.map(achievement => achievement.aid);
+						earned = earnedAchievements.achievements.map(achievement => achievement.aid);
 
-							retAchievements = foundAchievements.map(achievement => {
-								let ach = Object.assign({}, achievement._doc);
+						retAchievements = foundAchievements.map(achievement => {
+							let ach = Object.assign({}, achievement._doc);
 
-								let aIdx = earned.findIndex(aid => aid === ach.uid);
+							let aIdx = earned.findIndex(aid => aid === ach.uid);
 
-								if(aIdx >= 0) {
-									ach.earned = earnedAchievements.achievements[aIdx].earned;
-								}
+							if(aIdx >= 0) {
+								ach.earned = earnedAchievements.achievements[aIdx].earned;
+							}
 
-								return ach
-							})
-						} else {
-							retAchievements = foundAchievements;
+							return ach
+						})
+					} else {
+						retAchievements = foundAchievements;
+					}
+
+					//check if patreon active, return full access or not
+					User.findOne({name: channel}).then((foundUser) => {
+						let fullAccess = false;
+
+						if(foundUser.integration.patreon && foundUser.integration.patreon.is_gold) {
+							fullAccess = true;
 						}
 
 						res.json({
 							channel: foundChannel,
 							achievements: retAchievements,
-							joined: joined
+							joined: joined,
+							fullAccess
 						});
-					});	
-					
-				} else {
-					res.json({
-						error: "No channel found for the name: " + channel
 					});
-				}
-			});
+				});	
+				
+			} else {
+				res.json({
+					error: "No channel found for the name: " + channel
+				});
+			}
+		});
 	} else {
 		//use current logged in person's channel
 		Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {

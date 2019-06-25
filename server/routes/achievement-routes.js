@@ -79,7 +79,7 @@ let updatedAchievement = (existingAchievement, updates, listenerUpdates, iconImg
 				if(Object.keys(listenerUpdates).length > 0) {
 					Listener.findOneAndUpdate({ _id: updatedAchievement.listener }, { $set: listenerUpdates }, { new: true }).then((updatedListener) => {
 						
-						emitUpdateListener({
+						emitUpdateListener(req, {
 							uid: updatedListener.uid,
 							achievement: updatedListener.achievement,
 							type: updatedListener.type,
@@ -244,14 +244,14 @@ router.post("/create", isAuthorized, (req, res) => {
 						};
 
 						if(listenerData.code !== '0') {
-							listenerData.query = req.body.query;
+							listenerData.condition = req.body.condition;
 
 							if(listenerData.code === "1") {
 								listenerData.resubType = parseInt(req.body.resubType);
 							}
 							if(listenerData.code === "4") {
 								listenerData.bot = req.body.bot;
-								listenerData.condition = req.body.condition;
+								listenerData.query = req.body.query;
 							}
 						}
 
@@ -274,7 +274,7 @@ router.post("/create", isAuthorized, (req, res) => {
 											//create listener for achievement
 											new Listener(listenerData).save().then(newListener => {
 												
-												emitNewListener({
+												emitNewListener(req, {
 													uid: listenerData.uid,
 													achievement: listenerData.achievement,
 													type: listenerData.type,
@@ -304,7 +304,7 @@ router.post("/create", isAuthorized, (req, res) => {
 										//create listener for achievement
 										new Listener(listenerData).save().then(newListener => {
 											
-											emitNewListener({
+											emitNewListener(req, {
 												uid: listenerData.uid,
 												achievement: listenerData.achievement,
 												type: listenerData.type,
@@ -363,7 +363,7 @@ router.post("/delete", isAuthorized, (req, res) => {
 						Listener.findOne(listenerQuery).then(existingListener => {
 							if(existingListener) {
 
-								emitRemoveListener({
+								emitRemoveListener(req, {
 									uid: existingListener.uid,
 									achievement: existingListener.achievement,
 									type: existingListener.type,
@@ -374,13 +374,17 @@ router.post("/delete", isAuthorized, (req, res) => {
 								});
 
 								Listener.deleteOne(listenerQuery).then(err => {
-									res.json({
-										deleted:true
+									Image.findOneAndUpdate({achievementID: req.body.achievementID}, { $set: {achievementID: ''}}).then(updatedImage => {
+										res.json({
+											deleted:true
+										});
 									});
 								});
 							} else {
-								res.json({
-									deleted:true
+								Image.findOneAndUpdate({achievementID: req.body.achievementID}, { $set: {achievementID: ''}}).then(updatedImage => {
+									res.json({
+										deleted:true
+									});
 								});
 							}
 						});

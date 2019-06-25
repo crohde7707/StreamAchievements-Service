@@ -80,8 +80,8 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 				let rt = cryptr.decrypt(patreonInfo.rt);
 				axios.post(`https://www.patreon.com/api/oauth2/token?grant_type=refresh_token&refresh_token=${rt}&client_id=${process.env.PCID}&client_secret=${process.env.PCS}`)
 					.then(response => {
-						let newAT = cryptr.encrypt(response.at);
-						let newRT = cryptr.encrypt(response.rt);
+						let newAT = cryptr.encrypt(response.access_token);
+						let newRT = cryptr.encrypt(response.refresh_token);
 
 						axios.get(`https://www.patreon.com/api/oauth2/v2/members/${longID}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
 							headers: {
@@ -115,6 +115,8 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 								res.redirect(process.env.WEB_DOMAIN + 'home');
 							});			
 						})
+					}).catch(err => {
+						console.log(err);
 					});
 			}
 		});

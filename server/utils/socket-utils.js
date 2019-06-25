@@ -9,21 +9,21 @@ let emitNewChannel = (req, channel) => {
 	});
 }
 
-let emitNewListener = (listener) => {
+let emitNewListener = (req, listener) => {
 	let ws = req.app.get('ws');
 	let sid = req.app.get('IRCSOCKET');
 	
 	ws.to(sid).emit('new-listener', listener);
 }
 
-let emitUpdateListener = (listener) => {
+let emitUpdateListener = (req, listener) => {
 	let ws = req.app.get('ws');
 	let sid = req.app.get('IRCSOCKET');
 	
 	ws.to(sid).emit('update-listener', listener);
 }
 
-let emitRemoveListener = (listener) => {
+let emitRemoveListener = (req, listener) => {
 	let ws = req.app.get('ws');
 	let sid = req.app.get('IRCSOCKET');
 
@@ -32,14 +32,14 @@ let emitRemoveListener = (listener) => {
 	ws.to(sid).emit('remove-listener', listener);
 }
 
-let emitBecomeGold = () => {
+let emitBecomeGold = (req) => {
 	let ws = req.app.get('ws');
 	let sid = req.app.get('IRCSOCKET');
 	
 	ws.to(sid).emit('become-gold', {});
 }
 
-let emitRemoveGold = () => {
+let emitRemoveGold = (req) => {
 	let ws = req.app.get('ws');
 	let sid = req.app.get('IRCSOCKET');
 	
