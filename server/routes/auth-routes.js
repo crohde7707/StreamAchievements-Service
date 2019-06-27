@@ -40,9 +40,29 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 	let patreonInfo = req.user.integration.patreon;
 	let patreonPromise;
 
-	if(patreonInfo && patreonInfo.status !== 'lifetime') {
+	if(false) {
+	// if(patreonInfo && patreonInfo.status !== 'lifetime') {
 		let longID = patreonInfo.id;
-		let at = cryptr.decrypt(patreonInfo.at);
+		let expires = patreonInfo.expires;
+		let at = patreonInfo.at;
+
+		let refreshPromise;
+
+		if(isExpired(expires)) {
+			
+			refreshPromise = new Promise((res2, rej2) => {
+			   refreshPatreonToken(req.user, patreonInfo.rt).then(newTokens => {
+					
+					if(newTokens) {
+						at = newTokens.at;
+					}
+					res2();
+			   });
+			});
+		} else {
+			refreshPromise = Promise.resolve();
+		}
+
 
 		axios.get(`https://www.patreon.com/api/oauth2/v2/members/${longID}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
 			headers: {
@@ -78,10 +98,13 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 		}).catch(error => {
 			if(error.response.status === 401) {
 				let rt = cryptr.decrypt(patreonInfo.rt);
+				console.log(rt);
+				console.log(process.env.PCID);
+				console.log(process.env.PCS);
 				axios.post(`https://www.patreon.com/api/oauth2/token?grant_type=refresh_token&refresh_token=${rt}&client_id=${process.env.PCID}&client_secret=${process.env.PCS}`)
 					.then(response => {
-						let newAT = cryptr.encrypt(response.access_token);
-						let newRT = cryptr.encrypt(response.refresh_token);
+						let newAT = cryptr.encrypt(response.data.access_token);
+						let newRT = cryptr.encrypt(response.data.refresh_token);
 
 						axios.get(`https://www.patreon.com/api/oauth2/v2/members/${longID}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
 							headers: {
@@ -145,13 +168,17 @@ router.get('/patreon/redirect', isAuthorized, (req, res) => {
 	let oauthGrantCode = req.query.code;
 
 	return patreonOauthClient.getTokens(oauthGrantCode, process.env.PPR).then(tokenResponse => {
-		let patreonAPIClient = patreonAPI(tokenResponse.access_token)
+		let patreonAPIClient = patreonAPI(tokenResponse.access_token);
 		let etid = (req.cookies.etid);
 
 		return new Promise((resolve, reject) => {
 							
 			let at = cryptr.encrypt(tokenResponse.access_token);
 			let rt = cryptr.encrypt(tokenResponse.refresh_token);
+
+			//handle expires in
+			let today = new Date();
+			let expireDate = new Date().setDate(today.getDate() + 26);
 			
 			let vanity;
 			let thumb_url;
@@ -199,7 +226,8 @@ router.get('/patreon/redirect', isAuthorized, (req, res) => {
 							etid,
 							is_follower,
 							status: patron_status,
-							is_gold: isGold
+							is_gold: isGold,
+							expires: expireDate
 						});
 					});
 				}
@@ -207,17 +235,17 @@ router.get('/patreon/redirect', isAuthorized, (req, res) => {
 		});
 	}).then(patreonData => {
 		
-		let {id, thumb_url, vanity, at, rt, etid, is_follower, status, is_gold} = patreonData;
+		let {id, thumb_url, vanity, at, rt, etid, is_follower, status, is_gold, expires} = patreonData;
 
 		let integration = Object.assign({}, req.user.integration);
 
-		integration.patreon = {id, thumb_url, vanity, at, rt, is_follower, status, is_gold};
+		integration.patreon = {id, thumb_url, vanity, at, rt, is_follower, status, is_gold, expires};
 
 		req.user.integration = integration;
 
 		req.user.save().then(savedUser => {
 			//2604384
-			res.redirect('http://streamachievements.com/profile');
+			res.redirect(process.env.WEB_DOMAIN + 'profile');
 		});
 
 	});
@@ -230,77 +258,143 @@ router.post('/patreon/sync', isAuthorized, (req, res) => {
 	});
 });
 
+let isExpired = (expires) => {
+	let expireDate = new Date(expires);
+	let today = new Date();
+
+	return today > expireDate;
+}
+
+let refreshPatreonToken = (user, refreshToken) => {
+
+	return new Promise((resolve, reject) => {
+		let rt = cryptr.decrypt(refreshToken);
+
+		axios.post(`https://www.patreon.com/api/oauth2/token?grant_type=refresh_token&refresh_token=${rt}&client_id=${process.env.PCID}&client_secret=${process.env.PCS}`)
+			.then(response => {
+
+				let newAT = cryptr.encrypt(response.data.access_token);
+				let newRT = cryptr.encrypt(response.data.refresh_token);
+				let today = new Date();
+				let newExpires = new Date().setDate(today.getDate() + 26);
+
+				let integration = Object.assign({}, user.integration);
+
+				integration.patreon.at = newAT;
+				integration.patreon.rt = newRT;
+				integration.patreon.expires = newExpires;
+				user.integration = integration;
+
+				user.save().then(savedUser => {
+					resolve({
+						at: newAT,
+						rt: newRT,
+						expires: newExpires
+					})
+				});
+				
+			}).catch(err => {
+				resolve(null);
+			});
+		
+	});
+}
+
 let patreonSync = (user, etid) => {
 	if(user.integration.patreon) {
 		return new Promise((resolve, reject) => {
-			let {at, rt, id} = user.integration.patreon;
+			let {at, rt, id, expires} = user.integration.patreon;
 
-			let access_token = cryptr.decrypt(at);
+			let refreshPromise;
 
-			axios.get(PATREON_IDENTITY_API, {
-				headers: {
-					Authorization: `Bearer ${access_token}`
-				}
-			}).then(res => {
-				vanity = res.data.data.attributes.vanity,
-				thumb_url = res.data.data.attributes.thumb_url
-
-				if(!res.data.included) {
-					//patron is not a member of the patreon
-					//set at, rt, and thumb_url in DB, display panel to follow
-					resolve({
-						thumb_url,
-						vanity,
-						at,
-						rt,
-						etid
-					});
-				} else {
-					let longID = (res.data.included[0].id);
-
-					axios.get(`https://www.patreon.com/api/oauth2/v2/members/${longID}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
-						headers: {
-							Authorization: `Bearer ${access_token}`
-						}
-					}).then(res2 => {
+			if(isExpired(expires)) {
+				
+				refreshPromise = new Promise((res2, rej2) => {
+				   refreshPatreonToken(user, rt).then(newTokens => {
 						
-						//active_patron, declined_patron, former_patron, null
-						let patron_status = res2.data.data.attributes.patron_status;
-						let is_follower = res2.data.data.attributes.is_follower;
-						let tiers = res2.data.data.relationships.currently_entitled_tiers;
-						let isGold = tiers.data.map(tier => tier.id).indexOf(GOLD_TIER_ID) >= 0;
+						if(newTokens) {
+							at = newTokens.at;
+							rt = newTokens.rt;
+							expires = newTokens.expires;
+						}
+						res2();
+				   });
+				});
+			} else {
+				refreshPromise = Promise.resolve();
+			}
 
-						let patreonData = {
-							id: longID,
+			refreshPromise.then(() => {
+				let access_token = cryptr.decrypt(at);
+
+				axios.get(PATREON_IDENTITY_API, {
+					headers: {
+						Authorization: `Bearer ${access_token}`
+					}
+				}).then(res => {
+					vanity = res.data.data.attributes.vanity,
+					thumb_url = res.data.data.attributes.thumb_url
+
+					if(!res.data.included) {
+						//patron is not a member of the patreon
+						//set at, rt, and thumb_url in DB, display panel to follow
+						resolve({
 							thumb_url,
 							vanity,
 							at,
 							rt,
-							etid,
-							is_follower,
-							status: patron_status,
-							is_gold: isGold
-						};
+							etid
+						});
+					} else {
+						let longID = (res.data.included[0].id);
 
-						let integration = Object.assign({}, user.integration);
+						axios.get(`https://www.patreon.com/api/oauth2/v2/members/${longID}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
+							headers: {
+								Authorization: `Bearer ${access_token}`
+							}
+						}).then(res2 => {
+							
+							//active_patron, declined_patron, former_patron, null
+							let patron_status = res2.data.data.attributes.patron_status;
+							let is_follower = res2.data.data.attributes.is_follower;
+							let tiers = res2.data.data.relationships.currently_entitled_tiers;
+							let isGold = tiers.data.map(tier => tier.id).indexOf(GOLD_TIER_ID) >= 0;
 
-						integration.patreon = {...patreonData};
+							let patreonData = {
+								id: longID,
+								thumb_url,
+								vanity,
+								at,
+								rt,
+								etid,
+								is_follower,
+								status: patron_status,
+								is_gold: isGold,
+								expires
+							};
 
-						user.integration = integration;
+							let integration = Object.assign({}, user.integration);
 
-						user.save().then(savedUser => {
-							//2604384
-							resolve({
-								vanity: savedUser.integration.patreon.vanity,
-								thumb_url: savedUser.integration.patreon.thumb_url,
-								follower: savedUser.integration.patreon.is_follower,
-								status: savedUser.integration.patreon.status,
-								gold: savedUser.integration.patreon.is_gold
+							integration.patreon = {...patreonData};
+
+							user.integration = integration;
+
+							user.save().then(savedUser => {
+								//2604384
+								resolve({
+									vanity: savedUser.integration.patreon.vanity,
+									thumb_url: savedUser.integration.patreon.thumb_url,
+									follower: savedUser.integration.patreon.is_follower,
+									status: savedUser.integration.patreon.status,
+									gold: savedUser.integration.patreon.is_gold
+								});
 							});
 						});
-					});
-				}
-			});	
+					}
+				});	
+			});
+
+			
 		});
 	} else {
 		return Promise.resolve();
