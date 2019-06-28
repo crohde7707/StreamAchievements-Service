@@ -10,13 +10,16 @@ const Queue = require('../models/queue-model');
 const Notice = require('../models/notice-model');
 const Image = require('../models/image-model');
 const {isAuthorized} = require('../utils/auth-utils');
-const {emitNewListener, emitUpdateListener, emitRemoveListener} = require('../utils/socket-utils');
+const {
+	emitNewListener,
+	emitUpdateListener,
+	emitRemoveListener,
+	emitAwardedAchievement,
+	emitAwardedAchievementNonMember
+} = require('../utils/socket-utils');
 
 const uploadImage = require('../utils/image-utils').uploadImage;
 const mongoose = require('mongoose');
-
-//let io = require('../index2').WebSockets;
-//let getSocketForUser = require('../SocketManager').getSocketForUser;
 
 let combineAchievementAndListeners = (achievement, listener) => {
 	let merge = {
@@ -507,17 +510,6 @@ router.post('/award', isAuthorized, (req, res) => {
 				});
 			});
 
-			// let promises = [];
-
-			// for (let i = 0; i < foundMembers.length; i++) {
-			// 	let channels = foundMembers[i].channels;
-			// 	let channelIdx = channels.findIndex(channel => channel.channelID === existingChannel.id);
-
-			// 	channels[channelIdx].achievements.push(achievementID);
-			// 	foundMembers[i].channels = channels;
-			// 	promises.push(foundMembers[i].save());
-			// }
-
 			Promise.all(promises).then((responses) => {
 				User.find({'_id': { $in: existingChannel.members}}).then((members) => {
 					//Filter out member data: name, logo, achievements
@@ -585,64 +577,84 @@ router.post('/listeners', (req, res) => {
 	let achievements = req.body;
 	let currentDate = new Date();
 
+	let responses = [];
+
 	achievements.forEach(achievementListener => {
 		let {channel, achievement, tier, userID} = achievementListener;
 
 		User.findOne({'integration.twitch.etid': userID}).then((foundUser) => {
 			if(foundUser) {
 				Channel.find({owner: channel}).then(foundChannel => {
-					let entryIdx = foundUser.channels.findIndex(savedChannel => {
-						return savedChannel.channelID === foundChannel._id;
-					});
-
-					if(entryIdx >= 0) {
-						if(!foundUser.channels[entryIdx].achievements.includes(achievement.achievementID)) {
-							foundUser.channels[entryIdx].achievements.push({
-								id: achievement.achievementID,
-								earned: currentDate
-							});
-						} else {
-							res.json({
-								message: "This user already earned this achievement!"
-							});
-						}
-					} else {
-						foundUser.channels.push({
-							channelID: foundChannel._id,
-							achievements: [{
-								id: achievement.achievementID,
-								earned: currentDate
-							}]
+					Achievement.findOne({'_id': achievement}).then(foundAchievement => {
+						let entryIdx = foundUser.channels.findIndex(savedChannel => {
+							return savedChannel.channelID === foundChannel._id;
 						});
-						foundUser.save().then(savedUser => {
 
-							//Create a notification for the user
-							new Notice({
-								twitchID: userID,
-								channelID: foundChannel._id,
-								achievementID: achievement.achievementID
-							}).save().then(savedNotice => {
+						if(entryIdx >= 0) {
+							let userAchievements = foundUser.channels[entryIdx].achievements;
 
-								// let socket = getSocketForUser(savedUser.name);
-								// socket.emit('NEW_NOTIFICATION', savedNotice);
+							let achIdx = userAchievements.findIndex(usrAch => {
+								return usrAch.id === foundAchievement._id;
+							});
 
+							if(achIdx < 0) {
+								foundUser.channels[entryIdx].achievements.push({
+									id: achievement.achievementID,
+									earned: currentDate
+								});
+
+								emitAwardedAchievement(req, {
+									'channel':foundChannel.owner,
+									'member': foundUser.name,
+									'achievement': foundAchievement.title
+								});
+
+							} else {
 								res.json({
-									message: "Achievement has been awarded!"
+									message: "This user already earned this achievement!"
+								});
+							}
+						} else {
+							foundUser.channels.push({
+								channelID: foundChannel._id,
+								achievements: [{
+									id: achievement.achievementID,
+									earned: currentDate
+								}]
+							});
+							foundUser.save().then(savedUser => {
+
+								//Create a notification for the user
+								new Notice({
+									twitchID: userID,
+									channelID: foundChannel._id,
+									achievementID: achievement.achievementID
+								}).save().then(savedNotice => {
+
+									emitAwardedAchievement(req, {
+										'channel':foundChannel.owner,
+										'member': foundUser.name,
+										'achievement': foundAchievement.title
+									});
 								});
 							});
-						});
-					}
+						}	
+					});
+
+					
 				});
 			} else {
 				// User doesn't exist yet, so store the event off to award when signed up!
-				Channel.find({owner: channel}).then(foundChannel => {	
+				Channel.find({owner: channel}).then(foundChannel => {
 					new Queue({
 						twitchID: userID,
 						channelID: foundChannel._id,
-						achievementID: achievement.achievementID
+						achievementID: achievement
 					}).save().then(savedQueue => {
-						res.json({
-							message: "User hasn't signed up yet, but their achievement earning is stored!"
+						emitAwardedAchievementNonMember(req, {
+							'channel':foundChannel.owner,
+							'member': foundUser.name,
+							'achievement': foundAchievement.title
 						});
 					});
 				})

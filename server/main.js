@@ -11,7 +11,6 @@ const refresh = require('./utils/refresh-cookie').refreshCookie;
 const allowAccess = require('./utils/access-utils').allowAccess;
 
 let io = require('socket.io');
-//let SocketManager = require('./SocketManager').initSocket;
 
 let authRoutes = require('./routes/auth-routes');
 let apiRoutes = require('./routes/api-routes');
@@ -56,8 +55,6 @@ let server = app.listen(port);
 
 let WebSockets = io.listen(server);
 
-console.log(port);
-
 app.set('ws', WebSockets);
 
 WebSockets.on('connection', function (socket) {
@@ -65,20 +62,22 @@ WebSockets.on('connection', function (socket) {
 
     socket.on('handshake', function(data) {
     	if(data.name = "SAIRC") {
-    		console.log("Hello, SAIRC");
+    		
     		app.set('IRCSOCKET', socket.id);
     		
-    		// new Socket({
-    		// 	socketID: ,
-    		// 	name: "SAIRC"
-    		// }).save().then(savedSocket => {
+    	} else if(data.web) {
+    		let userSockets = app.get('USERSOCKETS');
 
-    		// });
+    		if(userSockets) {
+    			userSockets[data.user] = socket.id;
+    		} else {
+    			userSockets = {};
+    			userSockets[data.user] = socket.id;
+
+    			app.set('USERSOCKETS', userSockets);
+    		}
     	}
     });
-    
-    socket.emit('new-channel', 'phirehero has joined the frey');
-    console.log('message sent to IRC');
 });
 
 console.log(`Express app listening on port ${port}`)

@@ -46,11 +46,18 @@ let emitRemoveGold = (req) => {
 	ws.to(sid).emit('remove-gold', {});
 }
 
-let emitAchievementAwarded = () => {
+let emitAwardedAchievement = (req, achievement) => {
 	let ws = req.app.get('ws');
 	let sid = req.app.get('IRCSOCKET');
 	
-	ws.to(sid).emit('achievement-awarded', {});
+	ws.to(sid).emit('achievement-awarded', achievement);
+}
+
+let emitAwardedAchievementNonMember = (req, achievement) => {
+	let ws = req.app.get('ws');
+	let sid = req.app.get('IRCSOCKET');
+
+	ws.to(sid).emit('achievement-awarded-nonMember', achievement);
 }
 
 module.exports = {
@@ -60,5 +67,6 @@ module.exports = {
 	emitRemoveListener,
 	emitBecomeGold,
 	emitRemoveGold,
-	emitAchievementAwarded
+	emitAwardedAchievement,
+	emitAwardedAchievementNonMember
 }
