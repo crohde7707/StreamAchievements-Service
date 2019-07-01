@@ -7,7 +7,6 @@ const Socket = require('./models/socket-model');
 const passportSetup = require('./configs/passport-setup');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
-const refresh = require('./utils/refresh-cookie').refreshCookie;
 const allowAccess = require('./utils/access-utils').allowAccess;
 
 let io = require('socket.io');
@@ -29,25 +28,14 @@ mongoose.connect(process.env.MDB, {useNewUrlParser: true}, () => {
 	console.log('connected to mongodb');
 });
 
-app.use(cookieSession({
-	name: 'e2tid',
-	maxAge: 1000,
-	keys: process.env.SCK,
-	cookie: {
-		httpOnly: true,
-		expires: new Date(Date.now() + 60 * 60 * 1000)
-	}
-}));
-
-
 //initialize passport
 app.use(passport.initialize());
 app.use(passport.session());
 
 app.use(express.static('public'));
 
-app.use('/auth', [allowAccess, refresh], authRoutes);
-app.use('/api', [allowAccess, refresh], apiRoutes);
+app.use('/auth', [allowAccess], authRoutes);
+app.use('/api', [allowAccess], apiRoutes);
 
 app.use(express.static(path.join(__dirname, 'client/build')));
 
