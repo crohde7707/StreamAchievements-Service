@@ -40,7 +40,8 @@ router.get("/create", isAuthorized, (req, res) => {
 				icons: {
 					default: DEFAULT_ICON,
 					hidden: HIDDEN_ICON
-				}
+				},
+				nextUID: 1
 			}).save().then((newChannel) => {
 				let fullAccess = false;
 
@@ -230,18 +231,24 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 
 					//check if patreon active, return full access or not
 					User.findOne({name: channel}).then((foundUser) => {
-						let fullAccess = false;
+						if(foundUser) {
+							let fullAccess = false;
 
-						if(foundUser.integration.patreon && foundUser.integration.patreon.is_gold) {
-							fullAccess = true;
+							if(foundUser.integration.patreon && foundUser.integration.patreon.is_gold) {
+								fullAccess = true;
+							}
+
+							res.json({
+								channel: foundChannel,
+								achievements: retAchievements,
+								joined: joined,
+								fullAccess
+							});	
+						} else {
+							res.json({
+								error: "Channel doesn't exist"
+							});
 						}
-
-						res.json({
-							channel: foundChannel,
-							achievements: retAchievements,
-							joined: joined,
-							fullAccess
-						});
 					});
 				});	
 				

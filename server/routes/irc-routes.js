@@ -16,7 +16,7 @@ router.get('/channels', (req, res) => {
 
 			if(patreon) {
 				if(patreon.forever || patreon.is_gold) {
-					channel.full_access = true;
+					channel['full-access'] = true;
 				}
 			}
 
@@ -81,6 +81,7 @@ let getListeners = (offset, limit, total) => {
 			} else {
 				let listeners = doc.map(listener => {
 					return {
+						channel: listener.channel,
 						achievement: listener.achievement,
 						type: listener.type,
 						code: listener.code,

@@ -11,7 +11,8 @@ const channelSchema = new Schema({
 	icons: {
 		default: String,
 		hidden: String
-	}
+	},
+	nextUID: Number
 });
 
 const Channel = mongoose.model("channel", channelSchema);

@@ -220,6 +220,21 @@ router.post('/patreon/sync', isAuthorized, (req, res) => {
 	});
 });
 
+router.post('/patreon/unlink', isAuthorized, (req, res) => {
+	let integration = Object.assign({}, req.user.integration);
+
+	delete integration.patreon;
+
+	req.user.integration = integration;
+
+	req.user.save().then(savedUser => {
+		res.json({
+			success: true,
+			service: 'patreon'
+		});
+	});	
+});
+
 let isExpired = (expires) => {
 	let expireDate = new Date(expires);
 	let today = new Date();
