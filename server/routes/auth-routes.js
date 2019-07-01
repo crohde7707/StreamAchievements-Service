@@ -29,7 +29,7 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 
 	//Set Cookie
 	let etid = cryptr.encrypt(req.user.integration.twitch.etid);
-
+	console.log(process.env.NODE_ENV);
 	if(process.env.NODE_ENV === 'production') {
 		res.cookie('etid', etid, { maxAge: 4 * 60 * 60 * 1000, httpOnly: false, domain: 'streamachievements.com' });
 	} else {
