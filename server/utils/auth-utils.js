@@ -19,7 +19,7 @@ const isAuthorized = async (req, res, next) => {
 		req.user = foundUser;
 		
 		if(process.env.NODE_ENV === 'production') {
-			res.cookie('etid', req.cookie.etid, { maxAge: 4 * 60 * 60 * 1000, httpOnly: false, domain: 'streamachievements.com' });
+			res.cookie('etid', req.cookie.etid, { maxAge: 4 * 60 * 60 * 1000, secure: true, httpOnly: false, domain: 'streamachievements.com' });
 		} else {
 			res.cookie('etid', req.cookies.etid, { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
 		}
@@ -40,7 +40,7 @@ const isAdminAuthorized = async (req, res, next) => {
 		if(foundUser.type = 'admin') {
 			res.user = foundUser;
 			if(process.env.NODE_ENV === 'production') {
-				res.cookie('etid', req.cookies.etid, { maxAge: 4 * 60 * 60 * 1000, httpOnly: false, domain: 'streamachievements.com' });
+				res.cookie('etid', req.cookies.etid, { maxAge: 4 * 60 * 60 * 1000, secure: true, httpOnly: false, domain: 'streamachievements.com' });
 			} else {
 				res.cookie('etid', req.cookies.etid, { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
 			}
