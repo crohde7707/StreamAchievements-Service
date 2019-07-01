@@ -230,18 +230,25 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 
 					//check if patreon active, return full access or not
 					User.findOne({name: channel}).then((foundUser) => {
-						let fullAccess = false;
+						if(foundUser) {
+							let fullAccess = false;
 
-						if(foundUser.integration.patreon && foundUser.integration.patreon.is_gold) {
-							fullAccess = true;
+							if(foundUser.integration.patreon && foundUser.integration.patreon.is_gold) {
+								fullAccess = true;
+							}
+
+							res.json({
+								channel: foundChannel,
+								achievements: retAchievements,
+								joined: joined,
+								fullAccess
+							});	
+						} else {
+							res.json({
+								error: "Channel doesn't exist"
+							});
 						}
-
-						res.json({
-							channel: foundChannel,
-							achievements: retAchievements,
-							joined: joined,
-							fullAccess
-						});
+						
 					});
 				});	
 				
@@ -399,7 +406,6 @@ router.post('/preferences', isAuthorized, (req, res) => {
 		
 		let defaultPromise, hiddenPromise;
 		//upload images if needed
-		console.log(req.body);
 		defaultPromise = new Promise((resolve, reject) => {
 			if(req.body.defaultIcon && validDataUrl(req.body.defaultIcon)) {
 				//got an image to upload
@@ -407,7 +413,6 @@ router.post('/preferences', isAuthorized, (req, res) => {
 					resolve(iconImg.url);
 				});
 			} else if(req.body.defaultImage && imgURLRegex.test(req.body.defaultImage)) {
-				console.log('successful match');
 				resolve(req.body.defaultImage);
 			} else {
 				resolve();
@@ -542,7 +547,6 @@ router.post('/image', isAuthorized, (req, res) => {
 		}
 
 		Promise.all([achievementPromise, imagePromise, channelUpdatePromise]).then(values => {
-			console.log(values);
 			let responseObj = {
 				images: values[1]
 			};
@@ -574,7 +578,6 @@ router.get("/user", isAuthorized, (req, res) => {
 
 			return new Promise((resolve, reject) => {
 				Achievement.countDocuments({channel: channel.owner}).then(count => {
-					console.log(count);
 					if(count > 0) {
 						percentage = Math.round((earnedAchievements[0].achievements.length / count) * 100);
 					}
@@ -644,8 +647,6 @@ router.post('/confirm', isAdminAuthorized, (req, res) => {
 	User.findOne({name: req.body.name}).then(foundMember => {
 		let uid = foundMember['_id'];
 
-		console.log(uid);
-
 		Token.findOne({uid}).then(foundToken => {
 			let generatedToken = crypto.randomBytes(16).toString('hex');
 			foundToken.token = generatedToken;
@@ -692,11 +693,9 @@ router.post('/confirm', isAdminAuthorized, (req, res) => {
 
 router.post('/verify', isAuthorized, (req, res) => {
 	let token = req.body.id;
-	console.log(req.user._id);
-	console.log(token);
+	
 	Token.findOne({uid: req.user._id, token}).then(foundToken => {
 		if(foundToken) {
-			console.log(foundToken);
 			if(foundToken.hasExpired()) {
 				// Token.deleteOne({uid: req.user._id, token}).then(err => {
 				// 	res.json({

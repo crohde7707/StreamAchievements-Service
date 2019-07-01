@@ -9,6 +9,7 @@ let channelRoutes = require('./channel-routes');
 let achievementRoutes = require('./achievement-routes');
 let ircRoutes = require('./irc-routes');
 const {isAuthorized, isAdminAuthorized} = require('../utils/auth-utils');
+const {emitTestListener} = require('../utils/socket-utils');
 
 router.use('/channel', channelRoutes);
 router.use('/achievement', achievementRoutes);
@@ -47,7 +48,6 @@ router.get("/user", isAuthorized, (req, res) => {
 
 	setTimeout(() => {
 		if(timeout) {
-			console.log('timeout');
 			res.status(500);
 			res.json({
 				message: 'Internal Server Issue'
@@ -85,11 +85,8 @@ router.get("/user", isAuthorized, (req, res) => {
 			});
 		} else {
 			let status = 'viewer';
-
-			console.log(req.user);
 			
 			Token.findOne({uid: req.user._id}).then(foundToken => {
-				console.log(foundToken);
 				if(foundToken) {
 					if(foundToken.token === 'not issued') {
 						status = 'review'
@@ -137,5 +134,14 @@ router.get("/profile", isAuthorized, (req, res) => {
 	     res.json(responseData);
 	});
 });
+
+router.post("/test", isAdminAuthorized, (req, res) => {
+	console.log(req.body);
+	emitTestListener(req, {
+		channel: req.body.channel,
+		message: req.body.message,
+		username: req.body.username
+	});
+})
 
 module.exports = router;
