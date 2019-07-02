@@ -49,7 +49,8 @@ let emitRemoveGold = (req) => {
 let emitAwardedAchievement = (req, achievement) => {
 	let ws = req.app.get('ws');
 	let sid = req.app.get('IRCSOCKET');
-	console.log(achievement);
+	var err = new Error();
+	console.log(err.stack);
 	ws.to(sid).emit('achievement-awarded', achievement);
 }
 
@@ -63,7 +64,6 @@ let emitAwardedAchievementNonMember = (req, achievement) => {
 let emitTestListener = (req, data) => {
 	let ws = req.app.get('ws');
 	let sid = req.app.get('IRCSOCKET');
-	console.log(data);
 	ws.to(sid).emit('test', data);
 }
 

@@ -4,8 +4,8 @@ const Schema = mongoose.Schema;
 const listenerSchema = new Schema({
 	uid: String,
 	channel: String,
-	code: String,
 	type: String,
+	resubType: String,
 	bot: String,
 	query: Schema.Types.Mixed,
 	condition: String,
@@ -17,7 +17,7 @@ const Listener = mongoose.model("listener", listenerSchema);
 module.exports = Listener;
 
 /*
-	Listener Codes:
+	Listener Types:
 	---------------
 	1 - Sub
 	2 - Resub

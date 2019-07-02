@@ -32,7 +32,7 @@ let combineAchievementAndListeners = (achievement, listener) => {
 		limited: achievement.limited,
 		secret: achievement.secret,
 		listener: achievement.listener,
-		code: listener.code
+		type: listener.type
 	}
 	
 	if(listener.resubType) {
@@ -45,7 +45,7 @@ let combineAchievementAndListeners = (achievement, listener) => {
 	return merge;
 }
 
-let updateAchievement = (channel, existingAchievement, updates, listenerUpdates, iconImg) => {
+let updateAchievement = (req, channel, existingAchievement, updates, listenerUpdates, iconImg) => {
 	return new Promise((resolve, reject) => {
 
 		let imgPromise;
@@ -87,7 +87,7 @@ let updateAchievement = (channel, existingAchievement, updates, listenerUpdates,
 							channel: channel,
 							achievement: updatedListener.achievement,
 							type: updatedListener.type,
-							code: updatedListener.code,
+							resubType: listenerData.resubType,
 							query: updatedListener.query,
 							bot: updatedListener.bot,
 							condition: updatedListener.condition
@@ -150,13 +150,13 @@ router.post('/update', isAuthorized, (req, res) => {
 				if(existingAchievement) {
 					let updates = req.body;
 
-					let {code, resubType, query, bot, condition} = updates;
+					let {type, resubType, query, bot, condition} = updates;
 
 					let listenerUpdates = {};
 
-					if(code) {
-						listenerUpdates.code = code;
-						delete updates.code;
+					if(type) {
+						listenerUpdates.type = type;
+						delete updates.type;
 					}
 					if(resubType) {
 						listenerUpdates.resubType = resubType;
@@ -180,12 +180,12 @@ router.post('/update', isAuthorized, (req, res) => {
 						uploadImage(updates.icon, updates.iconName, existingChannel.owner).then(iconImg => {
 							updates.icon = iconImg.url;
 
-							updateAchievement(existingChannel.owner, existingAchievement, updates, listenerUpdates, iconImg).then(response => {
+							updateAchievement(req, existingChannel.owner, existingAchievement, updates, listenerUpdates, iconImg).then(response => {
 								res.json(response);
 							});
 						});
 					} else {
-						updateAchievement(existingChannel.owner, existingAchievement, updates, listenerUpdates).then(response => {
+						updateAchievement(req, existingChannel.owner, existingAchievement, updates, listenerUpdates).then(response => {
 							res.json(response);
 						});
 					}
@@ -243,17 +243,17 @@ router.post("/create", isAuthorized, (req, res) => {
 
 					let listenerData = {
 						channel: existingChannel.owner,
-						code: req.body.code,
+						type: req.body.type,
 						uid: uuid()
 					};
 
-					if(listenerData.code !== '0') {
+					if(listenerData.type !== '0') {
 						listenerData.condition = req.body.condition;
 
-						if(listenerData.code === "1") {
+						if(listenerData.type === "1") {
 							listenerData.resubType = parseInt(req.body.resubType);
 						}
-						if(listenerData.code === "4") {
+						if(listenerData.type === "4") {
 							listenerData.bot = req.body.bot;
 							listenerData.query = req.body.query;
 						}
@@ -283,7 +283,7 @@ router.post("/create", isAuthorized, (req, res) => {
 												channel: listenerData.channel,
 												achievement: listenerData.achievement,
 												type: listenerData.type,
-												code: listenerData.code,
+												resubType: listenerData.resubType,
 												query: listenerData.query,
 												bot: listenerData.bot,
 												condition: listenerData.condition
@@ -317,7 +317,7 @@ router.post("/create", isAuthorized, (req, res) => {
 											channel: listenerData.channel,
 											achievement: listenerData.achievement,
 											type: listenerData.type,
-											code: listenerData.code,
+											resubType: listenerData.resubType,
 											query: listenerData.query,
 											bot: listenerData.bot,
 											condition: listenerData.condition
@@ -379,7 +379,7 @@ router.post("/delete", isAuthorized, (req, res) => {
 									channel: existingChannel.owner,
 									achievement: existingListener.achievement,
 									type: existingListener.type,
-									code: existingListener.code,
+									resubType: existingListener.resubType,
 									query: existingListener.query,
 									bot: existingListener.bot,
 									condition: existingListener.condition
@@ -593,99 +593,104 @@ router.post('/listeners', (req, res) => {
 
 	let responses = [];
 
-	achievements.forEach(achievementListener => {
-		let {channel, achievementID, tier, userID} = achievementListener;
+	let sortedListeners = {};
 
-		let userCriteria = {};
+	achievements.forEach(listener => {
+		sortedListeners[listener.channel] = sortedListeners[listener.channel] || [];
+   		sortedListeners[listener.channel].push(listener)
+	});
 
-		if(userID) {
-			userCriteria['integration.twitch.etid'] = userID
-		} else {
-			userCriteria.name = achievementListener.user
-		}
+	let channels = Object.keys(sortedListeners);
 
-		User.findOne(userCriteria).then((foundUser) => {
-			if(foundUser) {
-				Channel.find({owner: channel}).then(foundChannel => {
+	channels.forEach(channel => {
+		Channel.find({owner: channel}).then(foundChannel => {
+			let channelListeners = sortedListeners[channel];
+			
+			channelListeners.forEach(achievement => {
+				let {channel, achievementID, tier, userID} = achievement;
+				let userCriteria = {};
 
-					Achievement.findOne({'_id': achievementID}).then(foundAchievement => {
-						let entryIdx = foundUser.channels.findIndex(savedChannel => {
-							return savedChannel.channelID === foundChannel._id;
-						});
+				if(userID) {
+					userCriteria['integration.twitch.etid'] = userID
+				} else {
+					userCriteria.name = achievement.user
+				}
 
-						if(entryIdx >= 0) {
-							let userAchievements = foundUser.channels[entryIdx].achievements;
-
-							let achIdx = userAchievements.findIndex(usrAch => {
-								return usrAch.id === foundAchievement._id;
+				User.findOne(userCriteria).then((foundUser) => {
+					if(foundUser) {
+						Achievement.findOne({'_id': achievementID}).then(foundAchievement => {
+							let entryIdx = foundUser.channels.findIndex(savedChannel => {
+								return savedChannel.channelID === foundChannel._id;
 							});
 
-							if(achIdx < 0) {
-								foundUser.channels[entryIdx].achievements.push({
-									id: achievementID,
-									earned: currentDate
+							if(entryIdx >= 0) {
+								let userAchievements = foundUser.channels[entryIdx].achievements;
+
+								let achIdx = userAchievements.findIndex(usrAch => {
+									return usrAch.id === foundAchievement._id;
 								});
 
-								emitAwardedAchievement(req, {
-									'channel':channel,
-									'member': foundUser.name,
-									'achievement': foundAchievement.title
-								});
-
-							} else {
-								res.json({
-									message: "This user already earned this achievement!"
-								});
-							}
-						} else {
-							foundUser.channels.push({
-								channelID: foundChannel._id,
-								achievements: [{
-									id: achievementID,
-									earned: currentDate
-								}]
-							});
-							foundUser.save().then(savedUser => {
-
-								//Create a notification for the user
-								new Notice({
-									twitchID: userID,
-									channelID: foundChannel._id,
-									achievementID: achievementID
-								}).save().then(savedNotice => {
-
+								if(achIdx < 0) {
+									foundUser.channels[entryIdx].achievements.push({
+										id: achievementID,
+										earned: currentDate
+									});
+									console.log('sending it');
 									emitAwardedAchievement(req, {
-										'channel':channel,
+										'channel': channel,
 										'member': foundUser.name,
 										'achievement': foundAchievement.title
 									});
-								});
-							});
-						}	
-					});
 
-					
-				});
-			} else {
-				// User doesn't exist yet, so store the event off to award when signed up!
-				Channel.find({owner: channel}).then(foundChannel => {
-					new Queue({
-						twitchID: userID,
-						channelID: foundChannel._id,
-						achievementID: achievement
-					}).save().then(savedQueue => {
-						emitAwardedAchievementNonMember(req, {
-							'channel':channel,
-							'member': foundUser.name,
-							'achievement': foundAchievement.title
+								} else {
+									res.json({
+										message: "This user already earned this achievement!"
+									});
+								}
+							} else {
+								foundUser.channels.push({
+									channelID: foundChannel._id,
+									achievements: [{
+										id: achievementID,
+										earned: currentDate
+									}]
+								});
+								foundUser.save().then(savedUser => {
+
+									//Create a notification for the user
+									new Notice({
+										twitchID: userID,
+										channelID: foundChannel._id,
+										achievementID: achievementID
+									}).save().then(savedNotice => {
+
+										emitAwardedAchievement(req, {
+											'channel':channel,
+											'member': foundUser.name,
+											'achievement': foundAchievement.title
+										});
+									});
+								});
+							}	
 						});
-					});
-				})
-			}
+					} else {
+						// User doesn't exist yet, so store the event off to award when signed up!
+						new Queue({
+							twitchID: userID,
+							channelID: foundChannel._id,
+							achievementID: achievement
+						}).save().then(savedQueue => {
+							emitAwardedAchievementNonMember(req, {
+								'channel': channel,
+								'member': foundUser.name,
+								'achievement': foundAchievement.title
+							});
+						});
+					}
+				});
+			});
 		});
 	});
-
-	//Spawn child process to do it?
 });
 
 module.exports = router;

@@ -84,7 +84,7 @@ let getListeners = (offset, limit, total) => {
 						channel: listener.channel,
 						achievement: listener.achievement,
 						type: listener.type,
-						code: listener.code,
+						resubType: listener.resubType,
 						query: listener.query,
 						bot: listener.bot,
 						condition: listener.condition
