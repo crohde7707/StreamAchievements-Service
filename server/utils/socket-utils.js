@@ -1,11 +1,11 @@
 let emitNewChannel = (req, channel) => {
 	let ws = req.app.get('ws');
 	let sid = req.app.get('IRCSOCKET');
-	
+	console.log(channel);
 	ws.to(sid).emit('new-channel', {
 		name: channel.name,
 		'full-access': channel['full-access'],
-		online: false
+		connected: false
 	});
 }
 

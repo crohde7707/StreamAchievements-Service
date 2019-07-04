@@ -10,7 +10,7 @@ let channelRoutes = require('./channel-routes');
 let achievementRoutes = require('./achievement-routes');
 let ircRoutes = require('./irc-routes');
 const {isAuthorized, isAdminAuthorized} = require('../utils/auth-utils');
-const {emitTestListener} = require('../utils/socket-utils');
+const {emitTestListener, emitNewChannel} = require('../utils/socket-utils');
 
 router.use('/channel', channelRoutes);
 router.use('/achievement', achievementRoutes);
@@ -144,10 +144,14 @@ router.get("/profile", isAuthorized, (req, res) => {
 });
 
 router.post("/test", isAdminAuthorized, (req, res) => {
-	emitTestListener(req, {
-		channel: req.body.channel,
-		message: req.body.message,
-		username: req.body.username
+	// emitTestListener(req, {
+	// 	channel: req.body.channel,
+	// 	message: req.body.message,
+	// 	username: req.body.username
+	// });
+	emitNewChannel(req, {
+		name: req.body.channel,
+		'full-access': false
 	});
 })
 
