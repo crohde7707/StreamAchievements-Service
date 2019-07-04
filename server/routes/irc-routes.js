@@ -5,28 +5,39 @@ const Token = require('../models/token-model');
 const mongoose = require('mongoose');
 
 router.get('/channels', (req, res) => {
-	User.find({ $or: [{type: 'verified'},{type:'admin'}]}).then(users => {
-		let channels = users.map(user => {
-			let channel = {
-				name: user.name,
-				full_access: false
-			};
+	let offset = parseInt(req.query.offset) || 0;
+	let limit = parseInt(req.query.limit) || 50;
+	let total = parseInt(req.query.total) || undefined;
 
-			let patreon = user.integration.patreon;
-
-			if(patreon) {
-				if(patreon.forever || patreon.is_gold) {
-					channel['full-access'] = true;
+	if(!total) {
+		total = User.estimatedDocumentCount().exec().then(count => {
+			total = count;
+			
+			getChannels(offset, limit, total).then(channels => {
+				if(channels.err) {
+					res.status(500);
+					res.json({
+						channels: [],
+						err: channels.err
+					});
+				} else {
+					res.json(channels);
 				}
+			});
+		});
+	} else {
+		getChannels(offset, limit, total).then(channels => {
+			if(channels.err) {
+				res.status(500);
+				res.json({
+					channels: [],
+					err: channels.err
+				});
+			} else {
+				res.json(channels);
 			}
-
-			return channel;
 		});
-
-		res.json({
-			channels
-		});
-	});
+	}
 });
 
 router.get('/listeners', (req, res) => {
@@ -97,6 +108,44 @@ let getListeners = (offset, limit, total) => {
 				
 				if(listeners.length === limit) {
 					response.offset = offset + listeners.length;
+				}
+
+				resolve(response);
+			}
+		});
+	});
+}
+
+let getChannels = (offset, limit, total) => {
+	return new Promise((resolve, reject) => {
+		User.find({ $or: [{type: 'verified'},{type:'admin'}]}).sort({'_id': -1}).skip(offset).limit(limit).exec((err, doc) => {
+			if(err) {
+				resolve({err: 'Issue retrieving from User sets'});
+			} else {
+				let channels = doc.map(user => {
+					let channel = {
+						name: user.name,
+						full_access: false
+					};
+
+					let patreon = user.integration.patreon;
+
+					if(patreon) {
+						if(patreon.forever || patreon.is_gold) {
+							channel['full-access'] = true;
+						}
+					}
+
+					return channel;
+				});
+
+				let response = {
+					channels: channels,
+					total: total
+				}
+				
+				if(channels.length === limit) {
+					response.offset = offset + channels.length;
 				}
 
 				resolve(response);
