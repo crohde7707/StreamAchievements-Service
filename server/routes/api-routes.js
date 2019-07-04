@@ -2,6 +2,7 @@ const router = require('express').Router();
 const passport = require('passport');
 const User = require('../models/user-model');
 const Channel = require('../models/channel-model');
+const Achievement = require('../models/achievement-model');
 const Token = require('../models/token-model');
 const mongoose = require('mongoose');
 
@@ -117,25 +118,28 @@ router.get("/profile", isAuthorized, (req, res) => {
 
 	Channel.find({'_id': { $in: channelArray}}).then((channels) => {
 
-	     responseData = channels.map((channel) => {
+		let promises = channels.map(channel => {
+			let earnedAchievements = req.user.channels.filter(userChannel => (userChannel.channelID === channel.id));
+			let percentage = 0;
 
-	     	let percentage = 0;
+			return new Promise((resolve, reject) => {
+				Achievement.countDocuments({channel: channel.owner}).then(count => {
+					if(count > 0) {
+						percentage = Math.round((earnedAchievements[0].achievements.length / count) * 100);
+					}
 
-	     	//get percentage of achievements
-	     	let earnedAchievements = req.user.channels.filter((userChannel) => (userChannel.channelID === channel.id));
+					resolve({
+			     		logo: channel.logo,
+			     		owner: channel.owner,
+			     		percentage: percentage
+			     	});
+			    });
+			});
+		});
 
-	     	if(channel.achievements.length !== 0) {
-	     		percentage = Math.round((earnedAchievements[0].achievements.length / channel.achievements.length) * 100);
-	     	}
-
-	     	return {
-	     		logo: channel.logo,
-	     		owner: channel.owner,
-	     		percentage: percentage
-	     	};
-	     });
-
-	     res.json(responseData);
+		Promise.all(promises).then(responseData => {
+			res.json(responseData);
+		});
 	});
 });
 

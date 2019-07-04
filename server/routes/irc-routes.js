@@ -23,8 +23,6 @@ router.get('/channels', (req, res) => {
 			return channel;
 		});
 
-		console.log(channels);
-
 		res.json({
 			channels
 		});
@@ -52,6 +50,7 @@ router.get('/listeners', (req, res) => {
 						error: listeners.err
 					});
 				} else {
+					console.log(listeners);
 					res.json(listeners);
 				}
 			});
@@ -83,7 +82,7 @@ let getListeners = (offset, limit, total) => {
 					return {
 						channel: listener.channel,
 						achievement: listener.achievement,
-						type: listener.type,
+						achType: listener.achType,
 						resubType: listener.resubType,
 						query: listener.query,
 						bot: listener.bot,

@@ -406,7 +406,6 @@ router.post('/preferences', isAuthorized, (req, res) => {
 		
 		let defaultPromise, hiddenPromise;
 		//upload images if needed
-		console.log(req.body);
 		defaultPromise = new Promise((resolve, reject) => {
 			if(req.body.defaultIcon && validDataUrl(req.body.defaultIcon)) {
 				//got an image to upload
@@ -414,7 +413,6 @@ router.post('/preferences', isAuthorized, (req, res) => {
 					resolve(iconImg.url);
 				});
 			} else if(req.body.defaultImage && imgURLRegex.test(req.body.defaultImage)) {
-				console.log('successful match');
 				resolve(req.body.defaultImage);
 			} else {
 				resolve();
@@ -651,8 +649,6 @@ router.post('/confirm', isAdminAuthorized, (req, res) => {
 	User.findOne({name: req.body.name}).then(foundMember => {
 		let uid = foundMember['_id'];
 
-		console.log(uid);
-
 		Token.findOne({uid}).then(foundToken => {
 			let generatedToken = crypto.randomBytes(16).toString('hex');
 			foundToken.token = generatedToken;
@@ -699,17 +695,15 @@ router.post('/confirm', isAdminAuthorized, (req, res) => {
 
 router.post('/verify', isAuthorized, (req, res) => {
 	let token = req.body.id;
-	console.log(req.user._id);
-	console.log(token);
+
 	Token.findOne({uid: req.user._id, token}).then(foundToken => {
 		if(foundToken) {
-			console.log(foundToken);
 			if(foundToken.hasExpired()) {
-				// Token.deleteOne({uid: req.user._id, token}).then(err => {
-				// 	res.json({
-				// 		expired: true
-				// 	});	
-				// });
+				Token.deleteOne({uid: req.user._id, token}).then(err => {
+					res.json({
+						expired: true
+					});	
+				});
 				
 				res.json({
 					expired: true
@@ -720,8 +714,12 @@ router.post('/verify', isAuthorized, (req, res) => {
 					twitchID: req.user.integration.twitch.etid,
 					theme: '',
 					logo: req.user.logo,
-					achievements: [],
-					members: []
+					members: [],
+					icons: {
+						default: DEFAULT_ICON,
+						hidden: HIDDEN_ICON
+					},
+					nextUID: 1
 				}).save().then((newChannel) => {
 					req.user.channelID = newChannel.id;
 					req.user.save().then((savedUser) => {

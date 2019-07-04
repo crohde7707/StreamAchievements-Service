@@ -4,12 +4,13 @@ const Schema = mongoose.Schema;
 const listenerSchema = new Schema({
 	uid: String,
 	channel: String,
-	type: String,
+	achType: String,
 	resubType: String,
 	bot: String,
 	query: Schema.Types.Mixed,
 	condition: String,
-	achievement: String
+	achievement: String,
+	aid: Number
 });
 
 const Listener = mongoose.model("listener", listenerSchema);

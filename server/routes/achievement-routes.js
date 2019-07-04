@@ -32,7 +32,8 @@ let combineAchievementAndListeners = (achievement, listener) => {
 		limited: achievement.limited,
 		secret: achievement.secret,
 		listener: achievement.listener,
-		type: listener.type
+		achType: listener.achType,
+		condition: listener.condition
 	}
 	
 	if(listener.resubType) {
@@ -86,8 +87,8 @@ let updateAchievement = (req, channel, existingAchievement, updates, listenerUpd
 							uid: updatedListener.uid,
 							channel: channel,
 							achievement: updatedListener.achievement,
-							type: updatedListener.type,
-							resubType: listenerData.resubType,
+							achType: updatedListener.achType,
+							resubType: updatedListener.resubType,
 							query: updatedListener.query,
 							bot: updatedListener.bot,
 							condition: updatedListener.condition
@@ -150,13 +151,13 @@ router.post('/update', isAuthorized, (req, res) => {
 				if(existingAchievement) {
 					let updates = req.body;
 
-					let {type, resubType, query, bot, condition} = updates;
+					let {achType, resubType, query, bot, condition} = updates;
 
 					let listenerUpdates = {};
 
-					if(type) {
-						listenerUpdates.type = type;
-						delete updates.type;
+					if(achType) {
+						listenerUpdates.achType = achType;
+						delete updates.achType;
 					}
 					if(resubType) {
 						listenerUpdates.resubType = resubType;
@@ -243,17 +244,17 @@ router.post("/create", isAuthorized, (req, res) => {
 
 					let listenerData = {
 						channel: existingChannel.owner,
-						type: req.body.type,
+						achType: req.body.achType,
 						uid: uuid()
 					};
 
-					if(listenerData.type !== '0') {
+					if(listenerData.achType !== '0') {
 						listenerData.condition = req.body.condition;
 
-						if(listenerData.type === "1") {
+						if(listenerData.achType === "1") {
 							listenerData.resubType = parseInt(req.body.resubType);
 						}
-						if(listenerData.type === "4") {
+						if(listenerData.achType === "4") {
 							listenerData.bot = req.body.bot;
 							listenerData.query = req.body.query;
 						}
@@ -274,6 +275,7 @@ router.post("/create", isAuthorized, (req, res) => {
 									new Achievement(achData).save().then((newAchievement) => {
 										console.log('new achievement in DB');
 										listenerData.achievement = newAchievement.id;
+										listenerData.aid = newAchievement.uid;
 										
 										//create listener for achievement
 										new Listener(listenerData).save().then(newListener => {
@@ -282,7 +284,7 @@ router.post("/create", isAuthorized, (req, res) => {
 												uid: listenerData.uid,
 												channel: listenerData.channel,
 												achievement: listenerData.achievement,
-												type: listenerData.type,
+												achType: listenerData.achType,
 												resubType: listenerData.resubType,
 												query: listenerData.query,
 												bot: listenerData.bot,
@@ -309,6 +311,7 @@ router.post("/create", isAuthorized, (req, res) => {
 								new Achievement(achData).save().then((newAchievement) => {
 									
 									listenerData.achievement = newAchievement.id;
+									listenerData.aid = newAchievement.uid;
 									//create listener for achievement
 									new Listener(listenerData).save().then(newListener => {
 										
@@ -316,7 +319,7 @@ router.post("/create", isAuthorized, (req, res) => {
 											uid: listenerData.uid,
 											channel: listenerData.channel,
 											achievement: listenerData.achievement,
-											type: listenerData.type,
+											achType: listenerData.achType,
 											resubType: listenerData.resubType,
 											query: listenerData.query,
 											bot: listenerData.bot,
@@ -378,7 +381,7 @@ router.post("/delete", isAuthorized, (req, res) => {
 									uid: existingListener.uid,
 									channel: existingChannel.owner,
 									achievement: existingListener.achievement,
-									type: existingListener.type,
+									achType: existingListener.achType,
 									resubType: existingListener.resubType,
 									query: existingListener.query,
 									bot: existingListener.bot,
@@ -587,11 +590,10 @@ router.get('/listeners', (req, res) => {
 router.post('/listeners', (req, res) => {
 	//Process achievements
 	console.log('achievements to process...');
-	console.log(req.body);
+	
 	let achievements = req.body;
+	
 	let currentDate = new Date();
-
-	let responses = [];
 
 	let sortedListeners = {};
 
@@ -601,10 +603,12 @@ router.post('/listeners', (req, res) => {
 	});
 
 	let channels = Object.keys(sortedListeners);
+	
+	channels.forEach(achievementOwner => {
 
-	channels.forEach(channel => {
-		Channel.find({owner: channel}).then(foundChannel => {
-			let channelListeners = sortedListeners[channel];
+		Channel.findOne({owner: achievementOwner}).then(foundChannel => {
+
+			let channelListeners = sortedListeners[achievementOwner];
 			
 			channelListeners.forEach(achievement => {
 				let {channel, achievementID, tier, userID} = achievement;
@@ -617,39 +621,47 @@ router.post('/listeners', (req, res) => {
 				}
 
 				User.findOne(userCriteria).then((foundUser) => {
+					
 					if(foundUser) {
-						Achievement.findOne({'_id': achievementID}).then(foundAchievement => {
+						Achievement.findOne({['_id']: achievementID, channel: achievementOwner}).then(foundAchievement => {
 							let entryIdx = foundUser.channels.findIndex(savedChannel => {
-								return savedChannel.channelID === foundChannel._id;
+								return savedChannel.channelID === foundChannel.id;
 							});
 
 							if(entryIdx >= 0) {
+								//User already a part of this channel
 								let userAchievements = foundUser.channels[entryIdx].achievements;
+								let sync = foundUser.channels[entryIdx].sync;
 
 								let achIdx = userAchievements.findIndex(usrAch => {
-									return usrAch.id === foundAchievement._id;
+									return usrAch.id === foundAchievement.id;
 								});
 
 								if(achIdx < 0) {
 									foundUser.channels[entryIdx].achievements.push({
-										id: achievementID,
+										aid: foundAchievement.uid,
 										earned: currentDate
 									});
-									console.log('sending it');
-									emitAwardedAchievement(req, {
-										'channel': channel,
-										'member': foundUser.name,
-										'achievement': foundAchievement.title
-									});
 
-								} else {
-									res.json({
-										message: "This user already earned this achievement!"
-									});
+									if(sync && tier) {
+										handleSubBackfill(foundAchievement.id, foundUser, foundChannel);
+									} else {
+										throw new Error();
+										foundUser.save();
+									}
+
+									// emitAwardedAchievement(req, {
+									// 	'channel': channel,
+									// 	'member': foundUser.name,
+									// 	'achievement': foundAchievement.title
+									// });
+
 								}
 							} else {
+								throw new Error();
+								//TODO: User preference to auto join channel?
 								foundUser.channels.push({
-									channelID: foundChannel._id,
+									channelID: foundChannel.id,
 									achievements: [{
 										id: achievementID,
 										earned: currentDate
@@ -658,6 +670,7 @@ router.post('/listeners', (req, res) => {
 								foundUser.save().then(savedUser => {
 
 									//Create a notification for the user
+									//TODO: Reorganize notice model
 									new Notice({
 										twitchID: userID,
 										channelID: foundChannel._id,
@@ -692,5 +705,63 @@ router.post('/listeners', (req, res) => {
 		});
 	});
 });
+
+let handleSubBackfill = (achievement, foundUser, foundChannel) => {
+	//First time user getting an achievement, lets backfill award
+	//Get all sub, resub, & gifted sub listeners for the channel
+	Listener.find({achType: { $in: ["0","1"]}, channel: foundChannel.owner}).then(listeners => {
+		if(listeners) {
+			//Get current listener achieved to get the criteria
+			let entryIdx = listeners.findIndex(listener => {
+				return listener.achievement === achievement;
+			});
+
+			let currentListener = listeners.splice(entryIdx, 1)[0];
+			let achType = currentListener.achType;
+			let condition = currentListener.condition;
+			let listenersToAward = [];
+
+			if(achType === "1") {
+				let resubType = currentListener.resubType;
+
+				if(resubType === "0") {
+					//Streak Achievement: Backfill streaks and totals
+					listeners.forEach(listener => {
+						if(listener.condition <= condition) {
+							listenersToAward.push(listener);
+						}
+					});
+				} else {
+					//Total Achievement: Backfill only totals
+					listeners.forEach(listener => {
+						if(listener.achType === "0") {
+							listenersToAward.push(listener);
+						} else if(listener.resubType === "1" && listener.condition <= condition) {
+							listenersToAward.push(listener);
+						}
+					});
+				}
+
+				if(listenersToAward.length > 0) {
+					let userChannels = foundUser.channels;
+					let channelIdx = userChannels.findIndex(savedChannel => {
+						return savedChannel.channelID === foundChannel.id;
+					});
+
+					listenersToAward.forEach(listener => {
+						userChannels[channelIdx].achievements.push({aid: listener.aid, earned: Date.now()});
+					});
+					userChannels[channelIdx].sync = false;
+
+					foundUser.channels = userChannels;
+					
+					foundUser.save().then(savedUser => {
+
+					});
+				}
+			}
+		}
+	});
+}
 
 module.exports = router;

@@ -15,7 +15,8 @@ const userSchema = new Schema({
 					aid: Number,
 					earned: Date
 				}
-			]
+			],
+			sync: Boolean
 		}
 	],
 	integration: Object,

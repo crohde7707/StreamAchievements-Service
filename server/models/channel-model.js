@@ -6,7 +6,6 @@ const channelSchema = new Schema({
 	twitchID: String,
 	theme: String,
 	logo: String,
-	achievements: Array,
 	members: Array,
 	icons: {
 		default: String,

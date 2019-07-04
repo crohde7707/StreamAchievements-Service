@@ -11,7 +11,6 @@ const authCheck = (req, res, next) => {
 }
 
 const isAuthorized = async (req, res, next) => {
-	console.log(req.cookies);
 	let etid = cryptr.decrypt(req.cookies.etid);
 
 	let foundUser = await User.findOne({'integration.twitch.etid': etid})
