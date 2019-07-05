@@ -99,6 +99,7 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 					res.redirect(process.env.WEB_DOMAIN + 'home');
 				});			
 			}).catch(error => {
+				console.log(error.response.data.errors[0]);
 				if(error.response.status === 401) {
 					res.redirect('/auth/patreon');
 				}
@@ -141,7 +142,7 @@ router.get('/patreon/redirect', isAuthorized, (req, res) => {
 
 			//handle expires in
 			let today = new Date();
-			let expireDate = new Date().setDate(today.getDate() + 26);
+			let expireDate = new Date().setDate(today.getDate() + 14);
 			
 			let vanity;
 			let thumb_url;
@@ -254,7 +255,7 @@ let refreshPatreonToken = (user, refreshToken) => {
 				let newAT = cryptr.encrypt(response.data.access_token);
 				let newRT = cryptr.encrypt(response.data.refresh_token);
 				let today = new Date();
-				let newExpires = new Date().setDate(today.getDate() + 26);
+				let newExpires = new Date().setDate(today.getDate() + 14);
 
 				let integration = Object.assign({}, user.integration);
 

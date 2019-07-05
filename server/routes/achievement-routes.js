@@ -260,6 +260,8 @@ router.post("/create", isAuthorized, (req, res) => {
 						}
 					}
 
+					console.log(listenerData);
+
 					Listener.findOne(listenerData).then(foundListener => {
 						if(foundListener) {
 							Achievement.findOne({listener: foundListener._id}).then(foundAchievement => {
@@ -646,19 +648,17 @@ router.post('/listeners', (req, res) => {
 									if(sync && tier) {
 										handleSubBackfill(foundAchievement.id, foundUser, foundChannel);
 									} else {
-										throw new Error();
 										foundUser.save();
 									}
 
-									// emitAwardedAchievement(req, {
-									// 	'channel': channel,
-									// 	'member': foundUser.name,
-									// 	'achievement': foundAchievement.title
-									// });
+									emitAwardedAchievement(req, {
+										'channel': channel,
+										'member': foundUser.name,
+										'achievement': foundAchievement.title
+									});
 
 								}
 							} else {
-								throw new Error();
 								//TODO: User preference to auto join channel?
 								foundUser.channels.push({
 									channelID: foundChannel.id,

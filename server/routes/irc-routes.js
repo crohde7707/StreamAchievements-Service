@@ -90,6 +90,7 @@ let getListeners = (offset, limit, total) => {
 				resolve({err: 'Issue retrieving from Listener sets'});
 			} else {
 				let listeners = doc.map(listener => {
+					console.log(listener);
 					return {
 						channel: listener.channel,
 						achievement: listener.achievement,
