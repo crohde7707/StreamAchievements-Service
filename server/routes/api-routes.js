@@ -83,7 +83,8 @@ router.get("/user", isAuthorized, (req, res) => {
 				logo: req.user.logo,
 				patreon: patreonInfo,
 				status: 'verified',
-				type: req.user.type
+				type: req.user.type,
+				preferences: req.user.preferences
 			});
 		} else {
 			let status = 'viewer';
@@ -105,7 +106,8 @@ router.get("/user", isAuthorized, (req, res) => {
 					logo: req.user.logo,
 					patreon: patreonInfo,
 					status,
-					type: req.user.type
+					type: req.user.type,
+					preferences: req.user.preferences
 				});
 			});
 		}
@@ -138,8 +140,23 @@ router.get("/profile", isAuthorized, (req, res) => {
 		});
 
 		Promise.all(promises).then(responseData => {
-			res.json(responseData);
+			res.json({
+				channels: responseData,
+				preferences: req.user.preferences
+			});
 		});
+	});
+});
+
+router.post("/profile/preferences", isAuthorized, (req, res) => {
+	let preferences = {...req.user.preferences} || {};
+
+	preferences = {...req.body.preferences};
+
+	req.user.preferences = preferences;
+
+	req.user.save().then(savedUser => {
+		res.json(req.user.preferences);
 	});
 });
 

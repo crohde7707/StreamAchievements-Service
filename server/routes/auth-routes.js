@@ -65,6 +65,8 @@ router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
 		refreshPromise.then(() => {
 			let access_token = cryptr.decrypt(at);
 			console.log('getting up to date info from patreon');
+			console.log(id);
+			console.log(access_token);
 			axios.get(`https://www.patreon.com/api/oauth2/v2/members/${id}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
 				headers: {
 					Authorization: `Bearer ${access_token}`

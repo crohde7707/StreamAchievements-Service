@@ -622,10 +622,13 @@ router.post('/listeners', (req, res) => {
 					userCriteria.name = achievement.user
 				}
 
-				User.findOne(userCriteria).then((foundUser) => {
+				Achievement.findOne({['_id']: achievementID, channel: achievementOwner}).then(foundAchievement => {
+
+					User.findOne(userCriteria).then((foundUser) => {
 					
-					if(foundUser) {
-						Achievement.findOne({['_id']: achievementID, channel: achievementOwner}).then(foundAchievement => {
+						if(foundUser) {
+							userID = foundUser.integration.twitch.etid;
+
 							let entryIdx = foundUser.channels.findIndex(savedChannel => {
 								return savedChannel.channelID === foundChannel.id;
 							});
@@ -660,46 +663,60 @@ router.post('/listeners', (req, res) => {
 								}
 							} else {
 								//TODO: User preference to auto join channel?
-								foundUser.channels.push({
-									channelID: foundChannel.id,
-									achievements: [{
-										id: achievementID,
-										earned: currentDate
-									}]
-								});
-								foundUser.save().then(savedUser => {
+								if(foundUser.preferences.autojoin) {
+									foundUser.channels.push({
+										channelID: foundChannel.id,
+										achievements: [{
+											id: achievementID,
+											earned: currentDate
+										}]
+									});
+									foundUser.save().then(savedUser => {
 
-									//Create a notification for the user
-									//TODO: Reorganize notice model
+										//Create a notification for the user
+										//TODO: Reorganize notice model
+										new Notice({
+											twitchID: userID,
+											channelID: foundChannel._id,
+											achievementID: achievementID
+										}).save().then(savedNotice => {
+
+											emitAwardedAchievement(req, {
+												'channel':channel,
+												'member': foundUser.name,
+												'achievement': foundAchievement.title
+											});
+										});
+									});
+								} else {
 									new Notice({
 										twitchID: userID,
 										channelID: foundChannel._id,
 										achievementID: achievementID
 									}).save().then(savedNotice => {
-
 										emitAwardedAchievement(req, {
-											'channel':channel,
+											channel,
 											'member': foundUser.name,
 											'achievement': foundAchievement.title
 										});
 									});
-								});
+								}
 							}	
-						});
-					} else {
-						// User doesn't exist yet, so store the event off to award when signed up!
-						new Queue({
-							twitchID: userID,
-							channelID: foundChannel._id,
-							achievementID: achievement
-						}).save().then(savedQueue => {
-							emitAwardedAchievementNonMember(req, {
-								'channel': channel,
-								'member': foundUser.name,
-								'achievement': foundAchievement.title
+						} else {
+							// User doesn't exist yet, so store the event off to award when signed up!
+							new Queue({
+								twitchID: userID,
+								channelID: foundChannel._id,
+								achievementID: achievement
+							}).save().then(savedQueue => {
+								emitAwardedAchievementNonMember(req, {
+									'channel': channel,
+									'member': userCriteria.name,
+									'achievement': foundAchievement.title
+								});
 							});
-						});
-					}
+						}
+					});
 				});
 			});
 		});

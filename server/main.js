@@ -8,6 +8,7 @@ const passportSetup = require('./configs/passport-setup');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 const allowAccess = require('./utils/access-utils').allowAccess;
+const {searchChannels} = require('./utils/client-socket-utils');
 
 let io = require('socket.io');
 
@@ -65,6 +66,11 @@ WebSockets.on('connection', function (socket) {
     			app.set('USERSOCKETS', userSockets);
     		}
     	}
+    });
+
+    socket.on('search-directory', (data) => {
+        console.log(data);
+        searchChannels(socket, data);
     });
 });
 

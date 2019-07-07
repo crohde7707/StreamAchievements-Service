@@ -20,6 +20,7 @@ const userSchema = new Schema({
 		}
 	],
 	integration: Object,
+	preferences: Object,
 	lastLogin: Date
 });
 
