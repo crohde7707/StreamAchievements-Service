@@ -7,6 +7,7 @@ const userSchema = new Schema({
 	logo: String,
 	email: String,
 	type: String,
+	broadcaster_type: String,
 	channels: [
 		{
 			channelID: String,

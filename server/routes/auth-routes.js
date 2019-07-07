@@ -18,12 +18,12 @@ const PATREON_IDENTITY_API = 'https://www.patreon.com/api/oauth2/v2/identity?inc
 const SILVER_TIER_ID = '3497636';
 const GOLD_TIER_ID = '3497710';
 
-router.get('/twitch', passport.authenticate('twitch', {
-	scope: ["user_read"]
+router.get('/twitch', passport.authenticate('twitch.js', {
+	scope: ["user_read", "user:read:email"]
 }));
 
 //callback for twitch to redirect to
-router.get('/twitch/redirect', passport.authenticate('twitch'), (req, res) => {
+router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) => {
 
 	req.session.user = req.user;
 
@@ -217,6 +217,12 @@ router.get('/patreon/redirect', isAuthorized, (req, res) => {
 	});
 });
 
+router.post('/twitch/sync', isAuthorized, (req, res) => {
+	twitchSync(req.user, req.cookies.etid).then(twitchData => {
+		res.json(twitchData);
+	});
+})
+
 router.post('/patreon/sync', isAuthorized, (req, res) => {
 	
 	patreonSync(req.user, req.cookies.etid).then((patreonData) => {
@@ -279,6 +285,31 @@ let refreshPatreonToken = (user, refreshToken) => {
 			});
 		
 	});
+}
+
+let twitchSync = (user, etid) => {
+	if(user.integration.twitch) {
+		return new Promise((resolve, reject) => {
+			axios.get(`https://api.twitch.tv/helix/users/?id=${user.integration.twitch.etid}`, {
+				headers: {
+					'Client-ID': process.env.TCID
+				}
+			})
+				.then(response => {
+					user.name = response.data.data[0].login;
+					user.logo = response.data.data[0].profile_image_url;
+
+					user.save().then(savedUser => {
+						resolve({
+							username: savedUser.name,
+							logo: savedUser.logo
+						});
+					});
+				});
+		});
+	} else {
+		return Promise.resolve();
+	}
 }
 
 let patreonSync = (user, etid) => {

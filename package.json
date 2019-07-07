@@ -27,7 +27,7 @@
     "nodemailer": "^6.1.1",
     "passport": "^0.4.0",
     "passport-oauth": "^1.0.0",
-    "passport-twitch": "^1.0.3",
+    "passport-twitch.js": "0.0.7",
     "patreon": "^0.4.1",
     "request": "^2.88.0",
     "socket.io": "^2.2.0",
