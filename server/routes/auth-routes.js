@@ -5,6 +5,7 @@ const axios = require('axios');
 const cryptr = new Cryptr(process.env.SCK);
 const isAuthorized = require('../utils/auth-utils').isAuthorized;
 const User = require('../models/user-model');
+const Channel = require('../models/channel-model');
 
 //patreon
 let url = require('url');
@@ -17,6 +18,9 @@ let patreonOauthClient = patreonOAuth(process.env.PCID, process.env.PCS);
 const PATREON_IDENTITY_API = 'https://www.patreon.com/api/oauth2/v2/identity?include=memberships&fields%5Buser%5D=thumb_url,vanity';
 const SILVER_TIER_ID = '3497636';
 const GOLD_TIER_ID = '3497710';
+
+const DEFAULT_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png";
+const HIDDEN_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811887/hidden-icon.png";
 
 router.get('/twitch', passport.authenticate('twitch.js', {
 	scope: ["user_read", "user:read:email"]
@@ -238,10 +242,31 @@ router.post('/patreon/unlink', isAuthorized, (req, res) => {
 	req.user.integration = integration;
 
 	req.user.save().then(savedUser => {
-		res.json({
-			success: true,
-			service: 'patreon'
-		});
+
+		//Check if user owns a channel
+		Channel.findOne({owner: req.user.name}).then(foundChannel => {
+			if(foundChannel) {
+				//user owns a channel, update their default and hidden icons
+				foundChannel.icons = {
+					default: DEFAULT_ICON,
+					hidden: HIDDEN_ICON
+				};
+
+				foundChannel.save().then(savedChannel => {
+					res.json({
+						success: true,
+						service: 'patreon'
+					});
+				})
+			} else {
+				res.json({
+					success: true,
+					service: 'patreon'
+				});
+			}
+		})
+
+		
 	});	
 });
 
