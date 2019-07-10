@@ -72,6 +72,10 @@ WebSockets.on('connection', function (socket) {
         console.log(data);
         searchChannels(socket, data);
     });
+
+    socket.on('disconnect', () => {
+        console.log('disconnect');
+    });
 });
 
 console.log(`Express app listening on port ${port}`)

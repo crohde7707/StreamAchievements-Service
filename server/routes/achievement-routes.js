@@ -698,6 +698,8 @@ router.post('/listeners', (req, res) => {
 				let {channel, achievementID, tier, userID} = achievement;
 				let userCriteria = {};
 
+				let identifier = achievement.userID || achievement.user;
+
 				if(userID) {
 					userCriteria['integration.twitch.etid'] = userID
 				} else {
@@ -786,8 +788,9 @@ router.post('/listeners', (req, res) => {
 							}	
 						} else {
 							// User doesn't exist yet, so store the event off to award when signed up!
+							//TODO: Handle this (make call to users API to get name from ID, or ID from name)
 							new Queue({
-								twitchID: userID,
+								twitchID: identifier,
 								channelID: foundChannel._id,
 								achievementID: achievement
 							}).save().then(savedQueue => {
