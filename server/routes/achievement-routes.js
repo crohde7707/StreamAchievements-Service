@@ -756,7 +756,7 @@ router.post('/listeners', (req, res) => {
 										}]
 									});
 									foundUser.save().then(savedUser => {
-										foundChannel.members.push(savedUser._id);
+										foundChannel.members.push(savedUser.id);
 										foundChannel.save().then(savedChannel => {
 											//TODO: Reorganize notice model
 											new Notice({
