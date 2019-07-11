@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const passport = require('passport');
 const uuid = require('uuid/v1');
+const axios = require('axios');
 
 const User = require('../models/user-model');
 const Channel = require('../models/channel-model');
