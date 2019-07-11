@@ -50,8 +50,8 @@ passport.use(
 				});
 			} else {
 				new User({
-					name: profile.username,
-					logo: profile['_json'].logo,
+					name: profile.login,
+					logo: profile['_json'].profile_image_url,
 					email: profile.email,
 					type: 'user',
 					channels: [],
