@@ -158,7 +158,7 @@ router.post('/join', isAuthorized, (req, res) => {
 					achievements: []
 				};
 
-				Queue.find({twitchID: req.user.integration.twitch, channelID: existingChannel.id}).then(queues => {
+				Queue.find({twitchID: req.user.integration.twitch.etid, channelID: existingChannel.id}).then(queues => {
 					if(queues) {
 						queues.forEach(ach => {
 							newChannelObj.achievements.push(ach.achievementID);
