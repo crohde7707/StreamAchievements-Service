@@ -756,48 +756,93 @@ router.post('/listeners', (req, res) => {
 										}]
 									});
 									foundUser.save().then(savedUser => {
+										foundChannel.members.push(savedUser._id);
+										foundChannel.save().then(savedChannel => {
+											//TODO: Reorganize notice model
+											new Notice({
+												twitchID: userID,
+												channelID: foundChannel._id,
+												achievementID: achievementID
+											}).save().then(savedNotice => {
 
-										//Create a notification for the user
-										//TODO: Reorganize notice model
-										new Notice({
-											twitchID: userID,
-											channelID: foundChannel._id,
-											achievementID: achievementID
-										}).save().then(savedNotice => {
-
-											emitAwardedAchievement(req, {
-												'channel':channel,
-												'member': foundUser.name,
-												'achievement': foundAchievement.title
-											});
-										});
+												emitAwardedAchievement(req, {
+													'channel':channel,
+													'member': foundUser.name,
+													'achievement': foundAchievement.title
+												});
+											});	
+										})
 									});
 								} else {
+									new Queue({
+										twitchID: foundUser.integration.twitch.etid,
+										name: foundUser.name,
+										channelID: foundChannel._id,
+										achievementID: achievementID
+									}).save();
+
 									new Notice({
 										twitchID: userID,
 										channelID: foundChannel._id,
 										achievementID: achievementID
-									}).save().then(savedNotice => {
-										emitAwardedAchievement(req, {
-											channel,
-											'member': foundUser.name,
-											'achievement': foundAchievement.title
-										});
+									}).save();
+
+									emitAwardedAchievement(req, {
+										channel,
+										'member': foundUser.name,
+										'achievement': foundAchievement.title
 									});
 								}
 							}	
 						} else {
 							// User doesn't exist yet, so store the event off to award when signed up!
 							//TODO: Handle this (make call to users API to get name from ID, or ID from name)
-							new Queue({
-								twitchID: identifier,
-								channelID: foundChannel._id,
-								achievementID: achievement
-							}).save().then(savedQueue => {
-								emitAwardedAchievementNonMember(req, {
-									'channel': channel,
-									'member': userCriteria.name,
-									'achievement': foundAchievement.title
+							let userObj = {
+								userID: achievement.userID,
+								name: achievement.user
+							};
+							let apiURL;
+							let userPromise;
+
+							if(!userObj.userID) {
+								apiURL = `https://api.twitch.tv/helix/users/?login=${achievement.user}`;
+							} else if(!userObj.name) {
+								apiURL = `https://api.twitch.tv/helix/users/?id=${achievement.userID}`;
+							}
+
+							if(apiURL) {
+								userPromise = new Promise((resolve, reject) => {
+									axios.get(apiURL, {
+										headers: {
+											'Client-ID': process.env.TCID
+										}
+									}).then(res => {
+										userObj.userID = res.data.data[0].id;
+										userObj.name = res.data.data[0].login
+
+										resolve();
+									});
+								})
+							} else {
+								userPromise = Promise.resolve();
+							}
+
+							userPromise.then(() => {
+								Queue.findOne({twitchID: userObj.userID}).then(foundQueue => {
+									if(!foundQueue) {
+										new Queue({
+											twitchID: userObj.userID,
+											name: userObj.name,
+											channelID: foundChannel._id,
+											achievementID: achievementID
+										}).save().then(savedQueue => {
+											emitAwardedAchievementNonMember(req, {
+												'channel': channel,
+												'member': userObj.name,
+												'achievement': foundAchievement.title
+											});
+										})
+									}
 								});
 							});
 						}
@@ -852,6 +897,11 @@ let handleSubBackfill = (achievement, foundUser, foundChannel) => {
 
 					listenersToAward.forEach(listener => {
 						userChannels[channelIdx].achievements.push({aid: listener.aid, earned: Date.now()});
+						new Notice({
+							twitchID: foundUser.integration.twitch.etid,
+							channelID: foundChannel._id,
+							achievementID: achievement
+						}).save();
 					});
 					userChannels[channelIdx].sync = false;
 
