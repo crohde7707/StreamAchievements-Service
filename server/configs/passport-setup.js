@@ -17,7 +17,6 @@ passport.use(
 	}, (accessToken, refreshToken, profile, done) => {
 		let e_token = cryptr.encrypt(accessToken);
 		let e_refresh = cryptr.encrypt(refreshToken);
-		console.log(profile);
 		let twitchIntegration = {
 			etid: profile.id.toString(),
 			token: e_token,
@@ -57,6 +56,9 @@ passport.use(
 					channels: [],
 					integration: {
 						twitch: twitchIntegration
+					},
+					preferences: {
+						autojoin: false
 					}
 				}).save().then((newUser) => {
 					done(null, newUser);

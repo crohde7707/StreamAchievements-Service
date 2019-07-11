@@ -140,10 +140,25 @@ router.get("/profile", isAuthorized, (req, res) => {
 		});
 
 		Promise.all(promises).then(responseData => {
-			res.json({
-				channels: responseData,
-				preferences: req.user.preferences
-			});
+
+			if(!req.user.preferences) {
+				req.user.preferences = {
+					autojoin: false
+				};
+
+				req.user.save().then((savedUser) => {
+					res.json({
+						channels: responseData,
+						preferences: savedUser.preferences
+					});
+				});
+			} else {
+				res.json({
+					channels: responseData,
+					preferences: req.user.preferences
+				});
+			}
+			
 		});
 	});
 });
