@@ -624,7 +624,7 @@ router.post('/queue', isAdminAuthorized, (req, res) => {
 	let uid = req.body.uid;
 
 	Token.deleteOne({uid}).then(err => {
-		User.find({'_id': uid}).then(foundUser => {
+		User.findById(uid).then(foundUser => {
 			let email = foundUser.email;
 			var transporter = nodemailer.createTransport({
 				service: 'gmail',
@@ -654,39 +654,36 @@ router.post('/confirm', isAdminAuthorized, (req, res) => {
 			foundToken.token = generatedToken;
 			foundToken.created = Date.now();
 			foundToken.save().then(savedToken => {
-				//email token to user
-				User.find({'_id': savedToken.uid}).then(foundUser => {
-					let email = foundUser.email;
+				
+				let email = foundMember.email;
 
+				var auth = {
+				    type: 'oauth2',
+				    user: process.env.GML,
+				    clientId: process.env.GMLCID,
+				    clientSecret: process.env.GMLCS,
+				    refreshToken: process.env.GMLRT
+				};
 
-					var auth = {
-					    type: 'oauth2',
-					    user: process.env.GML,
-					    clientId: process.env.GMLCID,
-					    clientSecret: process.env.GMLCS,
-					    refreshToken: process.env.GMLRT
-					};
+				var transporter = nodemailer.createTransport({
+					service: 'gmail',
+					auth: auth
+				});
 
-					var transporter = nodemailer.createTransport({
-						service: 'gmail',
-						auth: auth
-					});
+				const mailOptions = {
+				    from: process.env.GML, // sender address
+				    to: email, // list of receivers
+				    subject: 'Your Confirmation Code!', // Subject line
+				    html: '<div style="background:#222938;padding-bottom:30px;"><h1 style="text-align:center;background:#2f4882;padding:15px;margin-top:0;"><img style="max-width:600px;" src="https://res.cloudinary.com/phirehero/image/upload/v1557947921/sa-logo.png" /></h1><h2 style="color:#FFFFFF; text-align: center;margin-top:30px;margin-bottom:25px;font-size:22px;">Thank you for your interest in Stream Achievements!</h2><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">We reviewed your channel and feel you are a perfect fit to join in on this pilot, and test the new features we aim to provide for streamers!</p><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">To get started, all you need to do is <a style="color: #ecdc19;" href="http://streamachievements.com/channel/verify?id=' + generatedToken + '&utm_medium=Email">verify your account</a>, and you\'ll be all set!</p><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">We are truly excited to see what you bring in terms of Achievements, and can\'t wait to see how much your community engages!</p></div>'
+				};
 
-					const mailOptions = {
-					    from: process.env.GML, // sender address
-					    to: email, // list of receivers
-					    subject: 'Your Confirmation Code!', // Subject line
-					    html: '<div style="background:#222938;padding-bottom:30px;"><h1 style="text-align:center;background:#2f4882;padding:15px;margin-top:0;"><img style="max-width:600px;" src="https://res.cloudinary.com/phirehero/image/upload/v1557947921/sa-logo.png" /></h1><h2 style="color:#FFFFFF; text-align: center;margin-top:30px;margin-bottom:25px;font-size:22px;">Thank you for your interest in Stream Achievements!</h2><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">We reviewed your channel and feel you are a perfect fit to join in on this pilot, and test the new features we aim to provide for streamers!</p><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">To get started, all you need to do is <a style="color: #ecdc19;" href="http://streamachievements.com/channel/verify?id=' + generatedToken + '&utm_medium=Email">verify your account</a>, and you\'ll be all set!</p><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">We are truly excited to see what you bring in terms of Achievements, and can\'t wait to see how much your community engages!</p></div>'
-					};
-
-					transporter.sendMail(mailOptions, function (err, info) {
-					   if(err)
-					     console.log(err)
-					   else
-					     res.json({
-					     	message: "email sent"
-					     });
-					});
+				transporter.sendMail(mailOptions, function (err, info) {
+				   if(err)
+				     console.log(err)
+				   else
+				     res.json({
+				     	message: "email sent"
+				     });
 				});
 			});
 		});

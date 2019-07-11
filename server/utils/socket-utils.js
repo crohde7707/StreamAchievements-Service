@@ -49,8 +49,6 @@ let emitRemoveGold = (req) => {
 let emitAwardedAchievement = (req, achievement) => {
 	let ws = req.app.get('ws');
 	let sid = req.app.get('IRCSOCKET');
-	var err = new Error();
-	console.log(err.stack);
 	ws.to(sid).emit('achievement-awarded', achievement);
 }
 
