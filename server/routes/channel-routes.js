@@ -14,6 +14,7 @@ const Achievement = require('../models/achievement-model');
 const Listener = require('../models/listener-model');
 const Image = require('../models/image-model');
 const Token = require('../models/token-model');
+const Queue = require('../models/queue-model');
 const {uploadImage, destroyImage} = require('../utils/image-utils');
 const {emitNewChannel} = require('../utils/socket-utils');
 
@@ -152,17 +153,30 @@ router.post('/join', isAuthorized, (req, res) => {
 					});
 				}
 			} else {
-				req.user.channels.push({
+				let newChannelObj = {
 					channelID: existingChannel.id,
 					achievements: []
-				});
-				req.user.save().then((savedUser) => {
+				};
 
-					existingChannel.members.push(savedUser.id);
-					existingChannel.save().then((savedChannel) => {
-						res.json({
-							user: savedUser,
-							channel: savedChannel
+				Queue.find({twitchID: req.user.integration.twitch, channelID: existingChannel.id}).then(queues => {
+					if(queues) {
+						queues.forEach(ach => {
+							newChannelObj.achievements.push(ach.achievementID);
+							Queue.deleteOne({ _id: ach._id});
+						});
+					}
+
+
+					req.user.channels.push(newChannelObj);
+					req.user.save().then((savedUser) => {
+
+						existingChannel.members.push(savedUser.id);
+						existingChannel.save().then((savedChannel) => {
+
+							res.json({
+								user: savedUser,
+								channel: savedChannel
+							});
 						});
 					});
 				});
@@ -229,6 +243,14 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 						retAchievements = foundAchievements;
 					}
 
+					let strippedAchievements = retAchievements.map(ach => {
+						let tempAch = (ach['_doc']) ? {...ach['_doc']} : ach;
+						delete tempAch['__v'];
+						delete tempAch['_id'];
+
+						return tempAch;
+					});
+
 					//check if patreon active, return full access or not
 					User.findOne({name: channel}).then((foundUser) => {
 						if(foundUser) {
@@ -238,9 +260,13 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 								fullAccess = true;
 							}
 
+							let retChannel = {...foundChannel['_doc']};
+							delete retChannel['__v'];
+							delete retChannel['_id'];
+
 							res.json({
-								channel: foundChannel,
-								achievements: retAchievements,
+								channel: retChannel,
+								achievements: strippedAchievements,
 								joined: joined,
 								fullAccess
 							});	

@@ -630,8 +630,16 @@ router.get('/icons', isAuthorized, (req, res) => {
 			//Get Images
 
 			retrieveImages(existingChannel.owner).then(images => {
+				let retImages = images.map(image => {
+					let tempImg = {...image['_doc']};
+					delete tempImg['__v'];
+					delete tempImg['_id'];
+
+					return tempImg;
+				});
+
 				res.json({
-					images: images,
+					images: retImages,
 					defaultIcons: existingChannel.icons
 				});
 			});
@@ -740,7 +748,7 @@ router.post('/listeners', (req, res) => {
 									}
 
 									emitAwardedAchievement(req, {
-										'channel': channel,
+										'channel': achievementOwner,
 										'member': foundUser.name,
 										'achievement': foundAchievement.title
 									});
@@ -767,7 +775,7 @@ router.post('/listeners', (req, res) => {
 											}).save().then(savedNotice => {
 
 												emitAwardedAchievement(req, {
-													'channel':channel,
+													'channel':achievementOwner,
 													'member': foundUser.name,
 													'achievement': foundAchievement.title
 												});
@@ -789,7 +797,7 @@ router.post('/listeners', (req, res) => {
 									}).save();
 
 									emitAwardedAchievement(req, {
-										channel,
+										'channel': achievementOwner,
 										'member': foundUser.name,
 										'achievement': foundAchievement.title
 									});
@@ -834,11 +842,11 @@ router.post('/listeners', (req, res) => {
 										new Queue({
 											twitchID: userObj.userID,
 											name: userObj.name,
-											channelID: foundChannel._id,
+											channelID: achievementOwner,
 											achievementID: achievementID
 										}).save().then(savedQueue => {
 											emitAwardedAchievementNonMember(req, {
-												'channel': channel,
+												'channel': achievementOwner,
 												'member': userObj.name,
 												'achievement': foundAchievement.title
 											});
