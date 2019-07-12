@@ -49,6 +49,7 @@ let emitRemoveGold = (req) => {
 let emitAwardedAchievement = (req, achievement) => {
 	let ws = req.app.get('ws');
 	let sid = req.app.get('IRCSOCKET');
+
 	ws.to(sid).emit('achievement-awarded', achievement);
 }
 
@@ -65,6 +66,14 @@ let emitTestListener = (req, data) => {
 	ws.to(sid).emit('test', data);
 }
 
+let emitOverlayAlert = (req, data) => {
+	let ws = req.app.get('ws');
+	let sid = req.app.get(data.channel + '-OVERLAY');
+	if(sid) {
+		ws.to(sid).emit('alert-recieved', data.alert);	
+	}
+}
+
 module.exports = {
 	emitNewChannel,
 	emitNewListener,
@@ -74,5 +83,6 @@ module.exports = {
 	emitRemoveGold,
 	emitAwardedAchievement,
 	emitAwardedAchievementNonMember,
-	emitTestListener
+	emitTestListener,
+	emitOverlayAlert
 }
