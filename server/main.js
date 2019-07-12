@@ -8,7 +8,7 @@ const passportSetup = require('./configs/passport-setup');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 const allowAccess = require('./utils/access-utils').allowAccess;
-const {searchChannels} = require('./utils/client-socket-utils');
+const {searchChannels, storeSocket} = require('./utils/client-socket-utils');
 
 let io = require('socket.io');
 
@@ -48,6 +48,11 @@ app.set('ws', WebSockets);
 
 WebSockets.on('connection', function (socket) {
     console.log('connected:', socket.client.id);
+
+    if(socket.handshake && socket.handshake.query && socket.handshake.query.uid) {
+        //Socket coming from overlay-panel
+        storeSocket(socket, app);
+    }
 
     socket.on('handshake', function(data) {
     	if(data.name = "SAIRC") {

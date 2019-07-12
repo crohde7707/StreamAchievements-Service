@@ -18,6 +18,19 @@ let SearchChannels = (socket, value) => {
 	});
 }
 
+let StoreSocket = (socket, app) => {
+	Channel.findOne({oid: socket.handshake.query.uid}).then(foundChannel => {
+		if(foundChannel) {
+			app.set(foundChannel.owner + "-OVERLAY", socket.id);
+			console.log(foundChannel.owner + "-OVERLAY", socket.id);
+		} else {
+			//No channel found
+			socket.emit('connect-issue', "Issue while connecting");
+		}
+	})
+}
+
 module.exports = {
-	searchChannels: SearchChannels
+	searchChannels: SearchChannels,
+	storeSocket: StoreSocket
 }

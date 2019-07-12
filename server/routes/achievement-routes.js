@@ -747,11 +747,16 @@ router.post('/listeners', (req, res) => {
 										foundUser.save();
 									}
 
-									emitAwardedAchievement(req, {
+									let alertData = {
 										'channel': achievementOwner,
 										'member': foundUser.name,
 										'achievement': foundAchievement.title
-									});
+									};
+
+									emitAwardedAchievement(req, alertData);
+									if(foundAchievement.alert) {
+										emitOverlayAlert(req, alertData);	
+									}
 
 								}
 							} else {
@@ -773,12 +778,16 @@ router.post('/listeners', (req, res) => {
 												channelID: foundChannel._id,
 												achievementID: achievementID
 											}).save().then(savedNotice => {
-
-												emitAwardedAchievement(req, {
+												let alertData = {
 													'channel':achievementOwner,
 													'member': foundUser.name,
 													'achievement': foundAchievement.title
-												});
+												};
+
+												emitAwardedAchievement(req, alertData);
+												if(foundAchievement.alert) {
+													emitOverlayAlert(req, alertData);
+												}
 											});	
 										})
 									});
@@ -796,11 +805,16 @@ router.post('/listeners', (req, res) => {
 										achievementID: achievementID
 									}).save();
 
-									emitAwardedAchievement(req, {
+									let alertData = {
 										'channel': achievementOwner,
 										'member': foundUser.name,
 										'achievement': foundAchievement.title
-									});
+									};
+
+									emitAwardedAchievement(req, alertData);
+									if(foundAchievement.alert) {
+										emitOverlayAlert(req, alertData);
+									}
 								}
 							}	
 						} else {
@@ -845,11 +859,16 @@ router.post('/listeners', (req, res) => {
 											channelID: achievementOwner,
 											achievementID: achievementID
 										}).save().then(savedQueue => {
-											emitAwardedAchievementNonMember(req, {
+											let alertData = {
 												'channel': achievementOwner,
 												'member': userObj.name,
 												'achievement': foundAchievement.title
-											});
+											};
+											
+											emitAwardedAchievementNonMember(req, alertData);
+											if(foundAchievement.alert) {
+												emitOverlayAlert(req, alertData);
+											}
 										})
 									}
 								});

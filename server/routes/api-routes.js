@@ -88,8 +88,6 @@ router.get("/user", isAuthorized, (req, res) => {
 			});
 		} else {
 			let status = 'viewer';
-
-			console.log(req.user);
 			
 			Token.findOne({uid: req.user._id}).then(foundToken => {
 				console.log(foundToken);

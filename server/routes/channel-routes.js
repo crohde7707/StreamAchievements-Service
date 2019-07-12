@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const passport = require('passport');
+const uuid = require('uuid/v1');
 const {isAuthorized, isAdminAuthorized} = require('../utils/auth-utils');
 const mongoose = require('mongoose');
 const Cryptr = require('cryptr');
@@ -42,6 +43,7 @@ router.get("/create", isAuthorized, (req, res) => {
 					default: DEFAULT_ICON,
 					hidden: HIDDEN_ICON
 				},
+				oid: uuid(),
 				nextUID: 1
 			}).save().then((newChannel) => {
 				let fullAccess = false;
@@ -396,12 +398,32 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 				});
 
 				Promise.all([achievementsPromise, imagesPromise, membersPromise]).then(values => {
-					res.json({
-						channel: existingChannel,
-						achievements: values[0],
-						images: values[1],
-						members: values[2]
-					})
+					if(!existingChannel.oid) {
+						existingChannel.oid = uuid();
+						existingChannel.save().then(savedChannel => {
+							res.json({
+								channel: savedChannel,
+								achievements: values[0],
+								images: values[1],
+								members: values[2]
+							});
+						});
+					} else {
+						emitTestAlert(req, {
+							channel: existingChannel.owner,
+							alert: {
+								title: "My title",
+								user: "phirehero"
+							}
+						});
+
+						res.json({
+							channel: existingChannel,
+							achievements: values[0],
+							images: values[1],
+							members: values[2]
+						});
+					}
 				});
 				
 			} else {
@@ -742,6 +764,7 @@ router.post('/verify', isAuthorized, (req, res) => {
 						default: DEFAULT_ICON,
 						hidden: HIDDEN_ICON
 					},
+					oid: uuid(),
 					nextUID: 1
 				}).save().then((newChannel) => {
 					req.user.channelID = newChannel.id;

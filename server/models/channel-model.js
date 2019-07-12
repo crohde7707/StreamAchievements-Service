@@ -11,6 +11,7 @@ const channelSchema = new Schema({
 		default: String,
 		hidden: String
 	},
+	oid: String,
 	nextUID: Number
 });
 
