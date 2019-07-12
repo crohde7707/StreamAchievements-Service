@@ -744,8 +744,7 @@ router.post('/verify', isAuthorized, (req, res) => {
 					},
 					nextUID: 1
 				}).save().then((newChannel) => {
-					req.user.channelID = newChannel.id;
-					req.user.status = 'verified';
+					req.user.type = 'verified';
 					req.user.save().then((savedUser) => {
 						Token.deleteOne({uid: req.user._id, token}).then(err => {
 							res.json({
