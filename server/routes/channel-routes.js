@@ -409,13 +409,6 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 							});
 						});
 					} else {
-						emitTestAlert(req, {
-							channel: existingChannel.owner,
-							alert: {
-								title: "My title",
-								user: "phirehero"
-							}
-						});
 
 						res.json({
 							channel: existingChannel,

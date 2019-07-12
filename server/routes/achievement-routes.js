@@ -271,6 +271,26 @@ router.post('/update', isAuthorized, (req, res) => {
 	});
 });
 
+router.post('/fixit', isAuthorized, (req, res) => {
+	Achievement.find({}).then(achievements => {
+		if(achievements) {
+			achievements.forEach(achievement => {
+				if(achievement.listener) {
+					Listener.findById(achievement.listener).then(foundListener => {
+						if(foundListener) {
+							console.log('updating: ' + achievement.channel + ": " + achievement.title);
+							foundListener.aid = achievement.uid;
+							foundListener.achievement = achievement.id;
+							foundListener.save();
+						}
+					});
+				}
+				
+			});
+		}
+	})
+})
+
 router.post("/create", isAuthorized, (req, res) => {
 	
 	Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
@@ -380,6 +400,8 @@ router.post("/create", isAuthorized, (req, res) => {
 								});	
 							} else {
 								new Achievement(achData).save().then((newAchievement) => {
+									listenerData.achievement = newAchievement.id;
+									listenerData.aid = newAchievement.uid;
 									
 									existingChannel.nextUID = newAchievement.uid + 1;
 									existingChannel.save().then(updatedChannel => {
