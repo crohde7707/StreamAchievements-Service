@@ -37,9 +37,6 @@ let combineAchievementAndListeners = (achievement, listener) => {
 		condition: listener.condition
 	}
 	
-	if(listener.resubType) {
-		merge.resubType = listener.resubType;
-	}
 	if(listener.query) {
 		merge.query = listener.query;
 	}
@@ -92,7 +89,6 @@ let updateAchievement = (req, channel, existingAchievement, updates, listenerUpd
 									channel,
 									achievement: existingListener.achievement,
 									achType: existingListener.achType,
-									resubType: existingListener.resubType,
 									query: existingListener.query,
 									bot: existingListener.bot,
 									condition: existingListener.condition
@@ -127,7 +123,6 @@ let updateAchievement = (req, channel, existingAchievement, updates, listenerUpd
 								channel: newListener.channel,
 								achievement: newListener.achievement,
 								achType: newListener.achType,
-								resubType: newListener.resubType,
 								query: newListener.query,
 								bot: newListener.bot,
 								condition: newListener.condition
@@ -151,7 +146,6 @@ let updateAchievement = (req, channel, existingAchievement, updates, listenerUpd
 								channel: channel,
 								achievement: updatedListener.achievement,
 								achType: updatedListener.achType,
-								resubType: updatedListener.resubType,
 								query: updatedListener.query,
 								bot: updatedListener.bot,
 								condition: updatedListener.condition
@@ -215,17 +209,13 @@ router.post('/update', isAuthorized, (req, res) => {
 				if(existingAchievement) {
 					let updates = req.body;
 
-					let {achType, resubType, query, bot, condition} = updates;
+					let {achType, query, bot, condition} = updates;
 
 					let listenerUpdates = {};
 
 					if(achType) {
 						listenerUpdates.achType = achType;
 						delete updates.achType;
-					}
-					if(resubType) {
-						listenerUpdates.resubType = resubType;
-						delete updates.resubType;
 					}
 					if(query) {
 						listenerUpdates.query = query;
@@ -372,9 +362,6 @@ router.post("/create", isAuthorized, (req, res) => {
 					if(listenerData.achType !== '0') {
 						listenerData.condition = req.body.condition;
 
-						if(listenerData.achType === "1") {
-							listenerData.resubType = parseInt(req.body.resubType);
-						}
 						if(listenerData.achType === "4") {
 							listenerData.bot = req.body.bot;
 							listenerData.query = req.body.query;
@@ -411,7 +398,6 @@ router.post("/create", isAuthorized, (req, res) => {
 															channel: listenerData.channel,
 															achievement: listenerData.achievement,
 															achType: listenerData.achType,
-															resubType: listenerData.resubType,
 															query: listenerData.query,
 															bot: listenerData.bot,
 															condition: listenerData.condition
@@ -451,7 +437,6 @@ router.post("/create", isAuthorized, (req, res) => {
 													channel: listenerData.channel,
 													achievement: listenerData.achievement,
 													achType: listenerData.achType,
-													resubType: listenerData.resubType,
 													query: listenerData.query,
 													bot: listenerData.bot,
 													condition: listenerData.condition
@@ -517,7 +502,6 @@ router.post("/delete", isAuthorized, (req, res) => {
 									channel: existingChannel.owner,
 									achievement: existingListener.achievement,
 									achType: existingListener.achType,
-									resubType: existingListener.resubType,
 									query: existingListener.query,
 									bot: existingListener.bot,
 									condition: existingListener.condition
@@ -656,7 +640,7 @@ router.post('/award', isAuthorized, (req, res) => {
 						emitAwardedAchievement(req, {
 							'channel':existingChannel.owner,
 							'member': savedMember.name,
-							'title': foundAchievement.title
+							'achievement': foundAchievement.title
 						});
 					});
 				});
@@ -966,25 +950,15 @@ let handleSubBackfill = (achievement, foundUser, foundChannel) => {
 			let listenersToAward = [];
 
 			if(achType === "1") {
-				let resubType = currentListener.resubType;
-
-				if(resubType === "0") {
-					//Streak Achievement: Backfill streaks and totals
-					listeners.forEach(listener => {
-						if(listener.condition <= condition) {
-							listenersToAward.push(listener);
-						}
-					});
-				} else {
-					//Total Achievement: Backfill only totals
-					listeners.forEach(listener => {
-						if(listener.achType === "0") {
-							listenersToAward.push(listener);
-						} else if(listener.resubType === "1" && listener.condition <= condition) {
-							listenersToAward.push(listener);
-						}
-					});
-				}
+				
+				//Total Achievement: Backfill only totals
+				listeners.forEach(listener => {
+					if(listener.achType === "0") {
+						listenersToAward.push(listener);
+					} else if(listener.condition <= condition) {
+						listenersToAward.push(listener);
+					}
+				});
 
 				if(listenersToAward.length > 0) {
 					let userChannels = foundUser.channels;
