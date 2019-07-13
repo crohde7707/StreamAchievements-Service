@@ -314,6 +314,8 @@ router.post('/flush', isAuthorized, (req, res) => {
 												aid: foundAchievement.uid,
 												earned: Date.now()
 											});
+
+											foundUser.save();
 										}
 									}
 								});
@@ -769,7 +771,13 @@ router.post('/listeners', (req, res) => {
 				if(userID) {
 					userCriteria['integration.twitch.etid'] = userID
 				} else {
-					userCriteria.name = achievement.user
+					let userName = achievement.user;
+
+					if(userName.indexOf('@') === 0) {
+						userName = userName.substr(1);
+					}
+
+					userCriteria.name = userName;
 				}
 
 				Achievement.findById(achievementID).then(foundAchievement => {
