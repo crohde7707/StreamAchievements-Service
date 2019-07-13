@@ -11,24 +11,30 @@ const authCheck = (req, res, next) => {
 }
 
 const isAuthorized = async (req, res, next) => {
-	let etid = cryptr.decrypt(req.cookies.etid);
+	if(req.cookies.etid) {
+		let etid = cryptr.decrypt(req.cookies.etid);
 
-	let foundUser = await User.findOne({'integration.twitch.etid': etid})
+		let foundUser = await User.findOne({'integration.twitch.etid': etid})
+				
+		if(foundUser) {
+			req.user = foundUser;
 			
-	if(foundUser) {
-		req.user = foundUser;
-		
-		if(process.env.NODE_ENV === 'production') {
-			res.cookie('etid', req.cookies.etid, { maxAge: 4 * 60 * 60 * 1000, secure: true, httpOnly: false, domain: 'streamachievements.com' });
+			if(process.env.NODE_ENV === 'production') {
+				res.cookie('etid', req.cookies.etid, { maxAge: 4 * 60 * 60 * 1000, secure: true, httpOnly: false, domain: 'streamachievements.com' });
+			} else {
+				res.cookie('etid', req.cookies.etid, { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
+			}
+			next();
 		} else {
-			res.cookie('etid', req.cookies.etid, { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
-		}
-		next();
+			res.clearCookie('etid'); //set path to streamachievements.com when ready
+			res.status(401);
+			res.redirect(process.env.WEB_DOMAIN);
+		}	
 	} else {
-		res.clearCookie('etid'); //set path to streamachievements.com when ready
 		res.status(401);
 		res.redirect(process.env.WEB_DOMAIN);
 	}
+	
 }
 
 const isAdminAuthorized = async (req, res, next) => {

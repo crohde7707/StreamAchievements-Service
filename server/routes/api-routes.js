@@ -24,17 +24,21 @@ let timeout = false
 
 router.get('/users', isAdminAuthorized, (req, res) => {
 	Token.find({}).then(tokens => {
-		let userIDs = tokens.map(token => token.uid);
+		let tokenLookup = {};
+
+		let userIDs = tokens.map(token => {
+			tokenLookup[token.uid] = token.token;
+			return token.uid;
+		});
+
 		User.find({'_id': { $in: userIDs}}).then(users => {
-			let response = {
-				new: [],
-				pending: []
-			};
 			
 			let resUsers = users.map(user => {
+
 				return {
 					name: user.name,
-					logo: user.logo
+					logo: user.logo,
+					status: ((tokenLookup[user.id] === "not issued")) ? "new" : "pending"
 				}
 			});
 
