@@ -140,7 +140,8 @@ router.post('/join', isAuthorized, (req, res) => {
 				if(!alreadyJoined) {
 					req.user.channels.push({
 						channelID: existingChannel.id,
-						achievements: []
+						achievements: [],
+						sync: true
 					});
 					req.user.save().then((savedUser) => {
 						res.json({
@@ -157,7 +158,8 @@ router.post('/join', isAuthorized, (req, res) => {
 			} else {
 				let newChannelObj = {
 					channelID: existingChannel.id,
-					achievements: []
+					achievements: [],
+					sync: true
 				};
 
 				Queue.find({twitchID: req.user.integration.twitch.etid, channelID: existingChannel.id}).then(queues => {
