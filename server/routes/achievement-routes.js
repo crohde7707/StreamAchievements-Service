@@ -628,7 +628,7 @@ router.post('/award', isAuthorized, (req, res) => {
 	let achievementID = req.body.aid;
 
 	Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
-		Achievement.findOne({uid: achievementID}).then(foundAchievement => {
+		Achievement.findOne({uid: achievementID, channel: req.user.name}).then(foundAchievement => {
 			User.find({'name': { $in: members}}).then(foundMembers => {
 				let promises = foundMembers.map((member, idx) => {
 					let channels = member.channels;
