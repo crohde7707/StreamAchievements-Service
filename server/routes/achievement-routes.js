@@ -16,7 +16,8 @@ const {
 	emitUpdateListener,
 	emitRemoveListener,
 	emitAwardedAchievement,
-	emitAwardedAchievementNonMember
+	emitAwardedAchievementNonMember,
+	emitOverlayAlert
 } = require('../utils/socket-utils');
 
 const uploadImage = require('../utils/image-utils').uploadImage;
@@ -782,7 +783,7 @@ router.post('/listeners', (req, res) => {
 									let sync = foundUser.channels[entryIdx].sync;
 
 									let achIdx = userAchievements.findIndex(usrAch => {
-										return usrAch.id === foundAchievement.id;
+										return usrAch.aid === foundAchievement.uid;
 									});
 
 									if(achIdx < 0) {
@@ -805,7 +806,10 @@ router.post('/listeners', (req, res) => {
 
 										emitAwardedAchievement(req, alertData);
 										if(foundAchievement.alert) {
-											emitOverlayAlert(req, alertData);	
+											emitOverlayAlert(req, {
+												...alertData,
+												icon: foundAchievement.icon
+											});	
 										}
 
 									}
@@ -966,13 +970,21 @@ let handleSubBackfill = (achievement, foundUser, foundChannel) => {
 						return savedChannel.channelID === foundChannel.id;
 					});
 
+					let userAchievements = foundUser.channels[channelIdx].achievements;
+
 					listenersToAward.forEach(listener => {
-						userChannels[channelIdx].achievements.push({aid: listener.aid, earned: Date.now()});
-						new Notice({
-							twitchID: foundUser.integration.twitch.etid,
-							channelID: foundChannel._id,
-							achievementID: achievement
-						}).save();
+						let achIdx = userAchievements.findIndex(usrAch => {
+							return usrAch.aid === listener.aid;
+						});
+
+						if(achIdx < 0) {
+							userChannels[channelIdx].achievements.push({aid: listener.aid, earned: Date.now()});
+							new Notice({
+								twitchID: foundUser.integration.twitch.etid,
+								channelID: foundChannel._id,
+								achievementID: achievement
+							}).save();
+						}
 					});
 					userChannels[channelIdx].sync = false;
 

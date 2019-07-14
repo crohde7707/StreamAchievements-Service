@@ -70,7 +70,7 @@ let emitOverlayAlert = (req, data) => {
 	let ws = req.app.get('ws');
 	let sid = req.app.get(data.channel + '-OVERLAY');
 	if(sid) {
-		ws.to(sid).emit('alert-recieved', data.alert);	
+		ws.to(sid).emit('alert-recieved', data);	
 	}
 }
 
