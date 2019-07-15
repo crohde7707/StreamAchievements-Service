@@ -830,7 +830,7 @@ router.post('/listeners', (req, res) => {
 												new Notice({
 													twitchID: userID,
 													channelID: foundChannel._id,
-													achievementID: achievementID
+													achievementID: foundAchievement.uid
 												}).save().then(savedNotice => {
 													let alertData = {
 														'channel':achievementOwner,
@@ -850,7 +850,7 @@ router.post('/listeners', (req, res) => {
 											twitchID: foundUser.integration.twitch.etid,
 											name: foundUser.name,
 											channelID: foundChannel._id,
-											achievementID: achievementID
+											achievementID: foundAchievement.uid
 										}).save();
 
 										new Notice({
@@ -910,8 +910,8 @@ router.post('/listeners', (req, res) => {
 											new Queue({
 												twitchID: userObj.userID,
 												name: userObj.name,
-												channelID: achievementOwner,
-												achievementID: achievementID
+												channelID: foundChannel._id,
+												achievementID: foundAchievement.uid
 											}).save().then(savedQueue => {
 												let alertData = {
 													'channel': achievementOwner,

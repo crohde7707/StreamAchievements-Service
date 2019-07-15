@@ -5,7 +5,7 @@ const queueSchema = new Schema({
 	twitchID: String,
 	name: String,
 	channelID: String,
-	achievementID: String
+	achievementID: Number
 });
 
 const Queue = mongoose.model("queue", queueSchema);
