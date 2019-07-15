@@ -96,7 +96,7 @@ router.get("/user", isAuthorized, (req, res) => {
 			let status = 'viewer';
 			
 			Token.findOne({uid: req.user._id}).then(foundToken => {
-				console.log(foundToken);
+				
 				if(foundToken) {
 					if(foundToken.token === 'not issued') {
 						status = 'review'

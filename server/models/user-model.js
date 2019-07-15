@@ -20,7 +20,10 @@ const userSchema = new Schema({
 			sync: Boolean
 		}
 	],
-	integration: Object,
+	integration: {
+		twitch: Object,
+		patreon: Object
+	},
 	preferences: Object,
 	lastLogin: Date
 });

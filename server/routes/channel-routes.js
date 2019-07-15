@@ -590,7 +590,7 @@ router.post('/image', isAuthorized, (req, res) => {
 		}
 
 		Promise.all([achievementPromise, imagePromise, channelUpdatePromise]).then(values => {
-			console.log(values);
+
 			let responseObj = {
 				images: values[1]
 			};
@@ -622,7 +622,7 @@ router.get("/user", isAuthorized, (req, res) => {
 
 			return new Promise((resolve, reject) => {
 				Achievement.countDocuments({channel: channel.owner}).then(count => {
-					console.log(count);
+
 					if(count > 0) {
 						percentage = Math.round((earnedAchievements[0].achievements.length / count) * 100);
 					}

@@ -52,7 +52,7 @@ router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) =>
 		if(isExpired(expires)) {
 			console.log('patreon token expired');
 			refreshPromise = new Promise((res2, rej2) => {
-			   refreshPatreonToken(req.user, patreonInfo.rt).then(newTokens => {
+			   refreshPatreonToken(req, patreonInfo.rt).then(newTokens => {
 					console.log('token is refreshed');
 					if(newTokens) {
 						at = newTokens.at;
@@ -68,9 +68,13 @@ router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) =>
 
 		refreshPromise.then(() => {
 			let access_token = cryptr.decrypt(at);
+			
+			if(!id) {
+				console.log('grabbing id from user');
+				id = req.user.integration.patreon.id;
+			}
 			console.log('getting up to date info from patreon');
-			console.log(id);
-			console.log(access_token);
+
 			axios.get(`https://www.patreon.com/api/oauth2/v2/members/${id}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
 				headers: {
 					Authorization: `Bearer ${access_token}`
@@ -277,7 +281,7 @@ let isExpired = (expires) => {
 	return today > expireDate;
 }
 
-let refreshPatreonToken = (user, refreshToken) => {
+let refreshPatreonToken = (req, refreshToken) => {
 
 	return new Promise((resolve, reject) => {
 		let rt = cryptr.decrypt(refreshToken);
@@ -290,14 +294,15 @@ let refreshPatreonToken = (user, refreshToken) => {
 				let today = new Date();
 				let newExpires = new Date().setDate(today.getDate() + 14);
 
-				let integration = Object.assign({}, user.integration);
+				let integration = Object.assign({}, req.user.integration);
 
 				integration.patreon.at = newAT;
 				integration.patreon.rt = newRT;
 				integration.patreon.expires = newExpires;
-				user.integration = integration;
+				req.user.integration = integration;
 
-				user.save().then(savedUser => {
+				req.user.save().then(savedUser => {
+
 					resolve({
 						at: newAT,
 						rt: newRT,

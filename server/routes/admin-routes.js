@@ -100,4 +100,8 @@ router.post('/fixqueue', isAdminAuthorized, (req, res) => {
 	});
 });
 
+router.get('/fixsync', isAdminAuthorized, (req, res) => {
+	
+});
+
 module.exports = router;
