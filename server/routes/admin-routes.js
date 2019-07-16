@@ -100,8 +100,29 @@ router.post('/fixqueue', isAdminAuthorized, (req, res) => {
 	});
 });
 
-router.get('/fixsync', isAdminAuthorized, (req, res) => {
-	
+router.post('/sync', isAdminAuthorized, (req, res) => {
+	User.find({}).then(users => {
+		if(users) {
+			users.forEach(user => {
+				let newChannels = [];
+
+				let channels = user.channels;
+
+				if(channels) {
+					channels.forEach(channel => {
+						let newChannel = {
+							...channel['_doc'],
+							sync: true
+						};
+						newChannels.push(newChannel);
+					});
+
+					user.channels = newChannels;
+					user.save();
+				}
+			});
+		}
+	});
 });
 
 module.exports = router;

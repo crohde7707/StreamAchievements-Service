@@ -959,7 +959,7 @@ let handleSubBackfill = (achievement, foundUser, foundChannel) => {
 				listeners.forEach(listener => {
 					if(listener.achType === "0") {
 						listenersToAward.push(listener);
-					} else if(listener.condition <= condition) {
+					} else if(parseInt(listener.condition) <= parseInt(condition)) {
 						listenersToAward.push(listener);
 					}
 				});
@@ -986,6 +986,7 @@ let handleSubBackfill = (achievement, foundUser, foundChannel) => {
 							}).save();
 						}
 					});
+					
 					userChannels[channelIdx].sync = false;
 
 					foundUser.channels = userChannels;
