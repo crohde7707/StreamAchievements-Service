@@ -800,6 +800,8 @@ router.post('/listeners', (req, res) => {
 											});
 
 											if(sync && tier) {
+												console.log("syncing for " + foundUser.name);
+												console.log(foundAchievement);
 												handleSubBackfill(foundAchievement.id, foundUser, foundChannel);
 											} else {
 												foundUser.save();
@@ -958,54 +960,59 @@ let handleSubBackfill = (achievement, foundUser, foundChannel) => {
 				return listener.achievement === achievement;
 			});
 
-			let currentListener = listeners.splice(entryIdx, 1)[0];
-			let achType = currentListener.achType;
-			let condition = currentListener.condition;
-			let listenersToAward = [];
+			if(entryIdx >=0) {
 
-			if(achType === "1") {
-				
-				//Total Achievement: Backfill only totals
-				listeners.forEach(listener => {
-					if(listener.achType === "0") {
-						listenersToAward.push(listener);
-					} else if(parseInt(listener.condition) <= parseInt(condition)) {
-						listenersToAward.push(listener);
-					}
-				});
+				let currentListener = listeners.splice(entryIdx, 1)[0];
+				let achType = currentListener.achType;
+				let condition = currentListener.condition;
+				let listenersToAward = [];
 
-				if(listenersToAward.length > 0) {
-					let userChannels = foundUser.channels;
-					let channelIdx = userChannels.findIndex(savedChannel => {
-						return savedChannel.channelID === foundChannel.id;
-					});
-
-					let userAchievements = foundUser.channels[channelIdx].achievements;
-
-					listenersToAward.forEach(listener => {
-						let achIdx = userAchievements.findIndex(usrAch => {
-							return usrAch.aid === listener.aid;
-						});
-
-						if(achIdx < 0) {
-							userChannels[channelIdx].achievements.push({aid: listener.aid, earned: Date.now()});
-							new Notice({
-								twitchID: foundUser.integration.twitch.etid,
-								channelID: foundChannel._id,
-								achievementID: achievement
-							}).save();
+				if(achType === "1") {
+					
+					//Total Achievement: Backfill only totals
+					listeners.forEach(listener => {
+						if(listener.achType === "0") {
+							listenersToAward.push(listener);
+						} else if(parseInt(listener.condition) <= parseInt(condition)) {
+							listenersToAward.push(listener);
 						}
 					});
-					
-					userChannels[channelIdx].sync = false;
 
-					foundUser.channels = userChannels;
-					
-					foundUser.save().then(savedUser => {
+					if(listenersToAward.length > 0) {
+						let userChannels = foundUser.channels;
+						let channelIdx = userChannels.findIndex(savedChannel => {
+							return savedChannel.channelID === foundChannel.id;
+						});
 
-					});
+						let userAchievements = foundUser.channels[channelIdx].achievements;
+
+						listenersToAward.forEach(listener => {
+							let achIdx = userAchievements.findIndex(usrAch => {
+								return usrAch.aid === listener.aid;
+							});
+
+							if(achIdx < 0) {
+								userChannels[channelIdx].achievements.push({aid: listener.aid, earned: Date.now()});
+								new Notice({
+									twitchID: foundUser.integration.twitch.etid,
+									channelID: foundChannel._id,
+									achievementID: achievement
+								}).save();
+							}
+						});
+						
+						userChannels[channelIdx].sync = false;
+
+						foundUser.channels = userChannels;
+						
+						foundUser.save().then(savedUser => {
+
+						});
+					}
 				}
 			}
+		} else {
+			foundUser.save();
 		}
 	});
 }
