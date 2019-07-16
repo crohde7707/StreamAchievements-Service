@@ -484,7 +484,7 @@ router.post("/delete", isAuthorized, (req, res) => {
 			query['_id'] = req.body.achievementID;
 			query.channel = existingChannel.owner;
 
-			Achievement.findOne(query).then((existingAchievement) => {
+			Achievement.findOne(query).then(existingAchievement => {
 				if(existingAchievement) {
 					//time to delete
 					let listenerID = existingAchievement.listener;
@@ -745,195 +745,205 @@ router.post('/listeners', (req, res) => {
 
 		Channel.findOne({owner: achievementOwner}).then(foundChannel => {
 
-			let channelListeners = sortedListeners[achievementOwner];
-			
-			channelListeners.forEach(achievement => {
-				let {channel, achievementID, tier, userID} = achievement;
-				let userCriteria = {};
+			if(foundChannel) {
 
-				let identifier = achievement.userID || achievement.user;
+				let channelListeners = sortedListeners[achievementOwner];
+				
+				channelListeners.forEach(achievement => {
+					let {channel, achievementID, tier, userID} = achievement;
+					let userCriteria = {};
 
-				if(userID) {
-					userCriteria['integration.twitch.etid'] = userID
-				} else {
-					let userName = achievement.user;
+					let identifier = achievement.userID || achievement.user;
 
-					if(userName.indexOf('@') === 0) {
-						userName = userName.substr(1);
+					if(userID) {
+						console.log('>>> userID: ' + userID);
+						userCriteria['integration.twitch.etid'] = userID
+					} else if(achievement.user) {
+						console.log('>>> userName: ' + achievement.user);
+						let userName = achievement.user;
+
+						if(userName.indexOf('@') === 0) {
+							userName = userName.substr(1);
+						}
+
+						userCriteria.name = userName;
+					} else {
+						console.log('<<<< No user came from IRC >>>>');
+						console.log(Date.now());
 					}
 
-					userCriteria.name = userName;
-				}
+					Achievement.findById(achievementID).then(foundAchievement => {
+						if(foundAchievement) {
 
-				Achievement.findById(achievementID).then(foundAchievement => {
-					if(foundAchievement) {
+							User.findOne(userCriteria).then((foundUser) => {
+							
+								if(foundUser) {
+									userID = foundUser.integration.twitch.etid;
 
-						User.findOne(userCriteria).then((foundUser) => {
-						
-							if(foundUser) {
-								userID = foundUser.integration.twitch.etid;
-
-								let entryIdx = foundUser.channels.findIndex(savedChannel => {
-									return savedChannel.channelID === foundChannel.id;
-								});
-
-								if(entryIdx >= 0) {
-									//User already a part of this channel
-									let userAchievements = foundUser.channels[entryIdx].achievements;
-									let sync = foundUser.channels[entryIdx].sync;
-
-									let achIdx = userAchievements.findIndex(usrAch => {
-										return usrAch.aid === foundAchievement.uid;
+									let entryIdx = foundUser.channels.findIndex(savedChannel => {
+										return savedChannel.channelID === foundChannel.id;
 									});
 
-									if(achIdx < 0) {
-										foundUser.channels[entryIdx].achievements.push({
-											aid: foundAchievement.uid,
-											earned: currentDate
+									if(entryIdx >= 0) {
+										//User already a part of this channel
+										let userAchievements = foundUser.channels[entryIdx].achievements;
+										let sync = foundUser.channels[entryIdx].sync;
+
+										let achIdx = userAchievements.findIndex(usrAch => {
+											return usrAch.aid === foundAchievement.uid;
 										});
 
-										if(sync && tier) {
-											handleSubBackfill(foundAchievement.id, foundUser, foundChannel);
-										} else {
-											foundUser.save();
-										}
-
-										let alertData = {
-											'channel': achievementOwner,
-											'member': foundUser.name,
-											'achievement': foundAchievement.title
-										};
-
-										emitAwardedAchievement(req, alertData);
-										if(foundAchievement.alert) {
-											emitOverlayAlert(req, {
-												...alertData,
-												icon: foundAchievement.icon
-											});	
-										}
-
-									}
-								} else {
-									//TODO: User preference to auto join channel?
-									if(foundUser.preferences.autojoin) {
-										foundUser.channels.push({
-											channelID: foundChannel.id,
-											achievements: [{
-												id: achievementID,
+										if(achIdx < 0) {
+											foundUser.channels[entryIdx].achievements.push({
+												aid: foundAchievement.uid,
 												earned: currentDate
-											}]
-										});
-										foundUser.save().then(savedUser => {
-											foundChannel.members.push(savedUser.id);
-											foundChannel.save().then(savedChannel => {
-												//TODO: Reorganize notice model
-												new Notice({
-													twitchID: userID,
+											});
+
+											if(sync && tier) {
+												handleSubBackfill(foundAchievement.id, foundUser, foundChannel);
+											} else {
+												foundUser.save();
+											}
+
+											let alertData = {
+												'channel': achievementOwner,
+												'member': foundUser.name,
+												'achievement': foundAchievement.title
+											};
+
+											emitAwardedAchievement(req, alertData);
+											if(foundAchievement.alert) {
+												emitOverlayAlert(req, {
+													...alertData,
+													icon: foundAchievement.icon
+												});	
+											}
+
+										}
+									} else {
+										//TODO: User preference to auto join channel?
+										if(foundUser.preferences.autojoin) {
+											foundUser.channels.push({
+												channelID: foundChannel.id,
+												achievements: [{
+													id: achievementID,
+													earned: currentDate
+												}]
+											});
+											foundUser.save().then(savedUser => {
+												foundChannel.members.push(savedUser.id);
+												foundChannel.save().then(savedChannel => {
+													//TODO: Reorganize notice model
+													new Notice({
+														twitchID: userID,
+														channelID: foundChannel._id,
+														achievementID: foundAchievement.uid
+													}).save().then(savedNotice => {
+														let alertData = {
+															'channel':achievementOwner,
+															'member': foundUser.name,
+															'achievement': foundAchievement.title
+														};
+
+														emitAwardedAchievement(req, alertData);
+														if(foundAchievement.alert) {
+															emitOverlayAlert(req, alertData);
+														}
+													});	
+												})
+											});
+										} else {
+											new Queue({
+												twitchID: foundUser.integration.twitch.etid,
+												name: foundUser.name,
+												channelID: foundChannel._id,
+												achievementID: foundAchievement.uid,
+												earned: currentDate
+											}).save();
+
+											new Notice({
+												twitchID: userID,
+												channelID: foundChannel._id,
+												achievementID: achievementID
+											}).save();
+
+											let alertData = {
+												'channel': achievementOwner,
+												'member': foundUser.name,
+												'achievement': foundAchievement.title
+											};
+
+											emitAwardedAchievement(req, alertData);
+											if(foundAchievement.alert) {
+												emitOverlayAlert(req, alertData);
+											}
+										}
+									}	
+								} else {
+									// User doesn't exist yet, so store the event off to award when signed up!
+									//TODO: Handle this (make call to users API to get name from ID, or ID from name)
+									let userObj = {
+										userID: achievement.userID,
+										name: achievement.user
+									};
+									let apiURL;
+									let userPromise;
+
+									if(!userObj.userID) {
+										apiURL = `https://api.twitch.tv/helix/users/?login=${achievement.user}`;
+									} else if(!userObj.name) {
+										apiURL = `https://api.twitch.tv/helix/users/?id=${achievement.userID}`;
+									}
+
+									if(apiURL) {
+										userPromise = new Promise((resolve, reject) => {
+											axios.get(apiURL, {
+												headers: {
+													'Client-ID': process.env.TCID
+												}
+											}).then(res => {
+												userObj.userID = res.data.data[0].id;
+												userObj.name = res.data.data[0].login
+
+												resolve();
+											});
+										})
+									} else {
+										userPromise = Promise.resolve();
+									}
+
+									userPromise.then(() => {
+										Queue.findOne({twitchID: userObj.userID}).then(foundQueue => {
+											if(!foundQueue) {
+												new Queue({
+													twitchID: userObj.userID,
+													name: userObj.name,
 													channelID: foundChannel._id,
-													achievementID: foundAchievement.uid
-												}).save().then(savedNotice => {
+													achievementID: foundAchievement.uid,
+													earned: currentDate
+												}).save().then(savedQueue => {
 													let alertData = {
-														'channel':achievementOwner,
-														'member': foundUser.name,
+														'channel': achievementOwner,
+														'member': userObj.name,
 														'achievement': foundAchievement.title
 													};
-
-													emitAwardedAchievement(req, alertData);
+													
+													emitAwardedAchievementNonMember(req, alertData);
 													if(foundAchievement.alert) {
 														emitOverlayAlert(req, alertData);
 													}
-												});	
-											})
-										});
-									} else {
-										new Queue({
-											twitchID: foundUser.integration.twitch.etid,
-											name: foundUser.name,
-											channelID: foundChannel._id,
-											achievementID: foundAchievement.uid
-										}).save();
-
-										new Notice({
-											twitchID: userID,
-											channelID: foundChannel._id,
-											achievementID: achievementID
-										}).save();
-
-										let alertData = {
-											'channel': achievementOwner,
-											'member': foundUser.name,
-											'achievement': foundAchievement.title
-										};
-
-										emitAwardedAchievement(req, alertData);
-										if(foundAchievement.alert) {
-											emitOverlayAlert(req, alertData);
-										}
-									}
-								}	
-							} else {
-								// User doesn't exist yet, so store the event off to award when signed up!
-								//TODO: Handle this (make call to users API to get name from ID, or ID from name)
-								let userObj = {
-									userID: achievement.userID,
-									name: achievement.user
-								};
-								let apiURL;
-								let userPromise;
-
-								if(!userObj.userID) {
-									apiURL = `https://api.twitch.tv/helix/users/?login=${achievement.user}`;
-								} else if(!userObj.name) {
-									apiURL = `https://api.twitch.tv/helix/users/?id=${achievement.userID}`;
-								}
-
-								if(apiURL) {
-									userPromise = new Promise((resolve, reject) => {
-										axios.get(apiURL, {
-											headers: {
-												'Client-ID': process.env.TCID
+												})
 											}
-										}).then(res => {
-											userObj.userID = res.data.data[0].id;
-											userObj.name = res.data.data[0].login
-
-											resolve();
 										});
-									})
-								} else {
-									userPromise = Promise.resolve();
-								}
-
-								userPromise.then(() => {
-									Queue.findOne({twitchID: userObj.userID}).then(foundQueue => {
-										if(!foundQueue) {
-											new Queue({
-												twitchID: userObj.userID,
-												name: userObj.name,
-												channelID: foundChannel._id,
-												achievementID: foundAchievement.uid
-											}).save().then(savedQueue => {
-												let alertData = {
-													'channel': achievementOwner,
-													'member': userObj.name,
-													'achievement': foundAchievement.title
-												};
-												
-												emitAwardedAchievementNonMember(req, alertData);
-												if(foundAchievement.alert) {
-													emitOverlayAlert(req, alertData);
-												}
-											})
-										}
 									});
-								});
-							}
-						});
-					} else {
-						console.log("uh oh, no achievement found while awarding " + achievementID);
-					}
+								}
+							});
+						} else {
+							console.log("uh oh, no achievement found while awarding " + achievementID);
+						}
+					});
 				});
-			});
+			}	
 		});
 	});
 });

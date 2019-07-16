@@ -112,7 +112,6 @@ router.post('/leave', isAuthorized, (req, res) => {
 });
 
 router.post('/join', isAuthorized, (req, res) => {
-
 	Channel.findOne({owner: req.body.channel}).then((existingChannel) => {
 		if(existingChannel) {
 			let joinedChannels = req.user.channels;
@@ -161,12 +160,21 @@ router.post('/join', isAuthorized, (req, res) => {
 					achievements: [],
 					sync: true
 				};
+				console.log('checking queues...');
 
 				Queue.find({twitchID: req.user.integration.twitch.etid, channelID: existingChannel.id}).then(queues => {
 					if(queues) {
+
 						queues.forEach(ach => {
-							newChannelObj.achievements.push(ach.achievementID);
-							Queue.deleteOne({ _id: ach._id});
+							
+							newChannelObj.achievements.push({
+								aid: ach.achievementID,
+								earned: ach.earned || new Date()
+							});
+
+							Queue.deleteOne({ _id: ach.id}).then(err => {
+								console.log(err);
+							});
 						});
 					}
 
