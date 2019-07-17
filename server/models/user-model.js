@@ -24,7 +24,9 @@ const userSchema = new Schema({
 		twitch: Object,
 		patreon: Object
 	},
-	preferences: Object,
+	preferences: {
+		autojoin: Boolean
+	},
 	lastLogin: Date
 });
 

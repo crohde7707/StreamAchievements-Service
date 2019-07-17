@@ -89,14 +89,22 @@ router.post('/flush', isAdminAuthorized, (req, res) => {
 	})
 });
 
-router.post('/fixqueue', isAdminAuthorized, (req, res) => {
-	Queue.find({}).then(entries => {
-		entries.forEach(entry => {
-			console.log(Number.isInteger(entry.achievementID));
-			entry.achievementID = parseInt(entry.achievementID);
-			console.log(Number.isInteger(entry.achievementID));
-			entry.save();
-		});
+router.post('/fixpreferences', isAdminAuthorized, (req, res) => {
+	User.find({}).then(users => {
+		if(users) {
+			users.forEach(user => {
+				if(user.preferences) {
+					user.preferences.autojoin = true;	
+				} else {
+					user.preferences = {
+						autojoin: true
+					}
+				}
+				
+
+				user.save();
+			});
+		}
 	});
 });
 

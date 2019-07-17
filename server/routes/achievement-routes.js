@@ -767,6 +767,7 @@ router.post('/listeners', (req, res) => {
 						}
 
 						userCriteria.name = userName;
+						console.log(userCriteria);
 					} else {
 						console.log('<<<< No user came from IRC >>>>');
 						console.log(Date.now());
@@ -778,6 +779,7 @@ router.post('/listeners', (req, res) => {
 							User.findOne(userCriteria).then((foundUser) => {
 							
 								if(foundUser) {
+									console.log(foundUser.name + " was found");
 									userID = foundUser.integration.twitch.etid;
 
 									let entryIdx = foundUser.channels.findIndex(savedChannel => {
@@ -823,6 +825,8 @@ router.post('/listeners', (req, res) => {
 
 										}
 									} else {
+										console.log("couldn't find the channel");
+										console.log(foundChannel.id);
 										//TODO: User preference to auto join channel?
 										if(foundUser.preferences.autojoin) {
 											foundUser.channels.push({
@@ -915,7 +919,7 @@ router.post('/listeners', (req, res) => {
 									}
 
 									userPromise.then(() => {
-										Queue.findOne({twitchID: userObj.userID}).then(foundQueue => {
+										Queue.findOne({twitchID: userObj.userID, channelID: foundChannel._id, achievementID: foundAchievement.uid}).then(foundQueue => {
 											if(!foundQueue) {
 												new Queue({
 													twitchID: userObj.userID,

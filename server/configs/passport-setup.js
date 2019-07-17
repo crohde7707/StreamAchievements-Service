@@ -58,7 +58,7 @@ passport.use(
 						twitch: twitchIntegration
 					},
 					preferences: {
-						autojoin: false
+						autojoin: true
 					}
 				}).save().then((newUser) => {
 					done(null, newUser);
