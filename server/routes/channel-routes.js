@@ -410,44 +410,50 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 				});
 
 				Promise.all([achievementsPromise, imagesPromise, membersPromise]).then(values => {
-					console.log('foo');
-					console.log(existingChannel);
+					let retChannel;
+
 					if(!existingChannel.oid) {
 						existingChannel.oid = uuid();
-						if(!existingChannel.overlay) {
+						if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
 							existingChannel.overlay = DEFAULT_OVERLAY_CONFIG;
 						}
 						existingChannel.save().then(savedChannel => {
+							retChannel = {...savedChannel['_doc']};
+							delete retChannel['__v'];
+							delete retChannel['_id'];
+
 							res.json({
-								channel: savedChannel,
+								channel: retChannel,
 								achievements: values[0],
 								images: values[1],
 								members: values[2],
-								overlay: savedChannel.overlay
 							});
 						});
-					} else if(!existingChannel.overlay) {
+					} else if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
 						console.log('foo');
 						existingChannel.overlay = DEFAULT_OVERLAY_CONFIG;
 						existingChannel.save().then(savedChannel => {
-							console.log(existingChannel);
-							console.log(savedChannel);
+							retChannel = {...savedChannel['_doc']};
+							delete retChannel['__v'];
+							delete retChannel['_id'];
+
 							res.json({
-								channel: savedChannel,
-								achievement: values[0],
+								channel: retChannel,
+								achievements: values[0],
 								images: values[1],
 								members: values[2],
-								overlay: savedChannel.overlay
 							});
 						})
 					} else {
-						console.log('bar');
+						retChannel = {...existingChannel['_doc']};
+						delete retChannel['__v'];
+						delete retChannel['_id'];
+
 						res.json({
-							channel: existingChannel,
+							channel: retChannel,
 							achievements: values[0],
 							images: values[1],
 							members: values[2],
-							overlay: existingChannel.overlay
 						});
 					}
 				});
