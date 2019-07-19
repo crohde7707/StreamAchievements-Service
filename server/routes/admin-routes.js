@@ -57,37 +57,96 @@ router.post('/dedup', isAdminAuthorized, (req, res) => {
 	});
 });
 
-router.post('/flush', isAdminAuthorized, (req, res) => {
-	Queue.find({}).then(entries => {
-		entries.forEach(entry => {
-			User.findOne({'integration.twitch.etid': entry.twitchID}).then(foundUser => {
-				if(foundUser) {
-					let channels = foundUser.channels;
-					let channelIdx = channels.findIndex(channel => channel.channelID === entry.channelID);
-
-					if(channelIdx >= 0) {
-						let channelAchievements = channels[channelIdx].achievements;
-						let found = channelAchievements.filter(ach => {
-							ach.aid === entry.achievementID;
-						});
-
-						if(!found) {
-							channels[channelIdx].achievements.push({
-								aid: entry.achievementsID,
-								earned: Date.now()
-							});
-
-							foundUser.save();
-							//delete entry in queue
-						} else {
-							//delete entry in queue
+router.post('/fixit', isAdminAuthorized, (req, res) => {
+	Achievement.find({}).then(achievements => {
+		if(achievements) {
+			achievements.forEach(achievement => {
+				if(achievement.listener) {
+					Listener.findById(achievement.listener).then(foundListener => {
+						if(foundListener) {
+							console.log('updating: ' + achievement.channel + ": " + achievement.title);
+							foundListener.aid = achievement.uid;
+							foundListener.achievement = achievement.id;
+							foundListener.save();
 						}
-					}
+					});
 				}
+				
 			});
-		})
+		}
 	})
-});
+})
+
+router.post('/flush', isAdminAuthorized, (req, res) => {
+	Queue.find({}).then(queues => {
+		if(queues.length > 0) {
+			queues.forEach(entry => {
+				try {
+					console.log('finding ' + entry.channelID + ' channel');
+					Channel.findOne({owner: entry.channelID}).then(foundChannel => {
+						if(foundChannel) {
+							if(entry && entry.achievementID) {
+								console.log(entry.twitchID);
+								Achievement.findOne({uid: parseInt(entry.achievementID), channel: foundChannel.owner}).then(foundAchievement => {
+									if(foundAchievement) {
+										User.findOne({'integration.twitch.etid': entry.twitchID}).then(foundUser => {
+											if(foundUser) {
+												console.log('we found ' + foundUser.name);
+												let channels = foundUser.channels;
+												let channelIdx = channels.findIndex(channel => channel.channelID === foundChannel.id);
+
+												if(channelIdx >= 0) {
+													let channelAchievements = channels[channelIdx].achievements;
+
+													let found = channelAchievements.filter(ach => {
+														ach.aid === foundAchievement.uid;
+													});
+
+													if(!found) {
+														console.log('achievement will be awarded to ' + foundUser.name);
+														foundUser.channels[channelIdx].achievements.push({
+															aid: foundAchievement.uid,
+															earned: entry.earned || Date.now()
+														});
+
+														console.log('deleting entry');
+														console.log(entry);
+														Queue.deleteOne({ _id: entry.id}).then(err => {
+															console.log('deleted count: ' + err.deletedCount)
+														});
+
+														foundUser.save();
+													} else {
+														console.log(foundUser.name + 'already has ' + foundAchievement.title + '. Delete it');
+														Queue.deleteOne({ _id: entry.id}).then(err => {
+															console.log('deleted count: ' + err.deletedCount)
+														});
+													}
+												} else {
+													console.log(foundUser.name + 'hasn\'t joined ' + foundChannel.owner + '\'s channel yet');
+												}
+											} else {
+												console.log('no user');
+											}
+										});
+									} else {
+										console.log('no achievement');
+									}
+								});
+							}
+						} else {
+							console.log('no channel');
+						}
+					})
+				} catch(error) {
+					console.log('cast issue for ' + entry.channelID);
+				}
+			})
+		} else {
+			console.log('nothing in queue');
+		}
+	});
+})
 
 router.post('/fixpreferences', isAdminAuthorized, (req, res) => {
 	User.find({}).then(users => {
@@ -107,6 +166,10 @@ router.post('/fixpreferences', isAdminAuthorized, (req, res) => {
 		}
 	});
 });
+
+router.post('/purgeachievement', isAdminAuthorized, (req, res) => {
+	
+})
 
 router.post('/sync', isAdminAuthorized, (req, res) => {
 	User.find({}).then(users => {

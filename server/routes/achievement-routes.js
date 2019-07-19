@@ -262,63 +262,6 @@ router.post('/update', isAuthorized, (req, res) => {
 	});
 });
 
-router.post('/fixit', isAuthorized, (req, res) => {
-	Achievement.find({}).then(achievements => {
-		if(achievements) {
-			achievements.forEach(achievement => {
-				if(achievement.listener) {
-					Listener.findById(achievement.listener).then(foundListener => {
-						if(foundListener) {
-							console.log('updating: ' + achievement.channel + ": " + achievement.title);
-							foundListener.aid = achievement.uid;
-							foundListener.achievement = achievement.id;
-							foundListener.save();
-						}
-					});
-				}
-				
-			});
-		}
-	})
-})
-
-router.post('/flush', isAuthorized, (req, res) => {
-	Queue.find({}).then(queues => {
-		if(queues) {
-			queues.forEach(entry => {
-				Achievement.findById(entry.achievementID).then(foundAchievement => {
-					if(foundAchievement) {
-						User.find({'integration.twitch.etid': entry.twitchID}).then(foundUser => {
-							if(foundUser) {
-								Channel.find({owner: entry.channelID}).then(foundChannel => {
-									let channels = foundUser.channels;
-									let channelIdx = channels.findIndex(channel => channel.channelID === foundChannel.id);
-
-									if(channelIdx >= 0) {
-										let channelAchievements = channels[channelIdx].achievements;
-										let found = channelAchievements.filter(ach => {
-											ach.aid === foundAchievement.uid;
-										});
-
-										if(!found) {
-											channels[channelIdx].achievements.push({
-												aid: foundAchievement.uid,
-												earned: Date.now()
-											});
-
-											foundUser.save();
-										}
-									}
-								});
-							}
-						});
-					}
-				})
-			})
-		}
-	});
-})
-
 router.post("/create", isAuthorized, (req, res) => {
 	
 	Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
@@ -766,7 +709,7 @@ router.post('/listeners', (req, res) => {
 							userName = userName.substr(1);
 						}
 
-						userCriteria.name = userName;
+						userCriteria.name = userName.toLowerCase();
 						console.log(userCriteria);
 					} else {
 						console.log('<<<< No user came from IRC >>>>');
