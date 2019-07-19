@@ -24,6 +24,8 @@ const HIDDEN_ICON = "https://res.cloudinary.com/phirehero/image/upload/v15588118
 
 const imgURLRegex = /^https:\/\/res\.cloudinary\.com\/phirehero\/.*\.(png|jpg|jpeg)$/gm;
 
+const DEFAULT_OVERLAY_CONFIG = require('../configs/default-overlay-configs');
+
 router.get("/create", isAuthorized, (req, res) => {
 	Channel.findOne({twitchID: req.user.twitchID}).then((existingChannel) => {
 		if(existingChannel) {
@@ -408,23 +410,44 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 				});
 
 				Promise.all([achievementsPromise, imagesPromise, membersPromise]).then(values => {
+					console.log('foo');
+					console.log(existingChannel);
 					if(!existingChannel.oid) {
 						existingChannel.oid = uuid();
+						if(!existingChannel.overlay) {
+							existingChannel.overlay = DEFAULT_OVERLAY_CONFIG;
+						}
 						existingChannel.save().then(savedChannel => {
 							res.json({
 								channel: savedChannel,
 								achievements: values[0],
 								images: values[1],
-								members: values[2]
+								members: values[2],
+								overlay: savedChannel.overlay
 							});
 						});
+					} else if(!existingChannel.overlay) {
+						console.log('foo');
+						existingChannel.overlay = DEFAULT_OVERLAY_CONFIG;
+						existingChannel.save().then(savedChannel => {
+							console.log(existingChannel);
+							console.log(savedChannel);
+							res.json({
+								channel: savedChannel,
+								achievement: values[0],
+								images: values[1],
+								members: values[2],
+								overlay: savedChannel.overlay
+							});
+						})
 					} else {
-
+						console.log('bar');
 						res.json({
 							channel: existingChannel,
 							achievements: values[0],
 							images: values[1],
-							members: values[2]
+							members: values[2],
+							overlay: existingChannel.overlay
 						});
 					}
 				});
@@ -455,7 +478,7 @@ router.post('/update', isAuthorized, (req, res) => {
 router.post('/preferences', isAuthorized, (req, res) => {
 	Channel.findOne({twitchID: req.user.integration.twitch.etid}).then(existingChannel => {
 		
-		let defaultPromise, hiddenPromise;
+		let defaultPromise, hiddenPromise, overlayPromise;
 		//upload images if needed
 		defaultPromise = new Promise((resolve, reject) => {
 			if(req.body.defaultIcon && validDataUrl(req.body.defaultIcon)) {
@@ -483,7 +506,45 @@ router.post('/preferences', isAuthorized, (req, res) => {
 			}
 		});
 
-		Promise.all([defaultPromise, hiddenPromise]).then((icons) => {
+		overlayPromise = new Promise((resolve, reject) => {
+			if(req.body.overlay) {
+				let {chat, chatMessage, sfx, enterEffect, exitEffect, duration, volume} = req.body.overlay;
+
+				if(chat) {
+					existingChannel.overlay.chat = chat;
+				}
+
+				if(chatMessage) {
+					existingChannel.overlay.chatMessage = chatMessage;
+				}
+
+				if(sfx) {
+					existingChannel.overlay.sfx = sfx;
+				}
+
+				if(enterEffect) {
+					existingChannel.overlay.enterEffect = enterEffect;
+				}
+
+				if(exitEffect) {
+					existingChannel.overlay.exitEffect = exitEffect;
+				}
+
+				if(duration) {
+					existingChannel.overlay.duration = duration
+				}
+
+				if(volume) {
+					existingChannel.overlay.volume = volume
+				}
+
+				resolve();
+			} else {
+				resolve();
+			}
+		});
+
+		Promise.all([defaultPromise, hiddenPromise, overlayPromise]).then((icons) => {
 
 			let iconsUpdate = {
 				default: existingChannel.icons.default,
@@ -768,6 +829,7 @@ router.post('/verify', isAuthorized, (req, res) => {
 						hidden: HIDDEN_ICON
 					},
 					oid: uuid(),
+					overlay: DEFAULT_OVERLAY_CONFIG,
 					nextUID: 1
 				}).save().then((newChannel) => {
 					req.user.type = 'verified';
