@@ -590,13 +590,23 @@ router.post('/award', isAuthorized, (req, res) => {
 						emitAwardedAchievement(req, alertData);
 						
 						let shouldAlert = foundAchievement.alert || true;
+						let unlocked = false;
+
+						if(savedMember.integration.patreon) {
+							let patreonInfo = savedMember.integration.patreon;
+
+							if(patreonInfo.status === 'lifetime' || (patreonInfo.is_gold && patreonInfo.status === 'active_patron')) {
+								unlocked = true
+							}
+						}
 
 						if(shouldAlert) {
 							emitOverlayAlert(req, {
 								user: savedMember.name,
 								channel: existingChannel.owner,
 								title: foundAchievement.title,
-								icon: foundAchievement.icon
+								icon: foundAchievement.icon,
+								unlocked
 							});	
 						}
 					});
@@ -774,13 +784,23 @@ router.post('/listeners', (req, res) => {
 											emitAwardedAchievement(req, alertData);
 											
 											let shouldAlert = foundAchievement.alert || true;
+											let unlocked = false;
+
+											if(foundUser.integration.patreon) {
+												let patreonInfo = foundUser.integration.patreon;
+
+												if(patreonInfo.status === 'lifetime' || (patreonInfo.is_gold && patreonInfo.status === 'active_patron')) {
+													unlocked = true
+												}
+											}
 
 											if(shouldAlert) {
 												emitOverlayAlert(req, {
 													user: foundUser.name,
 													channel: achievementOwner,
 													title: foundAchievement.title,
-													icon: foundAchievement.icon
+													icon: foundAchievement.icon,
+													unlocked
 												});	
 											}
 
@@ -815,13 +835,23 @@ router.post('/listeners', (req, res) => {
 														emitAwardedAchievement(req, alertData);
 
 														let shouldAlert = foundAchievement.alert || true;
+														let unlocked = false;
+
+														if(foundUser.integration.patreon) {
+															let patreonInfo = foundUser.integration.patreon;
+
+															if(patreonInfo.status === 'lifetime' || (patreonInfo.is_gold && patreonInfo.status === 'active_patron')) {
+																unlocked = true
+															}
+														}
 
 														if(shouldAlert) {
 															emitOverlayAlert(req, {
 																user: foundUser.name,
 																channel: achievementOwner,
 																title: foundAchievement.title,
-																icon: foundAchievement.icon
+																icon: foundAchievement.icon,
+																unlocked
 															});
 														}
 													});	
@@ -851,13 +881,23 @@ router.post('/listeners', (req, res) => {
 											emitAwardedAchievement(req, alertData);
 
 											let shouldAlert = foundAchievement.alert || true;
+											let unlocked = false;
+
+											if(foundUser.integration.patreon) {
+												let patreonInfo = foundUser.integration.patreon;
+
+												if(patreonInfo.status === 'lifetime' || (patreonInfo.is_gold && patreonInfo.status === 'active_patron')) {
+													unlocked = true
+												}
+											}
 
 											if(shouldAlert) {
 												emitOverlayAlert(req, {
 													user: foundUser.name,
 													channel: achievementOwner,
 													title: foundAchievement.title,
-													icon: foundAchievement.icon
+													icon: foundAchievement.icon,
+													unlocked
 												});
 											}
 										}
@@ -914,13 +954,23 @@ router.post('/listeners', (req, res) => {
 													emitAwardedAchievementNonMember(req, alertData);
 
 													let shouldAlert = foundAchievement.alert || true;
+													let unlocked = false;
+
+													if(foundUser.integration.patreon) {
+														let patreonInfo = foundUser.integration.patreon;
+
+														if(patreonInfo.status === 'lifetime' || (patreonInfo.is_gold && patreonInfo.status === 'active_patron')) {
+															unlocked = true
+														}
+													}
 
 													if(shouldAlert) {
 														emitOverlayAlert(req, {
 															user: userObj.name,
 															channel: achievementOwner,
 															title: foundAchievement.title,
-															icon: foundAchievement.icon
+															icon: foundAchievement.icon,
+															unlocked
 														});
 													}
 												})
