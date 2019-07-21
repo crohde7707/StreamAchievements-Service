@@ -581,11 +581,20 @@ router.post('/award', isAuthorized, (req, res) => {
 					member.channels = channels;
 
 					return member.save().then(savedMember => {
-						emitAwardedAchievement(req, {
+						let alertData = {
 							'channel':existingChannel.owner,
 							'member': savedMember.name,
 							'achievement': foundAchievement.title
-						});
+						};
+
+						emitAwardedAchievement(req, alertData);
+						
+						if(foundAchievement.alert) {
+							emitOverlayAlert(req, {
+								...alertData,
+								icon: foundAchievement.icon
+							});	
+						}
 					});
 				});
 
