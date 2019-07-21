@@ -593,7 +593,9 @@ router.post('/award', isAuthorized, (req, res) => {
 
 						if(shouldAlert) {
 							emitOverlayAlert(req, {
-								...alertData,
+								user: savedMember.name,
+								channel: existingChannel.owner,
+								title: foundAchievement.title,
 								icon: foundAchievement.icon
 							});	
 						}
@@ -775,7 +777,9 @@ router.post('/listeners', (req, res) => {
 
 											if(shouldAlert) {
 												emitOverlayAlert(req, {
-													...alertData,
+													user: foundUser.name,
+													channel: achievementOwner,
+													title: foundAchievement.title,
 													icon: foundAchievement.icon
 												});	
 											}
@@ -813,7 +817,12 @@ router.post('/listeners', (req, res) => {
 														let shouldAlert = foundAchievement.alert || true;
 
 														if(shouldAlert) {
-															emitOverlayAlert(req, alertData);
+															emitOverlayAlert(req, {
+																user: foundUser.name,
+																channel: achievementOwner,
+																title: foundAchievement.title,
+																icon: foundAchievement.icon
+															});
 														}
 													});	
 												})
@@ -844,7 +853,12 @@ router.post('/listeners', (req, res) => {
 											let shouldAlert = foundAchievement.alert || true;
 
 											if(shouldAlert) {
-												emitOverlayAlert(req, alertData);
+												emitOverlayAlert(req, {
+													user: foundUser.name,
+													channel: achievementOwner,
+													title: foundAchievement.title,
+													icon: foundAchievement.icon
+												});
 											}
 										}
 									}	
@@ -902,7 +916,12 @@ router.post('/listeners', (req, res) => {
 													let shouldAlert = foundAchievement.alert || true;
 
 													if(shouldAlert) {
-														emitOverlayAlert(req, alertData);
+														emitOverlayAlert(req, {
+															user: userObj.name,
+															channel: achievementOwner,
+															title: foundAchievement.title,
+															icon: foundAchievement.icon
+														});
 													}
 												})
 											}

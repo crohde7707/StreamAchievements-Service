@@ -202,4 +202,16 @@ router.post('/sync', isAdminAuthorized, (req, res) => {
 	});
 });
 
+router.post('/alertSync', isAdminAuthorized, (req, res) => {
+	Achievement.find({}).then(achievements => {
+		if(achievements) {
+			achievements.forEach(achievement => {
+				achievement.alert = true;
+
+				achievement.save()
+			});
+		}
+	});
+});
+
 module.exports = router;
