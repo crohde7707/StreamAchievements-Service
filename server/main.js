@@ -42,7 +42,7 @@ app.use(express.static(path.join(__dirname, 'client/build')));
 
 let server = app.listen(port);
 
-let WebSockets = io.listen(server);
+let WebSockets = io.listen(process.env.SOCKET_PORT);
 
 app.set('ws', WebSockets);
 
