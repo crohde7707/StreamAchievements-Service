@@ -44,7 +44,7 @@ const isAdminAuthorized = async (req, res, next) => {
 			
 	if(foundUser) {
 		if(foundUser.type = 'admin') {
-			res.user = foundUser;
+			req.user = foundUser;
 			if(process.env.NODE_ENV === 'production') {
 				res.cookie('etid', req.cookies.etid, { maxAge: 4 * 60 * 60 * 1000, secure: true, httpOnly: false, domain: 'streamachievements.com' });
 			} else {

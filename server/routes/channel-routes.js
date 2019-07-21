@@ -856,4 +856,18 @@ router.post('/verify', isAuthorized, (req, res) => {
 	})
 });
 
+router.get('/overlay', (req, res) => {
+	let oid = req.query.id;
+
+	Channel.findOne({oid: oid}).then(foundChannel => {
+		if(foundChannel) {
+			
+			res.json({
+				overlay: foundChannel.overlay,
+				icons: foundChannel.icons
+			});
+		}
+	});
+})
+
 module.exports = router;

@@ -6,6 +6,7 @@ const Queue = require('../models/queue-model');
 const Achievement = require('../models/achievement-model');
 const mongoose = require('mongoose');
 const {isAdminAuthorized} = require('../utils/auth-utils');
+const {emitOverlayAlert} = require('../utils/socket-utils');
 
 router.post('/dedup', isAdminAuthorized, (req, res) => {
 	User.find({}).then(foundUsers => {
@@ -167,8 +168,13 @@ router.post('/fixpreferences', isAdminAuthorized, (req, res) => {
 	});
 });
 
-router.post('/purgeachievement', isAdminAuthorized, (req, res) => {
-	
+router.post('/overlay', isAdminAuthorized, (req, res) => {
+	emitOverlayAlert(req, {
+		user: req.user.name,
+		channel: req.user.name,
+		title: 'I can show you the world',
+		icon: 'https://res.cloudinary.com/phirehero/image/upload/v1562881653/u9astg4olsdtfm2rjhxu.png'
+	});
 })
 
 router.post('/sync', isAdminAuthorized, (req, res) => {

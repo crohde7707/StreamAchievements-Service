@@ -5,5 +5,6 @@ module.exports = {
 	enterEffect: "zoomIn",
 	exitEffect: "zoomOut",
 	duration: 6,
-	volume: 100
+	volume: 100,
+	delay: 2
 }
