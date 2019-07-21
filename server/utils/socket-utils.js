@@ -69,6 +69,8 @@ let emitTestListener = (req, data) => {
 let emitOverlayAlert = (req, data) => {
 	let ws = req.app.get('ws');
 	let sid = req.app.get(data.channel + '-OVERLAY');
+	console.log(data);
+	console.log('emitting to overlay: ' + sid);
 	if(sid) {
 		ws.to(sid).emit('alert-recieved', data);	
 	}
