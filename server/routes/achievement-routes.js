@@ -589,7 +589,9 @@ router.post('/award', isAuthorized, (req, res) => {
 
 						emitAwardedAchievement(req, alertData);
 						
-						if(foundAchievement.alert) {
+						let shouldAlert = foundAchievement.alert || true;
+
+						if(shouldAlert) {
 							emitOverlayAlert(req, {
 								...alertData,
 								icon: foundAchievement.icon
@@ -768,7 +770,10 @@ router.post('/listeners', (req, res) => {
 											};
 
 											emitAwardedAchievement(req, alertData);
-											if(foundAchievement.alert) {
+											
+											let shouldAlert = foundAchievement.alert || true;
+
+											if(shouldAlert) {
 												emitOverlayAlert(req, {
 													...alertData,
 													icon: foundAchievement.icon
@@ -804,7 +809,10 @@ router.post('/listeners', (req, res) => {
 														};
 
 														emitAwardedAchievement(req, alertData);
-														if(foundAchievement.alert) {
+
+														let shouldAlert = foundAchievement.alert || true;
+
+														if(shouldAlert) {
 															emitOverlayAlert(req, alertData);
 														}
 													});	
@@ -832,7 +840,10 @@ router.post('/listeners', (req, res) => {
 											};
 
 											emitAwardedAchievement(req, alertData);
-											if(foundAchievement.alert) {
+
+											let shouldAlert = foundAchievement.alert || true;
+
+											if(shouldAlert) {
 												emitOverlayAlert(req, alertData);
 											}
 										}
@@ -887,7 +898,10 @@ router.post('/listeners', (req, res) => {
 													};
 													
 													emitAwardedAchievementNonMember(req, alertData);
-													if(foundAchievement.alert) {
+
+													let shouldAlert = foundAchievement.alert || true;
+
+													if(shouldAlert) {
 														emitOverlayAlert(req, alertData);
 													}
 												})
