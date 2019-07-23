@@ -151,19 +151,23 @@ router.post('/flush', isAdminAuthorized, (req, res) => {
 })
 
 router.post('/fixpreferences', isAdminAuthorized, (req, res) => {
-	User.find({}).then(users => {
-		if(users) {
-			users.forEach(user => {
-				if(user.preferences) {
-					user.preferences.autojoin = true;	
-				} else {
-					user.preferences = {
-						autojoin: true
-					}
+	Channel.find({}).then(channels => {
+		if(channels) {
+			channels.forEach(channel => {
+				channel.overlay = {
+					chat: true,
+					chatMessage: "{user} just earned the {achievement} achievement! PogChamp",
+					sfx: "https://streamachievements.com/sounds/achievement.001.mp3",
+					enterEffect: "zoomIn",
+					exitEffect: "zoomOut",
+					duration: 6,
+					volume: 100,
+					delay: 2
 				}
-				
 
-				user.save();
+				channel.save().then(savedChannel => {
+					console.log('updated ' + savedChannel.owner + '\'s channel overlay');
+				});
 			});
 		}
 	});

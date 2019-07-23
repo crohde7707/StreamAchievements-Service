@@ -581,7 +581,7 @@ router.post('/award', isAuthorized, (req, res) => {
 					member.channels = channels;
 
 					return member.save().then(savedMember => {
-						if(foundChannel.overlay.chat) {
+						if(existingChannel.overlay.chat) {
 							let alertData = {
 								'channel':existingChannel.owner,
 								'member': savedMember.name,
