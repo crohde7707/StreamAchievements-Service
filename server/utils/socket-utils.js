@@ -76,6 +76,14 @@ let emitOverlayAlert = (req, data) => {
 	}
 }
 
+let emitOverlaySettingsUpdate = (req, data) => {
+	let ws = req.app.get('ws');
+	let sid = req.app.get(data.channel + '-OVERLAY');
+	if(sid) {
+		ws.to(sid).emit('update-settings', data.overlay);
+	}
+}
+
 module.exports = {
 	emitNewChannel,
 	emitNewListener,
@@ -86,5 +94,6 @@ module.exports = {
 	emitAwardedAchievement,
 	emitAwardedAchievementNonMember,
 	emitTestListener,
-	emitOverlayAlert
+	emitOverlayAlert,
+	emitOverlaySettingsUpdate
 }

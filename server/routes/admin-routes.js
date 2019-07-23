@@ -3,6 +3,7 @@ const User = require('../models/user-model');
 const Listener = require('../models/listener-model');
 const Token = require('../models/token-model');
 const Queue = require('../models/queue-model');
+const Channel = require('../models/channel-model');
 const Achievement = require('../models/achievement-model');
 const mongoose = require('mongoose');
 const {isAdminAuthorized} = require('../utils/auth-utils');
@@ -87,7 +88,6 @@ router.post('/flush', isAdminAuthorized, (req, res) => {
 					Channel.findOne({owner: entry.channelID}).then(foundChannel => {
 						if(foundChannel) {
 							if(entry && entry.achievementID) {
-								console.log(entry.twitchID);
 								Achievement.findOne({uid: parseInt(entry.achievementID), channel: foundChannel.owner}).then(foundAchievement => {
 									if(foundAchievement) {
 										User.findOne({'integration.twitch.etid': entry.twitchID}).then(foundUser => {
@@ -140,6 +140,7 @@ router.post('/flush', isAdminAuthorized, (req, res) => {
 						}
 					})
 				} catch(error) {
+					console.log(error);
 					console.log('cast issue for ' + entry.channelID);
 				}
 			})
@@ -173,7 +174,8 @@ router.post('/overlay', isAdminAuthorized, (req, res) => {
 		user: req.user.name,
 		channel: req.user.name,
 		title: 'I can show you the world',
-		icon: 'https://res.cloudinary.com/phirehero/image/upload/v1562881653/u9astg4olsdtfm2rjhxu.png'
+		icon: 'https://res.cloudinary.com/phirehero/image/upload/v1562881653/u9astg4olsdtfm2rjhxu.png',
+		unlocked: true
 	});
 })
 

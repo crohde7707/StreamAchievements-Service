@@ -42,7 +42,13 @@ app.use(express.static(path.join(__dirname, 'client/build')));
 
 let server = app.listen(port);
 
-let WebSockets = io.listen(process.env.SOCKET_PORT);
+let WebSockets;
+
+if(process.env.NODE_ENV === 'production') {
+    WebSockets = io.listen(process.env.SOCKET_PORT);
+} else {
+    WebSockets = io.listen(server);
+}
 
 app.set('ws', WebSockets);
 

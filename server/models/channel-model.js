@@ -12,7 +12,16 @@ const channelSchema = new Schema({
 		hidden: String
 	},
 	oid: String,
-	overlay: Object,
+	overlay: {
+		chat: Boolean,
+		chatMessage: String,
+		sfx: String,
+		enterEffect: String,
+		exitEffect: String,
+		duration: Number,
+		volume: Number,
+		delay: Number
+	},
 	nextUID: Number
 });
 

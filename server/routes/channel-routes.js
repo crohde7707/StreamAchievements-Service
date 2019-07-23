@@ -17,7 +17,7 @@ const Image = require('../models/image-model');
 const Token = require('../models/token-model');
 const Queue = require('../models/queue-model');
 const {uploadImage, destroyImage} = require('../utils/image-utils');
-const {emitNewChannel} = require('../utils/socket-utils');
+const {emitNewChannel, emitOverlaySettingsUpdate, emitOverlayAlert} = require('../utils/socket-utils');
 
 const DEFAULT_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png";
 const HIDDEN_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811887/hidden-icon.png";
@@ -514,63 +514,80 @@ router.post('/preferences', isAuthorized, (req, res) => {
 
 		overlayPromise = new Promise((resolve, reject) => {
 			if(req.body.overlay) {
-				let {chat, chatMessage, sfx, enterEffect, exitEffect, duration, volume} = req.body.overlay;
+				let {chat, chatMessage, sfx, enterEffect, exitEffect, duration, volume, delay} = req.body.overlay;
+				let overlay = existingChannel.overlay || {};
 
 				if(chat) {
-					existingChannel.overlay.chat = chat;
+					overlay.chat = chat;
 				}
 
 				if(chatMessage) {
-					existingChannel.overlay.chatMessage = chatMessage;
+					overlay.chatMessage = chatMessage;
 				}
 
 				if(sfx) {
-					existingChannel.overlay.sfx = sfx;
+					overlay.sfx = process.env.WEB_DOMAIN + 'sounds/achievement.' + sfx + '.mp3';
 				}
 
 				if(enterEffect) {
-					existingChannel.overlay.enterEffect = enterEffect;
+					overlay.enterEffect = enterEffect;
 				}
 
 				if(exitEffect) {
-					existingChannel.overlay.exitEffect = exitEffect;
+					overlay.exitEffect = exitEffect;
 				}
 
 				if(duration) {
-					existingChannel.overlay.duration = duration
+					overlay.duration = duration
 				}
 
 				if(volume) {
-					existingChannel.overlay.volume = volume
+					overlay.volume = volume
 				}
 
-				resolve();
+				if(delay) {
+					overlay.delay = delay;
+				}
+
+				resolve(overlay);
 			} else {
 				resolve();
 			}
 		});
 
-		Promise.all([defaultPromise, hiddenPromise, overlayPromise]).then((icons) => {
+		Promise.all([defaultPromise, hiddenPromise, overlayPromise]).then((results) => {
 
 			let iconsUpdate = {
 				default: existingChannel.icons.default,
 				hidden: existingChannel.icons.hidden
 			};
 
-			if(icons[0]) {
-				iconsUpdate.default = icons[0];
+			if(results[0]) {
+				iconsUpdate.default = results[0];
 			}
 
-			if(icons[1]) {
-				iconsUpdate.hidden = icons[1];
+			if(results[1]) {
+				iconsUpdate.hidden = results[1];
+			}
+
+			if(results[2]) {
+				existingChannel.overlay = results[2];
+				updateSettings = true;
 			}
 
 			existingChannel.icons = iconsUpdate;
 
 			existingChannel.save().then(savedChannel => {
 
-				if(icons[0] !== savedChannel.icons.default) {
+				if(results[0] !== savedChannel.icons.default) {
 					console.log('uh oh');
+				}
+
+				if(updateSettings) {
+					emitOverlaySettingsUpdate(req, {
+						channel: savedChannel.owner,
+						overlay: savedChannel.overlay
+					});
 				}
 
 				Image.find({channel: existingChannel.owner}).then(foundImages => {
@@ -867,6 +884,16 @@ router.get('/overlay', (req, res) => {
 				icons: foundChannel.icons
 			});
 		}
+	});
+})
+
+router.get('/testOverlay', isAuthorized, (req, res) => {
+	emitOverlayAlert(req, {
+		user: req.user.name,
+		channel: req.user.name,
+		title: 'Test Achievement',
+		icon: 'https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png',
+		unlocked: true
 	});
 })
 
