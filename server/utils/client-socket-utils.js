@@ -19,16 +19,52 @@ let SearchChannels = (socket, value) => {
 let StoreSocket = (socket, app) => {
 	Channel.findOne({oid: socket.handshake.query.uid}).then(foundChannel => {
 		if(foundChannel) {
-			app.set(foundChannel.owner + "-OVERLAY", socket.id);
-			console.log(foundChannel.owner + "-OVERLAY", socket.id);
+			let sockets = app.get(foundChannel.owner + "-OVERLAYS");
+			let socketLookup = app.get('SOCKET-LOOKUP');
+
+			if(!socketLookup) {
+				socketLookup = {};
+			}
+
+			if(sockets) {
+				sockets.push(socket.id);
+			} else {
+				sockets = [socket.id];
+			}
+			console.log(foundChannel.owner + '\'s sockets: ' + sockets.join(','));
+			app.set(foundChannel.owner + "-OVERLAYS", sockets);
+			
+			socketLookup[socket.id] = foundChannel.owner;
+
+			app.set('SOCKET-LOOKUP', socketLookup);
+
 		} else {
 			//No channel found
 			socket.emit('connect-issue', "Issue while connecting");
 		}
-	})
+	});
+}
+
+let RemoveSocket = (socket, app) => {
+	let socketLookup = app.get('SOCKET-LOOKUP');
+
+	let channel = socketLookup[socket.id];
+
+	let channelSockets = app.get(channel + "-OVERLAYS");
+
+	let newSockets = channelSockets.filter(channelSocket => {
+		return channelSocket !== socket.id
+	});
+
+	console.log(channel.owner + '\'s sockets: ' + newSockets.join(','));
+
+	app.set(channel + '-OVERLAYS', newSockets);
+	delete socketLookup[socket.id];
+	app.set('SOCKET-LOOKUP', socketLookup);
 }
 
 module.exports = {
 	searchChannels: SearchChannels,
-	storeSocket: StoreSocket
+	storeSocket: StoreSocket,
+	removeSocket: RemoveSocket
 }

@@ -895,6 +895,8 @@ router.get('/testOverlay', isAuthorized, (req, res) => {
 		icon: 'https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png',
 		unlocked: true
 	});
+
+	res.json({});
 })
 
 module.exports = router;

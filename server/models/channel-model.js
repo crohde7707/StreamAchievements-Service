@@ -22,6 +22,7 @@ const channelSchema = new Schema({
 		volume: Number,
 		delay: Number
 	},
+	gold: Boolean,
 	nextUID: Number
 });
 

@@ -106,6 +106,16 @@ router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) =>
 				req.user.integration = integration;
 				req.user.lastLogin = Date.now();
 				req.user.save().then(savedUser => {
+
+					if(savedUser.type === 'verified' || savedUser.type === "admin") {
+						Channel.findOne({owner: req.user.name}).then(foundChannel => {
+							if(foundChannel.gold !== savedUser.integration.patreon.is_gold) {
+								foundChannel.gold = savedUser.integration.patreon.is_gold;
+								foundChannel.save();
+							}
+						});
+					}
+
 					res.redirect(process.env.WEB_DOMAIN + 'home');
 				});			
 			}).catch(error => {
@@ -218,7 +228,16 @@ router.get('/patreon/redirect', isAuthorized, (req, res) => {
 		req.user.integration = integration;
 
 		req.user.save().then(savedUser => {
-			//2604384
+			
+			if(savedUser.type === 'verified') {
+				Channel.findOne({owner: req.user.name}).then(foundChannel => {
+					if(foundChannel.gold !== is_gold) {
+						foundChannel.gold = is_gold;
+						foundChannel.save();
+					}
+				});
+			}
+			
 			res.redirect(process.env.WEB_DOMAIN + 'profile');
 		});
 
@@ -422,7 +441,15 @@ let patreonSync = (user, etid) => {
 							user.integration = integration;
 
 							user.save().then(savedUser => {
-								//2604384
+								if(savedUser.type === 'verified') {
+									Channel.findOne({owner: req.user.name}).then(foundChannel => {
+										if(foundChannel.gold !== savedUser.integration.patreon.is_gold) {
+											foundChannel.gold = savedUser.integration.patreon.is_gold
+											foundChannel.save();	
+										}
+									});
+								}
+								
 								resolve({
 									vanity: savedUser.integration.patreon.vanity,
 									thumb_url: savedUser.integration.patreon.thumb_url,

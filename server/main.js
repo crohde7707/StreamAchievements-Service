@@ -8,7 +8,7 @@ const passportSetup = require('./configs/passport-setup');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 const allowAccess = require('./utils/access-utils').allowAccess;
-const {searchChannels, storeSocket} = require('./utils/client-socket-utils');
+const {searchChannels, storeSocket, removeSocket} = require('./utils/client-socket-utils');
 
 let io = require('socket.io');
 
@@ -85,7 +85,7 @@ WebSockets.on('connection', function (socket) {
     });
 
     socket.on('disconnect', () => {
-        console.log('disconnect');
+        removeSocket(socket, app);
     });
 });
 

@@ -594,12 +594,8 @@ router.post('/award', isAuthorized, (req, res) => {
 						let shouldAlert = foundAchievement.alert || true;
 						let unlocked = false;
 
-						if(savedMember.integration.patreon) {
-							let patreonInfo = savedMember.integration.patreon;
-
-							if(patreonInfo.status === 'lifetime' || (patreonInfo.is_gold && patreonInfo.status === 'active_patron')) {
-								unlocked = true
-							}
+						if(existingChannel.gold) {
+							unlocked = true
 						}
 
 						if(shouldAlert) {
@@ -791,12 +787,8 @@ router.post('/listeners', (req, res) => {
 													let shouldAlert = foundAchievement.alert || true;
 													let unlocked = false;
 
-													if(savedUser.integration.patreon) {
-														let patreonInfo = savedUser.integration.patreon;
-
-														if(patreonInfo.status === 'lifetime' || (patreonInfo.is_gold && patreonInfo.status === 'active_patron')) {
-															unlocked = true
-														}
+													if(foundChannel.gold) {
+														unlocked = true
 													}
 
 													if(shouldAlert) {
@@ -824,12 +816,8 @@ router.post('/listeners', (req, res) => {
 													let shouldAlert = foundAchievement.alert || true;
 													let unlocked = false;
 
-													if(savedUser.integration.patreon) {
-														let patreonInfo = savedUser.integration.patreon;
-
-														if(patreonInfo.status === 'lifetime' || (patreonInfo.is_gold && patreonInfo.status === 'active_patron')) {
-															unlocked = true
-														}
+													if(foundChannel.gold) {
+														unlocked = true
 													}
 
 													if(shouldAlert) {
@@ -879,12 +867,8 @@ router.post('/listeners', (req, res) => {
 														let shouldAlert = foundAchievement.alert || true;
 														let unlocked = false;
 
-														if(foundUser.integration.patreon) {
-															let patreonInfo = foundUser.integration.patreon;
-
-															if(patreonInfo.status === 'lifetime' || (patreonInfo.is_gold && patreonInfo.status === 'active_patron')) {
-																unlocked = true
-															}
+														if(foundChannel.gold) {
+															unlocked = true
 														}
 
 														if(shouldAlert) {
@@ -927,12 +911,8 @@ router.post('/listeners', (req, res) => {
 											let shouldAlert = foundAchievement.alert || true;
 											let unlocked = false;
 
-											if(foundUser.integration.patreon) {
-												let patreonInfo = foundUser.integration.patreon;
-
-												if(patreonInfo.status === 'lifetime' || (patreonInfo.is_gold && patreonInfo.status === 'active_patron')) {
-													unlocked = true
-												}
+											if(foundChannel.gold) {
+												unlocked = true
 											}
 
 											if(shouldAlert) {
@@ -1002,12 +982,8 @@ router.post('/listeners', (req, res) => {
 													let shouldAlert = foundAchievement.alert || true;
 													let unlocked = false;
 
-													if(foundUser.integration.patreon) {
-														let patreonInfo = foundUser.integration.patreon;
-
-														if(patreonInfo.status === 'lifetime' || (patreonInfo.is_gold && patreonInfo.status === 'active_patron')) {
-															unlocked = true
-														}
+													if(foundChannel.gold) {
+														unlocked = true
 													}
 
 													if(shouldAlert) {

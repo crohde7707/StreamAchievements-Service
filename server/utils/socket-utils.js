@@ -68,19 +68,23 @@ let emitTestListener = (req, data) => {
 
 let emitOverlayAlert = (req, data) => {
 	let ws = req.app.get('ws');
-	let sid = req.app.get(data.channel + '-OVERLAY');
+	let sid = req.app.get(data.channel + '-OVERLAYS');
 	console.log(data);
-	console.log('emitting to overlay: ' + sid);
 	if(sid) {
-		ws.to(sid).emit('alert-recieved', data);	
+		sid.forEach(id => {
+			console.log('emitting to ' + data.channel + ': ' + id);
+			ws.to(id).emit('alert-recieved', data);
+		});
 	}
 }
 
 let emitOverlaySettingsUpdate = (req, data) => {
 	let ws = req.app.get('ws');
-	let sid = req.app.get(data.channel + '-OVERLAY');
+	let sid = req.app.get(data.channel + '-OVERLAYS');
 	if(sid) {
-		ws.to(sid).emit('update-settings', data.overlay);
+		sid.forEach(id => {
+			ws.to(id).emit('update-settings', data.overlay);
+		});
 	}
 }
 
