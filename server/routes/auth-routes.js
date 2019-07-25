@@ -72,60 +72,101 @@ router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) =>
 			if(!id) {
 				console.log('grabbing id from user');
 				id = req.user.integration.patreon.id;
-			}
-			console.log('getting up to date info from patreon');
 
-			axios.get(`https://www.patreon.com/api/oauth2/v2/members/${id}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
-				headers: {
-					Authorization: `Bearer ${access_token}`
+				if(!id) {
+					req.user.lastLogin = Date.now();
+					req.user.save().then(savedUser => {
+						res.redirect(process.env.WEB_DOMAIN + 'home');
+					});
 				}
-			}).then(response => {
-				console.log('up to date info obtained');
-				//active_patron, declined_patron, former_patron, null
-				let patron_status = response.data.data.attributes.patron_status;
-				let is_follower = response.data.data.attributes.is_follower;
-				let tiers = response.data.data.relationships.currently_entitled_tiers;
-				let isGold = tiers.data.map(tier => tier.id).indexOf(GOLD_TIER_ID) >= 0;
+			} else {
+				console.log('getting up to date info from patreon');
 
-				let patreonUpdate = {
-					id: patreonInfo.id,
-					thumb_url: patreonInfo.thumb_url,
-					vanity: patreonInfo.vanity,
-					at: at,
-					rt: rt,
-					is_follower,
-					status: patron_status,
-					is_gold: isGold,
-					expires
-				};
+				axios.get(`https://www.patreon.com/api/oauth2/v2/members/${id}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
+					headers: {
+						Authorization: `Bearer ${access_token}`
+					}
+				}).then(response => {
+					console.log('up to date info obtained');
+					//active_patron, declined_patron, former_patron, null
+					let patron_status = response.data.data.attributes.patron_status;
+					let is_follower = response.data.data.attributes.is_follower;
+					let tiers = response.data.data.relationships.currently_entitled_tiers;
+					let isGold = tiers.data.map(tier => tier.id).indexOf(GOLD_TIER_ID) >= 0;
 
-				let integration = Object.assign({}, req.user.integration);
+					let patreonUpdate = {
+						id: patreonInfo.id,
+						thumb_url: patreonInfo.thumb_url,
+						vanity: patreonInfo.vanity,
+						at: at,
+						rt: rt,
+						is_follower,
+						status: patron_status,
+						is_gold: isGold,
+						expires
+					};
 
-				integration.patreon = {...patreonUpdate};
+					let integration = Object.assign({}, req.user.integration);
 
-				req.user.integration = integration;
-				req.user.lastLogin = Date.now();
-				req.user.save().then(savedUser => {
+					integration.patreon = {...patreonUpdate};
 
-					if(savedUser.type === 'verified' || savedUser.type === "admin") {
-						Channel.findOne({owner: req.user.name}).then(foundChannel => {
-							if(foundChannel.gold !== savedUser.integration.patreon.is_gold) {
-								foundChannel.gold = savedUser.integration.patreon.is_gold;
-								foundChannel.save();
+					req.user.integration = integration;
+					req.user.lastLogin = Date.now();
+					req.user.save().then(savedUser => {
+
+						if(savedUser.type === 'verified' || savedUser.type === "admin") {
+							Channel.findOne({owner: req.user.name}).then(foundChannel => {
+								if(foundChannel.gold !== savedUser.integration.patreon.is_gold) {
+									foundChannel.gold = savedUser.integration.patreon.is_gold;
+									foundChannel.save();
+								}
+							});
+						}
+
+						res.redirect(process.env.WEB_DOMAIN + 'home');
+					});			
+				}).catch(error => {
+					console.log(error.response.data.errors[0]);
+					if(error.response.status === 401) {
+						res.redirect('/auth/patreon');
+					} else if(error.response.status === 404) {
+						//Member used to follow, but now doesn't. Clear info
+
+						let integration = Object.assign({}, req.user.integration);
+
+						let patreonUpdate = {
+							id: null,
+							thumb_url: integration.patreon.thumb_url,
+							vanity: integration.patreon.vanity,
+							at: integration.patreon.at,
+							rt: integration.patreon.rt,
+							is_follower: null,
+							status: null,
+							is_gold: null,
+							expires: integration.patreon.expires
+						};
+
+						integration.patreon = {...patreonUpdate};
+
+						req.user.integration = integration;
+						req.user.lastLogin = Date.now();
+						req.user.save().then(savedUser => {
+
+							if(savedUser.type === 'verified' || savedUser.type === "admin") {
+								Channel.findOne({owner: req.user.name}).then(foundChannel => {
+									if(foundChannel.gold !== savedUser.integration.patreon.is_gold) {
+										foundChannel.gold = false;
+										foundChannel.save();
+									}
+								});
 							}
+
+							res.redirect(process.env.WEB_DOMAIN + 'home');
 						});
 					}
-
-					res.redirect(process.env.WEB_DOMAIN + 'home');
-				});			
-			}).catch(error => {
-				console.log(error.response.data.errors[0]);
-				if(error.response.status === 401) {
-					res.redirect('/auth/patreon');
-				}
-			});
+				});
+			}
 		});
-
 		
 	} else {
 		req.user.lastLogin = Date.now();
@@ -172,18 +213,20 @@ router.get('/patreon/redirect', isAuthorized, (req, res) => {
 					Authorization: `Bearer ${tokenResponse.access_token}`
 				}
 			}).then(res => {
-				vanity = res.data.data.attributes.vanity,
-				thumb_url = res.data.data.attributes.thumb_url
+				vanity = res.data.data.attributes.vanity;
+				thumb_url = res.data.data.attributes.thumb_url;
 
 				if(!res.data.included) {
 					//patron is not a member of the patreon
 					//set at, rt, and thumb_url in DB, display panel to follow
+
 					resolve({
 						thumb_url,
 						vanity,
 						at,
 						rt,
-						etid
+						etid,
+						expires: expireDate
 					});
 				} else {
 					//patron is a member via follow, active_patron, declined_patron, or former_patron
@@ -442,7 +485,7 @@ let patreonSync = (user, etid) => {
 
 							user.save().then(savedUser => {
 								if(savedUser.type === 'verified') {
-									Channel.findOne({owner: req.user.name}).then(foundChannel => {
+									Channel.findOne({owner: user.name}).then(foundChannel => {
 										if(foundChannel.gold !== savedUser.integration.patreon.is_gold) {
 											foundChannel.gold = savedUser.integration.patreon.is_gold
 											foundChannel.save();	
