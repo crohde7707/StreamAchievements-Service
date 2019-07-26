@@ -738,7 +738,7 @@ router.post('/listeners', (req, res) => {
 					}
 
 					Achievement.findById(achievementID).then(foundAchievement => {
-						if(foundAchievement) {
+						if(foundAchievement && foundAchievement.earnable) {
 							console.log('> Achievement: ' + foundAchievement.title);
 							User.findOne(userCriteria).then((foundUser) => {
 								
