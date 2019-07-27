@@ -265,6 +265,18 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 						return tempAch;
 					});
 
+					strippedAchievements.sort((a, b) => {
+						if(a.order > b.order) {
+							return 1;
+						}
+
+						if(b.order < a.order) {
+							return -1;
+						}
+
+						return 0;
+					});
+
 					//check if patreon active, return full access or not
 					User.findOne({name: channel}).then((foundUser) => {
 						if(foundUser) {
@@ -332,7 +344,8 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 											limited: achievement.limited,
 											secret: achievement.secret,
 											listener: achievement.listener,
-											code: listenerData.code
+											code: listenerData.code,
+											order: achievement.order
 										}
 										
 										if(listenerData.resubType) {
@@ -904,11 +917,13 @@ router.post('/reorder', isAuthorized, (req, res) => {
 
 	if(reqAchievements) {
 
-		let achLookup;
+		let achLookup = {};
 
 		reqAchievements.forEach(ach => {
 			achLookup[ach.uid] = ach.order;
 		});
+
+		console.log(achLookup);
 
 		Achievement.find({channel: req.user.name}).then(foundAchievements => {
 
@@ -916,11 +931,13 @@ router.post('/reorder', isAuthorized, (req, res) => {
 				foundAchievements.forEach(achievement => {
 					let order = achLookup[achievement.uid];
 
-					if(achievement.order !== order) {
+					if(!achievement.order || achievement.order !== order) {
 						achievement.order = order;
 						achievement.save();
 					}
 				});
+
+				res.json({})
 			} else {
 				res.json({
 					error: 'Issue updating achievements. Try again later.'
