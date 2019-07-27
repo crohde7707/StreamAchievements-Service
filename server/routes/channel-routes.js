@@ -166,8 +166,10 @@ router.post('/join', isAuthorized, (req, res) => {
 
 				Queue.find({twitchID: req.user.integration.twitch.etid, channelID: existingChannel.id}).then(queues => {
 					if(queues) {
-
+						console.log('Giving achievements to ' + req.user.name);
 						queues.forEach(ach => {
+
+							console.log('awarding ' + ach.achievementID);
 							
 							newChannelObj.achievements.push({
 								aid: ach.achievementID,
@@ -178,6 +180,7 @@ router.post('/join', isAuthorized, (req, res) => {
 								console.log(err);
 							});
 						});
+						console.log('---------------');
 					}
 
 
@@ -265,6 +268,8 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 						return tempAch;
 					});
 
+					strippedAchievements.sort((a, b) => (a.order > b.order) ? 1 : -1);
+
 					//check if patreon active, return full access or not
 					User.findOne({name: channel}).then((foundUser) => {
 						if(foundUser) {
@@ -332,7 +337,8 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 											limited: achievement.limited,
 											secret: achievement.secret,
 											listener: achievement.listener,
-											code: listenerData.code
+											code: listenerData.code,
+											order: achievement.order
 										}
 										
 										if(listenerData.resubType) {
@@ -347,6 +353,8 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 										return achievement;
 									}
 								});
+
+								mergedAchievements.sort((a, b) => (a.order > b.order) ? 1 : -1);
 
 								resolve(mergedAchievements);
 							});
@@ -430,7 +438,7 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 							});
 						});
 					} else if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
-						console.log('foo');
+						
 						existingChannel.overlay = DEFAULT_OVERLAY_CONFIG;
 						existingChannel.save().then(savedChannel => {
 							retChannel = {...savedChannel['_doc']};
@@ -898,5 +906,42 @@ router.get('/testOverlay', isAuthorized, (req, res) => {
 
 	res.json({});
 })
+
+router.post('/reorder', isAuthorized, (req, res) => {
+	let reqAchievements = req.body.achievements;
+
+	if(reqAchievements) {
+
+		let achLookup = {};
+
+		reqAchievements.forEach(ach => {
+			achLookup[ach.uid] = ach.order;
+		});
+
+		Achievement.find({channel: req.user.name}).then(foundAchievements => {
+
+			if(foundAchievements) {
+				foundAchievements.forEach(achievement => {
+					let order = achLookup[achievement.uid];
+
+					if(!achievement.order || achievement.order !== order) {
+						achievement.order = order;
+						achievement.save();
+					}
+				});
+
+				res.json({})
+			} else {
+				res.json({
+					error: 'Issue updating achievements. Try again later.'
+				});
+			}
+		});
+	} else {
+		res.json({
+			error: 'Unexpected use of the API'
+		});
+	}
+});
 
 module.exports = router;

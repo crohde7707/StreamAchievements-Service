@@ -13,7 +13,8 @@ const achievementSchema = new Schema({
 	listener: String,
 	first: String,
 	earned: Date,
-	alert: Boolean
+	alert: Boolean,
+	order: Number
 });
 
 const Achievement = mongoose.model("achievement", achievementSchema);
