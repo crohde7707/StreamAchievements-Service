@@ -166,8 +166,10 @@ router.post('/join', isAuthorized, (req, res) => {
 
 				Queue.find({twitchID: req.user.integration.twitch.etid, channelID: existingChannel.id}).then(queues => {
 					if(queues) {
-
+						console.log('Giving achievements to ' + req.user.name);
 						queues.forEach(ach => {
+
+							console.log('awarding ' + ach.achievementID);
 							
 							newChannelObj.achievements.push({
 								aid: ach.achievementID,
@@ -178,6 +180,7 @@ router.post('/join', isAuthorized, (req, res) => {
 								console.log(err);
 							});
 						});
+						console.log('---------------');
 					}
 
 
@@ -265,17 +268,7 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 						return tempAch;
 					});
 
-					strippedAchievements.sort((a, b) => {
-						if(a.order > b.order) {
-							return 1;
-						}
-
-						if(b.order < a.order) {
-							return -1;
-						}
-
-						return 0;
-					});
+					strippedAchievements.sort((a, b) => (a.order > b.order) ? 1 : -1);
 
 					//check if patreon active, return full access or not
 					User.findOne({name: channel}).then((foundUser) => {
@@ -361,6 +354,8 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 									}
 								});
 
+								mergedAchievements.sort((a, b) => (a.order > b.order) ? 1 : -1);
+
 								resolve(mergedAchievements);
 							});
 						} else {
@@ -443,7 +438,7 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 							});
 						});
 					} else if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
-						console.log('foo');
+						
 						existingChannel.overlay = DEFAULT_OVERLAY_CONFIG;
 						existingChannel.save().then(savedChannel => {
 							retChannel = {...savedChannel['_doc']};
@@ -922,8 +917,6 @@ router.post('/reorder', isAuthorized, (req, res) => {
 		reqAchievements.forEach(ach => {
 			achLookup[ach.uid] = ach.order;
 		});
-
-		console.log(achLookup);
 
 		Achievement.find({channel: req.user.name}).then(foundAchievements => {
 
