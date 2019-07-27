@@ -899,4 +899,39 @@ router.get('/testOverlay', isAuthorized, (req, res) => {
 	res.json({});
 })
 
+router.post('/reorder', isAuthorized, (req, res) => {
+	let reqAchievements = req.body.achievements;
+
+	if(reqAchievements) {
+
+		let achLookup;
+
+		reqAchievements.forEach(ach => {
+			achLookup[ach.uid] = ach.order;
+		});
+
+		Achievement.find({channel: req.user.name}).then(foundAchievements => {
+
+			if(foundAchievements) {
+				foundAchievements.forEach(achievement => {
+					let order = achLookup[achievement.uid];
+
+					if(achievement.order !== order) {
+						achievement.order = order;
+						achievement.save();
+					}
+				});
+			} else {
+				res.json({
+					error: 'Issue updating achievements. Try again later.'
+				});
+			}
+		});
+	} else {
+		res.json({
+			error: 'Unexpected use of the API'
+		});
+	}
+});
+
 module.exports = router;
