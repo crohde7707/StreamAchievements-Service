@@ -239,11 +239,39 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 					let earned, retAchievements;
 
 					if(joined) {
-						earnedAchievements = req.user.channels.filter((channel) => {
+						let channelIDX = req.user.channels.findIndex((channel) => {
 							return (channel.channelID === foundChannel.id)
-						})[0];
+						});
 
-						earned = earnedAchievements.achievements.map(achievement => achievement.aid);
+						let earnedAchievements = req.user.channels[channelIDX].achievements;
+
+						//Clean up deleted achievements
+
+						let foundMap = {};
+
+						let cleanedUpAchievements = earnedAchievements.filter((ach, idx) => {
+							let filtered = foundAchievements.findIndex(fach => {
+						        return fach.uid === ach.aid
+						    });
+
+							if(filtered >= 0 && !foundMap[ach.aid]) {
+								//achievement found
+								foundMap[ach.aid] = true;
+								return true;
+							} else {
+								return false;
+							}
+
+						});
+
+						if(cleanedUpAchievements.length !== earnedAchievements.length) {
+							req.user.channels[channelIDX].achievements = cleanedUpAchievements;
+							req.user.save();
+							console.log('synced achievements...');
+							earnedAchievements = cleanedUpAchievements;
+						}
+
+						earned = earnedAchievements.map(achievement => achievement.aid);
 
 						retAchievements = foundAchievements.map(achievement => {
 							let ach = Object.assign({}, achievement._doc);
@@ -251,7 +279,7 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 							let aIdx = earned.findIndex(aid => aid === ach.uid);
 
 							if(aIdx >= 0) {
-								ach.earned = earnedAchievements.achievements[aIdx].earned;
+								ach.earned = earnedAchievements[aIdx].earned;
 							}
 
 							return ach
