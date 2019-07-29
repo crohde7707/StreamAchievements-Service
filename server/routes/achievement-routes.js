@@ -285,127 +285,133 @@ router.post("/create", isAuthorized, (req, res) => {
 					});
 				} else {
 
-					let achData = {
-						uid: existingChannel.nextUID,
-						channel: existingChannel.owner,
-						title: req.body.title,
-						description: req.body.description,
-						icon: req.body.icon,
-						earnable: req.body.earnable,
-						limited: req.body.limited,
-						secret: req.body.secret,
-						listener: req.body.listener
-					};
+					Achievement.countDocuments({channel: existingChannel.owner}).then(preCount => {
 
-					let listenerData = {
-						channel: existingChannel.owner,
-						achType: req.body.achType,
-						uid: uuid()
-					};
+						let achData = {
+							uid: existingChannel.nextUID,
+							channel: existingChannel.owner,
+							title: req.body.title,
+							description: req.body.description,
+							icon: req.body.icon,
+							earnable: req.body.earnable,
+							limited: req.body.limited,
+							secret: req.body.secret,
+							listener: req.body.listener,
+							order: preCount
+						};
 
-					if(listenerData.achType !== '0') {
-						listenerData.condition = req.body.condition;
+						let listenerData = {
+							channel: existingChannel.owner,
+							achType: req.body.achType,
+							uid: uuid()
+						};
 
-						if(listenerData.achType === "4") {
-							listenerData.bot = req.body.bot;
-							listenerData.query = req.body.query;
+						if(listenerData.achType !== '0') {
+							listenerData.condition = req.body.condition;
+
+							if(listenerData.achType === "4") {
+								listenerData.bot = req.body.bot;
+								listenerData.query = req.body.query;
+							}
 						}
-					}
 
-					Listener.findOne(listenerData).then(foundListener => {
-						if(foundListener) {
-							Achievement.findOne({listener: foundListener._id}).then(foundAchievement => {
-								res.json({
-									created: false,
-									message: "The conditions you selected are already taken by the \"" + foundAchievement.title + "\" achievement!"
+						Listener.findOne(listenerData).then(foundListener => {
+							if(foundListener) {
+								Achievement.findOne({listener: foundListener._id}).then(foundAchievement => {
+									res.json({
+										created: false,
+										message: "The conditions you selected are already taken by the \"" + foundAchievement.title + "\" achievement!"
+									});
 								});
-							});
-						} else {
-							if(req.body.icon) {
-								uploadImage(req.body.icon, req.body.iconName, existingChannel.owner).then((result) => {
-									achData.icon = result.url;
+							} else {
+								if(req.body.icon) {
+									uploadImage(req.body.icon, req.body.iconName, existingChannel.owner).then((result) => {
+										achData.icon = result.url;
+										new Achievement(achData).save().then((newAchievement) => {
+											console.log('new achievement in DB');
+											listenerData.achievement = newAchievement.id;
+											listenerData.aid = newAchievement.uid;
+											
+											result.achievementID = newAchievement.id;
+											result.save().then(updatedImage => {
+												existingChannel.nextUID = newAchievement.uid + 1;
+												existingChannel.save().then(updatedChannel => {
+													//create listener for achievement
+													if(req.body.achType !== "3") {
+														new Listener(listenerData).save().then(newListener => {
+															
+															emitNewListener(req, {
+																uid: listenerData.uid,
+																channel: listenerData.channel,
+																achievement: listenerData.achievement,
+																achType: listenerData.achType,
+																query: listenerData.query,
+																bot: listenerData.bot,
+																condition: listenerData.condition
+															});
+
+															newAchievement.listener = newListener.id;
+															newAchievement.save().then(updatedAchievement => {
+																res.json({
+																	created: true,
+																	achievement: updatedAchievement
+																});
+															});
+														});
+													} else {
+														res.json({
+															created: true,
+															achievement: newAchievement
+														});
+													}
+												});
+											});
+										});
+									});	
+								} else {
 									new Achievement(achData).save().then((newAchievement) => {
-										console.log('new achievement in DB');
 										listenerData.achievement = newAchievement.id;
 										listenerData.aid = newAchievement.uid;
 										
-										result.achievementID = newAchievement.id;
-										result.save().then(updatedImage => {
-											existingChannel.nextUID = newAchievement.uid + 1;
-											existingChannel.save().then(updatedChannel => {
-												//create listener for achievement
-												if(req.body.achType !== "3") {
-													new Listener(listenerData).save().then(newListener => {
-														
-														emitNewListener(req, {
-															uid: listenerData.uid,
-															channel: listenerData.channel,
-															achievement: listenerData.achievement,
-															achType: listenerData.achType,
-															query: listenerData.query,
-															bot: listenerData.bot,
-															condition: listenerData.condition
-														});
+										existingChannel.nextUID = newAchievement.uid + 1;
+										existingChannel.save().then(updatedChannel => {
+											//create listener for achievement
+											if(req.body.achType !== "3") {
+												new Listener(listenerData).save().then(newListener => {
+													
+													emitNewListener(req, {
+														uid: listenerData.uid,
+														channel: listenerData.channel,
+														achievement: listenerData.achievement,
+														achType: listenerData.achType,
+														query: listenerData.query,
+														bot: listenerData.bot,
+														condition: listenerData.condition
+													});
 
-														newAchievement.listener = newListener.id;
-														newAchievement.save().then(updatedAchievement => {
-															res.json({
-																created: true,
-																achievement: updatedAchievement
-															});
+													newAchievement.listener = newListener.id;
+													newAchievement.save().then(updatedAchievement => {
+														res.json({
+															created: true,
+															achievement: updatedAchievement
 														});
 													});
-												} else {
-													res.json({
-														created: true,
-														achievement: newAchievement
-													});
-												}
-											});
+												});
+											} else {
+												res.json({
+													created: true,
+													achievement: newAchievement
+												});
+											}
 										});
 									});
-								});	
-							} else {
-								new Achievement(achData).save().then((newAchievement) => {
-									listenerData.achievement = newAchievement.id;
-									listenerData.aid = newAchievement.uid;
-									
-									existingChannel.nextUID = newAchievement.uid + 1;
-									existingChannel.save().then(updatedChannel => {
-										//create listener for achievement
-										if(req.body.achType !== "3") {
-											new Listener(listenerData).save().then(newListener => {
-												
-												emitNewListener(req, {
-													uid: listenerData.uid,
-													channel: listenerData.channel,
-													achievement: listenerData.achievement,
-													achType: listenerData.achType,
-													query: listenerData.query,
-													bot: listenerData.bot,
-													condition: listenerData.condition
-												});
-
-												newAchievement.listener = newListener.id;
-												newAchievement.save().then(updatedAchievement => {
-													res.json({
-														created: true,
-														achievement: updatedAchievement
-													});
-												});
-											});
-										} else {
-											res.json({
-												created: true,
-												achievement: newAchievement
-											});
-										}
-									});
-								});
+								}
+								
 							}
-							
-						}
-					});	
+						});	
+
+
+					});
 				}
 			});	
 		} else {
