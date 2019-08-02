@@ -48,22 +48,24 @@ let StoreSocket = (socket, app) => {
 let RemoveSocket = (socket, app) => {
 	let socketLookup = app.get('SOCKET-LOOKUP');
 
-	let channel = socketLookup[socket.id];
+	if(socketLookup) {
+		let channel = socketLookup[socket.id];
 
-	let channelSockets = app.get(channel + "-OVERLAYS");
+		let channelSockets = app.get(channel + "-OVERLAYS");
 
-	if(channelSockets) {
-		let newSockets = channelSockets.filter(channelSocket => {
-			return channelSocket !== socket.id
-		});
+		if(channelSockets) {
+			let newSockets = channelSockets.filter(channelSocket => {
+				return channelSocket !== socket.id
+			});
 
-		console.log(channel.owner + '\'s sockets: ' + newSockets.join(','));
+			console.log(channel.owner + '\'s sockets: ' + newSockets.join(','));
 
-		app.set(channel + '-OVERLAYS', newSockets);
+			app.set(channel + '-OVERLAYS', newSockets);
+		}
+
+		delete socketLookup[socket.id];
+		app.set('SOCKET-LOOKUP', socketLookup);
 	}
-
-	delete socketLookup[socket.id];
-	app.set('SOCKET-LOOKUP', socketLookup);
 }
 
 module.exports = {

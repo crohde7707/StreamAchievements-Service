@@ -890,46 +890,54 @@ router.post('/listeners', (req, res) => {
 												})
 											});
 										} else {
-											new Queue({
-												twitchID: foundUser.integration.twitch.etid,
+											Queue.findOne({
 												name: foundUser.name,
 												channelID: foundChannel._id,
-												achievementID: foundAchievement.uid,
-												earned: currentDate
-											}).save();
+												achievementID: foundAchievement.uid
+											}).then(foundQueue => {
+												if(!foundQueue) {
+													new Queue({
+														twitchID: foundUser.integration.twitch.etid,
+														name: foundUser.name,
+														channelID: foundChannel._id,
+														achievementID: foundAchievement.uid,
+														earned: currentDate
+													}).save();
 
-											new Notice({
-												twitchID: userID,
-												channelID: foundChannel._id,
-												achievementID: achievementID
-											}).save();
+													new Notice({
+														twitchID: userID,
+														channelID: foundChannel._id,
+														achievementID: achievementID
+													}).save();
 
-											if(foundChannel.overlay.chat) {
-												let alertData = {
-													'channel': achievementOwner,
-													'member': foundUser.name,
-													'achievement': foundAchievement.title
-												};
+													if(foundChannel.overlay.chat) {
+														let alertData = {
+															'channel': achievementOwner,
+															'member': foundUser.name,
+															'achievement': foundAchievement.title
+														};
 
-												emitAwardedAchievement(req, alertData);
-											}
+														emitAwardedAchievement(req, alertData);
+													}
 
-											let shouldAlert = foundAchievement.alert || true;
-											let unlocked = false;
+													let shouldAlert = foundAchievement.alert || true;
+													let unlocked = false;
 
-											if(foundChannel.gold) {
-												unlocked = true
-											}
+													if(foundChannel.gold) {
+														unlocked = true
+													}
 
-											if(shouldAlert) {
-												emitOverlayAlert(req, {
-													user: foundUser.name,
-													channel: achievementOwner,
-													title: foundAchievement.title,
-													icon: foundAchievement.icon,
-													unlocked
-												});
-											}
+													if(shouldAlert) {
+														emitOverlayAlert(req, {
+															user: foundUser.name,
+															channel: achievementOwner,
+															title: foundAchievement.title,
+															icon: foundAchievement.icon,
+															unlocked
+														});
+													}
+												}
+											})
 										}
 									}	
 								} else {
