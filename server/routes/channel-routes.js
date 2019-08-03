@@ -877,6 +877,8 @@ router.post('/verify', isAuthorized, (req, res) => {
 					expired: true
 				});
 			} else {
+				let type = req.user.broadcaster_type;
+
 				new Channel({
 					owner: req.user.name,
 					twitchID: req.user.integration.twitch.etid,
@@ -889,7 +891,10 @@ router.post('/verify', isAuthorized, (req, res) => {
 					},
 					oid: uuid(),
 					overlay: DEFAULT_OVERLAY_CONFIG,
-					nextUID: 1
+					nextUID: 1,
+					broadcaster_type: {
+						twitch: type
+					}
 				}).save().then((newChannel) => {
 					req.user.type = 'verified';
 					req.user.save().then((savedUser) => {

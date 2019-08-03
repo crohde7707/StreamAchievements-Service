@@ -23,7 +23,12 @@ const channelSchema = new Schema({
 		delay: Number
 	},
 	gold: Boolean,
-	nextUID: Number
+	nextUID: Number,
+	broadcaster_type: {
+		twitch: String,
+		mixer: String,
+		youtube: String
+	}
 });
 
 const Channel = mongoose.model("channel", channelSchema);
