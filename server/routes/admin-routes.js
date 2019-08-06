@@ -4,6 +4,7 @@ const Listener = require('../models/listener-model');
 const Token = require('../models/token-model');
 const Queue = require('../models/queue-model');
 const Channel = require('../models/channel-model');
+const Notice = require('../models/notice-model');
 const Achievement = require('../models/achievement-model');
 const mongoose = require('mongoose');
 const {isAdminAuthorized} = require('../utils/auth-utils');
@@ -219,5 +220,17 @@ router.post('/alertSync', isAdminAuthorized, (req, res) => {
 		}
 	});
 });
+
+router.post('/notice', isAdminAuthorized, (req, res) => {
+	new Notice({
+		user: "5cfc5f04a33c32ad539abe0c",
+		logo: "https://static-cdn.jtvnw.net/jtv_user_pictures/thorlar-profile_image-4bd4d7b82e71afc3-300x300.jpeg",
+		message: "You earned the \"Noisy Viking\" Achievement!",
+		date: Date.now()
+	}).save().then(savedNotice => {
+		console.log(savedNotice);
+		res.json(savedNotice);
+	});
+})
 
 module.exports = router;

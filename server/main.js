@@ -8,7 +8,13 @@ const passportSetup = require('./configs/passport-setup');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 const allowAccess = require('./utils/access-utils').allowAccess;
-const {searchChannels, storeSocket, removeSocket} = require('./utils/client-socket-utils');
+const {
+    searchChannels,
+    storeSocket,
+    removeSocket,
+    markNotificationRead,
+    deleteNotification
+} = require('./utils/client-socket-utils');
 
 let io = require('socket.io');
 
@@ -82,6 +88,14 @@ WebSockets.on('connection', function (socket) {
     socket.on('search-directory', (data) => {
         console.log(data);
         searchChannels(socket, data);
+    });
+
+    socket.on('mark-notification-read', (notification) => {
+        markNotificationRead(socket, notification);
+    });
+
+    socket.on('delete-notification', (notification) => {
+        deleteNotification(socket, notification);
     });
 
     socket.on('disconnect', () => {
