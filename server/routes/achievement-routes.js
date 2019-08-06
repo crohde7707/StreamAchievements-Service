@@ -596,6 +596,16 @@ router.post('/award', isAuthorized, (req, res) => {
 
 							emitAwardedAchievement(req, alertData);
 						}
+
+						new Notice({
+							user: savedMember._id,
+							logo: existingChannel.logo,
+							message: `You have earned the "${foundAchievement.title}" achievement!`,
+							date: Date.now(),
+							type: 'achievement',
+							channel: existingChannel.owner,
+							status: 'new'
+						}).save();
 						
 						let shouldAlert = foundAchievement.alert || true;
 						let unlocked = false;
@@ -856,9 +866,13 @@ router.post('/listeners', (req, res) => {
 												foundChannel.save().then(savedChannel => {
 													//TODO: Reorganize notice model
 													new Notice({
-														twitchID: userID,
-														channelID: foundChannel._id,
-														achievementID: foundAchievement.uid
+														user: foundUser._id,
+														logo: foundChannel.logo,
+														message: `You have earned the "${foundAchievement.title}" achievement!`,
+														date: currentDate,
+														type: 'achievement',
+														channel: foundChannel.owner,
+														status: 'new'
 													}).save().then(savedNotice => {
 														if(foundChannel.overlay.chat) {
 															let alertData = {
@@ -905,9 +919,13 @@ router.post('/listeners', (req, res) => {
 													}).save();
 
 													new Notice({
-														twitchID: userID,
-														channelID: foundChannel._id,
-														achievementID: achievementID
+														user: foundUser._id,
+														logo: foundChannel.logo,
+														message: `You have earned the "${foundAchievement.title}" achievement!`,
+														date: currentDate,
+														type: 'achievement',
+														channel: foundChannel.owner,
+														status: 'new'
 													}).save();
 
 													if(foundChannel.overlay.chat) {
@@ -1074,9 +1092,13 @@ let handleSubBackfill = (achievement, user, foundChannel) => {
 							if(achIdx < 0) {
 								userChannels[channelIdx].achievements.push({aid: listener.aid, earned: Date.now()});
 								new Notice({
-									twitchID: user.integration.twitch.etid,
-									channelID: foundChannel._id,
-									achievementID: achievement
+									user: foundUser._id,
+									logo: foundChannel.logo,
+									message: `Your previous subs have been backfilled!`,
+									date: currentDate,
+									type: 'achievement',
+									channel: foundChannel.owner,
+									status: 'new'
 								}).save();
 							} else {
 								console.log('> Achievement already earned: ' + listener.aid)

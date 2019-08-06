@@ -1,4 +1,5 @@
 const Channel = require('../models/channel-model');
+const Notice = require('../models/notice-model');
 
 let SearchChannels = (socket, value) => {
 	let regex = new RegExp(value, 'gi');
@@ -68,8 +69,26 @@ let RemoveSocket = (socket, app) => {
 	}
 }
 
+let MarkNotificationRead = (socket, notification) => {
+	Notice.findById(notification.id).then(notification => {
+		notification.status = 'read';
+		notification.save().then(savedNotification => {
+			socket.emit('notification-read', savedNotification.id);
+		});
+	});
+}
+
+let DeleteNotification = (socket, notification) => {
+	Notice.findByIdAndRemove(notification.id).then(notification => {
+		socket.emit('notification-removed', notification.id);
+	});
+	
+}
+
 module.exports = {
 	searchChannels: SearchChannels,
 	storeSocket: StoreSocket,
-	removeSocket: RemoveSocket
+	removeSocket: RemoveSocket,
+	markNotificationRead: MarkNotificationRead,
+	deleteNotification: DeleteNotification
 }

@@ -16,6 +16,7 @@ const Listener = require('../models/listener-model');
 const Image = require('../models/image-model');
 const Token = require('../models/token-model');
 const Queue = require('../models/queue-model');
+const Notice = require('../models/notice-model');
 const {uploadImage, destroyImage} = require('../utils/image-utils');
 const {emitNewChannel, emitOverlaySettingsUpdate, emitOverlayAlert} = require('../utils/socket-utils');
 
@@ -852,9 +853,21 @@ router.post('/confirm', isAdminAuthorized, (req, res) => {
 				   if(err)
 				     console.log(err)
 				   else
-				     res.json({
-				     	message: "email sent"
-				     });
+
+				   	new Notice({
+						user: uid,
+						logo: DEFAULT_ICON,
+						message: "Your channel has been approved! Go check your email for your confirmation code!",
+						date: Date.now(),
+						type: 'confirmation',
+						status: 'new'
+					}).save().then(savedNotice => {
+						console.log(savedNotice);
+					});
+
+				    res.json({
+				    	message: "email sent"
+				    });
 				});
 			});
 		});

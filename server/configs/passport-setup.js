@@ -1,6 +1,7 @@
 const passport = require('passport');
 const TwitchStrategy = require('passport-twitch.js').Strategy;
 const User = require('../models/user-model');
+const Notice = require('../models/notice-model');
 const Cryptr = require('cryptr');
 const cryptr = new Cryptr(process.env.SCK);
 
@@ -24,28 +25,44 @@ passport.use(
 		};
 		
 		User.findOne({'integration.twitch.etid': twitchIntegration.etid}).then((existingUser) => {
+			let updated = false;
+
 			if(existingUser) {
 				existingUser.integration.twitch = twitchIntegration;
 
 				if(existingUser.name !== profile.login) {
 					existingUser.name = profile.login;
+					updated = true;
 				}
 
 				if(existingUser.logo !== profile.profile_image_url) {
 					existingUser.logo = profile.profile_image_url;
+					updated = true;
 				}
 
 				if(existingUser.email !== profile.email) {
 					existingUser.email = profile.email;
+					updated = true;
 				}
 
 				if(existingUser.broadcaster_type !== profile.broadcaster_type) {
 					existingUser.broadcaster_type = profile.broadcaster_type;
+					updated = true;
 				}
 
 				existingUser.save().then(savedUser => {
-					console.log("found user, logging in...");
-					done(null, existingUser);	
+					if(updated) {
+						new Notice({
+							user: savedUser._id,
+							logo: "https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png",
+							message: "We noticed some information has been updated on Twitch, so we went ahead and updated your profile with those changes!",
+							date: Date.now(),
+							type: 'profile',
+							status: 'new'
+						}).save();
+					}
+
+					done(null, savedUser);	
 				});
 			} else {
 				new User({

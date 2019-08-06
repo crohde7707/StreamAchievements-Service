@@ -2,6 +2,7 @@ const router = require('express').Router();
 const passport = require('passport');
 const User = require('../models/user-model');
 const Channel = require('../models/channel-model');
+const Notice = require('../models/notice-model');
 const Achievement = require('../models/achievement-model');
 const Token = require('../models/token-model');
 const mongoose = require('mongoose');
@@ -12,6 +13,8 @@ let ircRoutes = require('./irc-routes');
 let adminRoutes = require('./admin-routes');
 const {isAuthorized, isAdminAuthorized} = require('../utils/auth-utils');
 const {emitTestListener, emitNewChannel} = require('../utils/socket-utils');
+
+const notificationLimit = 15;
 
 router.use('/channel', channelRoutes);
 router.use('/achievement', achievementRoutes);
@@ -143,28 +146,99 @@ router.get("/profile", isAuthorized, (req, res) => {
 			});
 		});
 
+		let notificationPromise = new Promise((resolve, reject) => {
+			Notice.estimatedDocumentCount({user: req.user._id}).exec().then(count => {
+				Notice.find({user: req.user._id}).sort({'date': -1}).limit(notificationLimit).exec((err, notifications) => {
+					if(notifications) {
+						let offset = false;
+
+						let mappedNotifications = notifications.map(notice => {
+							return {
+								id: notice._id,
+								logo: notice.logo,
+								message: notice.message,
+								date: notice.date,
+								type: notice.type,
+								channel: notice.channel,
+								status: notice.status
+							}
+						});
+
+						if(notificationLimit === mappedNotifications.length) {
+							offset = notificationLimit;
+						}
+
+						resolve({
+							notifications: mappedNotifications,
+							next: offset
+						});
+					} else {
+						resolve([]);
+					}
+				})
+			});
+		})
+
 		Promise.all(promises).then(responseData => {
 
-			if(!req.user.preferences) {
-				req.user.preferences = {
-					autojoin: false
-				};
+			notificationPromise.then(data => {
+				if(!req.user.preferences) {
+					req.user.preferences = {
+						autojoin: false
+					};
 
-				req.user.save().then((savedUser) => {
+					req.user.save().then((savedUser) => {
+						res.json({
+							channels: responseData,
+							preferences: savedUser.preferences,
+							notifications: data.notifications,
+							next: data.next
+						});
+					});
+				} else {
 					res.json({
 						channels: responseData,
-						preferences: savedUser.preferences
+						preferences: req.user.preferences,
+						notifications: data.notifications,
+						next: data.next
 					});
-				});
-			} else {
-				res.json({
-					channels: responseData,
-					preferences: req.user.preferences
-				});
-			}
-			
+				}
+			})
 		});
 	});
+});
+
+router.get('/notifications', isAuthorized, (req, res) => {
+	let offset = parseInt(req.query.next);
+
+	Notice.find({user: req.user._id}).sort({'date': -1}).skip(offset).limit(notificationLimit).exec((err, notifications) => {
+		if(notifications) {
+			let offset = false;
+
+			let mappedNotifications = notifications.map(notice => {
+				return {
+					id: notice._id,
+					logo: notice.logo,
+					message: notice.message,
+					date: notice.date,
+					type: notice.type,
+					channel: notice.channel,
+					status: notice.status
+				}
+			});
+
+			if(notificationLimit === mappedNotifications.length) {
+				offset = offset + notificationLimit;
+			}
+
+			res.json({
+				notifications: mappedNotifications,
+				next: offset
+			});
+		} else {
+			res.json([]);
+		}
+	})
 });
 
 router.post("/profile/preferences", isAuthorized, (req, res) => {
