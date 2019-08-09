@@ -783,6 +783,16 @@ router.post('/listeners', (req, res) => {
 												earned: currentDate
 											});
 
+											new Notice({
+												user: foundUser._id,
+												logo: foundChannel.logo,
+												message: `You have earned the "${foundAchievement.title}" achievement!`,
+												date: currentDate,
+												type: 'achievement',
+												channel: foundChannel.owner,
+												status: 'new'
+											}).save();
+
 											foundUser.save().then(savedUser => {
 												if(sync && tier) {
 													console.log("syncing for " + savedUser.name);
@@ -1092,7 +1102,7 @@ let handleSubBackfill = (achievement, user, foundChannel) => {
 							if(achIdx < 0) {
 								userChannels[channelIdx].achievements.push({aid: listener.aid, earned: Date.now()});
 								new Notice({
-									user: foundUser._id,
+									user: user._id,
 									logo: foundChannel.logo,
 									message: `Your previous subs have been backfilled!`,
 									date: currentDate,
