@@ -17,7 +17,8 @@ const {
 	emitRemoveListener,
 	emitAwardedAchievement,
 	emitAwardedAchievementNonMember,
-	emitOverlayAlert
+	emitOverlayAlert,
+	emitNotificationsUpdate
 } = require('../utils/socket-utils');
 
 const uploadImage = require('../utils/image-utils').uploadImage;
@@ -605,7 +606,20 @@ router.post('/award', isAuthorized, (req, res) => {
 							type: 'achievement',
 							channel: existingChannel.owner,
 							status: 'new'
-						}).save();
+						}).save().then(savedNotice => {
+							emitNotificationsUpdate(req, {
+								notification: {
+									id: savedNotice._id,
+									logo: savedNotice.logo,
+									message: savedNotice.message,
+									date: savedNotice.date,
+									type: savedNotice.type,
+									channel: savedNotice.channel,
+									status: savedNotice.status
+								},
+								user: savedMember.name
+							});
+						});
 						
 						let shouldAlert = foundAchievement.alert || true;
 						let unlocked = false;
@@ -683,8 +697,6 @@ router.get('/listeners', (req, res) => {
 		channelArray = channelArray.split(',');
 	}
 
-	console.log(channelArray);
-
 	Achievement.find({'owner': { $in: channelArray}})
 		.then(achievements => {
 			let earnableAchievements = achievements.map(achievement => {
@@ -747,10 +759,8 @@ router.post('/listeners', (req, res) => {
 						}
 
 						userCriteria.name = userName.toLowerCase();
-						console.log(userCriteria);
 					} else {
 						console.log('<<<< No user came from IRC >>>>');
-						console.log(Date.now());
 					}
 
 					Achievement.findById(achievementID).then(foundAchievement => {
@@ -791,7 +801,20 @@ router.post('/listeners', (req, res) => {
 												type: 'achievement',
 												channel: foundChannel.owner,
 												status: 'new'
-											}).save();
+											}).save().then(savedNotice => {
+												emitNotificationsUpdate(req, {
+													notification: {
+														id: savedNotice._id,
+														logo: savedNotice.logo,
+														message: savedNotice.message,
+														date: savedNotice.date,
+														type: savedNotice.type,
+														channel: savedNotice.channel,
+														status: savedNotice.status
+													},
+													user: foundUser.name
+												});
+											});
 
 											foundUser.save().then(savedUser => {
 												if(sync && tier) {
@@ -861,7 +884,6 @@ router.post('/listeners', (req, res) => {
 										}
 									} else {
 										console.log("couldn't find the channel");
-										console.log(foundChannel.id);
 										//TODO: User preference to auto join channel?
 										if(foundUser.preferences.autojoin) {
 											foundUser.channels.push({
@@ -892,6 +914,19 @@ router.post('/listeners', (req, res) => {
 															};
 
 															emitAwardedAchievement(req, alertData);
+
+															emitNotificationsUpdate(req, {
+																notification: {
+																	id: savedNotice._id,
+																	logo: savedNotice.logo,
+																	message: savedNotice.message,
+																	date: savedNotice.date,
+																	type: savedNotice.type,
+																	channel: savedNotice.channel,
+																	status: savedNotice.status
+																},
+																user: foundUser.name
+															});
 														};
 
 														let shouldAlert = foundAchievement.alert || true;
@@ -936,7 +971,20 @@ router.post('/listeners', (req, res) => {
 														type: 'achievement',
 														channel: foundChannel.owner,
 														status: 'new'
-													}).save();
+													}).save().then(savedNotice => {
+														emitNotificationsUpdate(req, {
+															notification: {
+																id: savedNotice._id,
+																logo: savedNotice.logo,
+																message: savedNotice.message,
+																date: savedNotice.date,
+																type: savedNotice.type,
+																channel: savedNotice.channel,
+																status: savedNotice.status
+															},
+															user: foundUser.name
+														});
+													});
 
 													if(foundChannel.overlay.chat) {
 														let alertData = {
@@ -1109,7 +1157,20 @@ let handleSubBackfill = (achievement, user, foundChannel) => {
 									type: 'achievement',
 									channel: foundChannel.owner,
 									status: 'new'
-								}).save();
+								}).save().then(savedNotice => {
+									emitNotificationsUpdate(req, {
+										notification: {
+											id: savedNotice._id,
+											logo: savedNotice.logo,
+											message: savedNotice.message,
+											date: savedNotice.date,
+											type: savedNotice.type,
+											channel: savedNotice.channel,
+											status: savedNotice.status
+										},
+										user: user.name
+									});
+								});
 							} else {
 								console.log('> Achievement already earned: ' + listener.aid)
 							}

@@ -59,9 +59,8 @@ if(process.env.NODE_ENV === 'production') {
 app.set('ws', WebSockets);
 
 WebSockets.on('connection', function (socket) {
-    console.log('connected:', socket.client.id);
-
-    if(socket.handshake && socket.handshake.query && socket.handshake.query.uid) {
+    
+    if(socket.handshake && socket.handshake.query) {
         //Socket coming from overlay-panel
         storeSocket(socket, app);
     }
@@ -86,7 +85,6 @@ WebSockets.on('connection', function (socket) {
     });
 
     socket.on('search-directory', (data) => {
-        console.log(data);
         searchChannels(socket, data);
     });
 
