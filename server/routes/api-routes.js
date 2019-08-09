@@ -6,6 +6,8 @@ const Notice = require('../models/notice-model');
 const Achievement = require('../models/achievement-model');
 const Token = require('../models/token-model');
 const mongoose = require('mongoose');
+const Cryptr = require('cryptr');
+const cryptr = new Cryptr(process.env.SCK);
 
 let channelRoutes = require('./channel-routes');
 let achievementRoutes = require('./achievement-routes');
@@ -55,6 +57,7 @@ router.get('/users', isAdminAuthorized, (req, res) => {
 });
 
 router.get("/user", isAuthorized, (req, res) => {
+	let uid = cryptr.encrypt(req.user._id);
 
 	setTimeout(() => {
 		if(timeout) {
@@ -84,40 +87,46 @@ router.get("/user", isAuthorized, (req, res) => {
 		patreonInfo = false;
 	}
 
-	Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
-		timeout = false;
-		if(existingChannel) {
-			res.json({
-				username: req.user.name,
-				logo: req.user.logo,
-				patreon: patreonInfo,
-				status: 'verified',
-				type: req.user.type,
-				preferences: req.user.preferences
-			});
-		} else {
-			let status = 'viewer';
-			
-			Token.findOne({uid: req.user._id}).then(foundToken => {
-				
-				if(foundToken) {
-					if(foundToken.token === 'not issued') {
-						status = 'review'
-					} else {
-						status = 'pending'
-					}
-				}
-
+	Notice.countDocuments({user: req.user._id, status: 'new'}).exec().then(count => {
+		Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
+			timeout = false;
+			if(existingChannel) {
 				res.json({
 					username: req.user.name,
 					logo: req.user.logo,
 					patreon: patreonInfo,
-					status,
+					status: 'verified',
 					type: req.user.type,
-					preferences: req.user.preferences
+					preferences: req.user.preferences,
+					notificationCount: count,
+					uid
 				});
-			});
-		}
+			} else {
+				let status = 'viewer';
+				
+				Token.findOne({uid: req.user._id}).then(foundToken => {
+					
+					if(foundToken) {
+						if(foundToken.token === 'not issued') {
+							status = 'review'
+						} else {
+							status = 'pending'
+						}
+					}
+
+					res.json({
+						username: req.user.name,
+						logo: req.user.logo,
+						patreon: patreonInfo,
+						status,
+						type: req.user.type,
+						preferences: req.user.preferences,
+						notificationCount: count,
+						uid
+					});
+				});
+			}
+		});
 	});
 
 });
@@ -147,7 +156,7 @@ router.get("/profile", isAuthorized, (req, res) => {
 		});
 
 		let notificationPromise = new Promise((resolve, reject) => {
-			Notice.estimatedDocumentCount({user: req.user._id}).exec().then(count => {
+			Notice.countDocuments({user: req.user._id}).exec().then(count => {
 				Notice.find({user: req.user._id}).sort({'date': -1}).limit(notificationLimit).exec((err, notifications) => {
 					if(notifications) {
 						let offset = false;
