@@ -106,12 +106,28 @@ let RemoveSocket = (socket, app) => {
 }
 
 let MarkNotificationRead = (socket, notification) => {
-	Notice.findById(notification.id).then(notification => {
-		notification.status = 'read';
-		notification.save().then(savedNotification => {
-			socket.emit('notification-read', savedNotification.id);
+	if(notification.notification) {
+		Notice.findById(notification.id).then(notification => {
+			notification.status = 'read';
+			notification.save().then(savedNotification => {
+				socket.emit('notification-read', savedNotification.id);
+			});
 		});
-	});
+	} else if(notification.nid) {
+		let uid = cryptr.decrypt(notification.nid);
+
+		Notice.find({user: uid}).then(notifications => {
+			if(notifications) {
+				notifications.forEach(notification => {
+					if(notification.status !== 'read') {
+						notification.status = "read";
+						notification.save()	
+					}
+				});
+				socket.emit('notification-read', 'all');
+			}
+		});
+	}
 }
 
 let DeleteNotification = (socket, notification) => {

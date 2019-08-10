@@ -87,10 +87,10 @@ let emitOverlaySettingsUpdate = (req, data) => {
 
 let emitNotificationsUpdate = (req, data) => {
 	let ws = req.app.get('ws');
-	let sid = req.app.get(data.channel + '-NOTIFICATIONS');
+	let sid = req.app.get(data.user + '-NOTIFICATIONS');
 	if(sid) {
 		sid.forEach(id => {
-			ws.to(id).emit('notification-received')
+			ws.to(id).emit('notification-received', data);
 		});
 	}
 }
@@ -106,5 +106,6 @@ module.exports = {
 	emitAwardedAchievementNonMember,
 	emitTestListener,
 	emitOverlayAlert,
-	emitOverlaySettingsUpdate
+	emitOverlaySettingsUpdate,
+	emitNotificationsUpdate
 }
