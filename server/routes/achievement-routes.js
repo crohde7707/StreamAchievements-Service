@@ -142,23 +142,32 @@ let updateAchievement = (req, channel, existingAchievement, updates, listenerUpd
 					} else {
 
 						Listener.findOneAndUpdate({ _id: updatedAchievement.listener }, { $set: listenerUpdates }, { new: true }).then((updatedListener) => {
-							
-							emitUpdateListener(req, {
-								uid: updatedListener.uid,
-								channel: channel,
-								achievement: updatedListener.achievement,
-								achType: updatedListener.achType,
-								query: updatedListener.query,
-								bot: updatedListener.bot,
-								condition: updatedListener.condition
-							});
 
-							let merge = combineAchievementAndListeners(updatedAchievement, updatedListener);
+							if(updatedListener) {
+								emitUpdateListener(req, {
+									uid: updatedListener.uid,
+									channel: channel,
+									achievement: updatedListener.achievement,
+									achType: updatedListener.achType,
+									query: updatedListener.query,
+									bot: updatedListener.bot,
+									condition: updatedListener.condition
+								});
 
-							resolve({
-								update: true,
-								achievement: merge
-							});
+								let merge = combineAchievementAndListeners(updatedAchievement, updatedListener);
+
+								resolve({
+									update: true,
+									achievement: merge
+								});
+							} else {
+								console.log("issue updating listener for achievement");
+								console.log("owner: " + channel);
+								console.log("achievement: " + updateAchievement.title);
+								resolve({
+									update: false
+								});
+							}
 						});
 					}
 				} else {
