@@ -20,6 +20,34 @@ let SearchChannels = (socket, value) => {
 	});
 }
 
+let SearchMembers = (socket, data) => {
+	let regex = new RegExp(data.value, 'gi');
+	console.log(data.owner);
+	Channel.findOne({owner: data.owner}).then(foundChannel => {
+		if(foundChannel) {
+			User.find({'_id': { $in: foundChannel.members}, name: regex}).sort({'_id': -1}).limit(25).exec((err, docs) => {
+				//Filter out member data: name, logo, achievements
+
+				let resMembers = docs.map(member => {
+
+					let channelIndex = member.channels.findIndex(channel => (channel.channelID === foundChannel.id));
+					let achievements = member.channels[channelIndex].achievements;
+
+					let achIndex = achievements.findIndex(achievement => (achievement.aid === data.aid));
+
+					return {
+						name: member.name,
+						logo: member.logo,
+						earned: achIndex >= 0
+					}
+				});
+
+				socket.emit('members-retrieved', resMembers);
+			});
+		}
+	})
+}
+
 let StoreSocket = (socket, app) => {
 	if(socket.handshake.query.uid) {
 		Channel.findOne({oid: socket.handshake.query.uid}).then(foundChannel => {
@@ -139,6 +167,7 @@ let DeleteNotification = (socket, notification) => {
 
 module.exports = {
 	searchChannels: SearchChannels,
+	searchMembers: SearchMembers,
 	storeSocket: StoreSocket,
 	removeSocket: RemoveSocket,
 	markNotificationRead: MarkNotificationRead,

@@ -10,6 +10,7 @@ const bodyParser = require('body-parser');
 const allowAccess = require('./utils/access-utils').allowAccess;
 const {
     searchChannels,
+    searchMembers,
     storeSocket,
     removeSocket,
     markNotificationRead,
@@ -86,6 +87,10 @@ WebSockets.on('connection', function (socket) {
 
     socket.on('search-directory', (data) => {
         searchChannels(socket, data);
+    });
+
+    socket.on('search-gift-member', (data) => {
+        searchMembers(socket, data);
     });
 
     socket.on('mark-notification-read', (notification) => {
