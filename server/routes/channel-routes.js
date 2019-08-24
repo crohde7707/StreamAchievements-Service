@@ -990,4 +990,12 @@ router.post('/reorder', isAuthorized, (req, res) => {
 	}
 });
 
+router.post('/favorite', isAuthorized, (req, res) => {
+	//for now, only supporting one favorited channel, so just store off that one channel
+	let channel = req.body.channel;
+	let task = req.body.task;
+
+	console.log(channel, task);
+});
+
 module.exports = router;
