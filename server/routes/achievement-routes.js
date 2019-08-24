@@ -1162,7 +1162,7 @@ let handleSubBackfill = (achievement, user, foundChannel) => {
 									user: user._id,
 									logo: foundChannel.logo,
 									message: `Your previous subs have been backfilled!`,
-									date: currentDate,
+									date: new Date(),
 									type: 'achievement',
 									channel: foundChannel.owner,
 									status: 'new'
