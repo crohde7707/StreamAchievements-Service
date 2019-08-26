@@ -231,9 +231,20 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 	}
 
 	if(channel) {
+		let favorited = false;
+
 		Channel.findOne({owner: channel}).then((foundChannel) => {
 			if(foundChannel) {
 				
+				if(req.user.favorites) {
+
+					let favIdx = req.user.favorites.findIndex(fav => fav === foundChannel.id);
+					
+					if(favIdx >= 0) {
+						favorited = true;
+					}
+				}
+
 				Achievement.find({channel: channel}).then((foundAchievements) => {
 
 					let joined = foundChannel.members.includes(req.user.id);
@@ -316,7 +327,8 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 								channel: retChannel,
 								achievements: strippedAchievements,
 								joined: joined,
-								fullAccess
+								fullAccess,
+								favorited
 							});	
 						} else {
 							res.json({
@@ -996,6 +1008,38 @@ router.post('/favorite', isAuthorized, (req, res) => {
 	let task = req.body.task;
 
 	console.log(channel, task);
+
+	Channel.findOne({owner: channel}).then(foundChannel => {
+		if(foundChannel) {
+			if(task === 'add') {
+				req.user.favorites = [foundChannel.id];
+
+				req.user.save().then(savedUser => {
+					res.json({
+						favorited: true,
+						favorites: savedUser.favorites
+					});
+				});
+			} else if(task === 'remove' && req.user.favorites) {
+				var index = req.user.favorites.findIndex(fav => fav === foundChannel.id);
+
+				req.user.favorites.splice(index, 1);
+
+				req.user.save().then(savedUser => {
+					res.json({
+						favorited: false,
+						favorites: savedUser.favorites
+					});
+				});
+			}
+			
+		} else {
+			res.json({
+				error: 'Channel doesn\'t exist!'
+			});
+		}
+	})
+
 });
 
 module.exports = router;
