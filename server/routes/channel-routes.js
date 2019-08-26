@@ -751,9 +751,21 @@ router.post('/image', isAuthorized, (req, res) => {
 
 router.get("/user", isAuthorized, (req, res) => {
 
+	let favChannels = [];
+	let favLookup = {};
+
+	if(req.user.favorites) {
+		req.user.favorites.forEach(fav => {
+			favLookup[fav] = true;
+		});
+	}
+
+	let favArray = req.user.favorites.map(channel => new mongoose.Types.ObjectId(channel));
 	let channelArray = req.user.channels.map(channel => new mongoose.Types.ObjectId(channel.channelID));
 
-	Channel.find({'_id': { $in: channelArray}}).then((channels) => {
+	let queryArray = favArray.concat(channelArray);
+
+	Channel.find({'_id': { $in: queryArray}}).sort({'_id': 1}).limit(10).exec((err, channels) => {
 
 		let channelResponse = [];
 
@@ -771,14 +783,18 @@ router.get("/user", isAuthorized, (req, res) => {
 					resolve({
 			     		logo: channel.logo,
 			     		owner: channel.owner,
-			     		percentage: percentage
+			     		percentage: percentage,
+			     		favorite: favLookup[channel.id] !== undefined
 			     	});
 			    });
 			});
 		});
 
-		Promise.all(promises).then(responseData => {
-			res.json(responseData);
+		Promise.all(promises).then(channels => {
+			res.json({
+				favChannels,
+				channels
+			});
 		});
 	});
 });
