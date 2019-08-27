@@ -27,6 +27,8 @@ const imgURLRegex = /^https:\/\/res\.cloudinary\.com\/phirehero\/.*\.(png|jpg|jp
 
 const DEFAULT_OVERLAY_CONFIG = require('../configs/default-overlay-configs');
 
+const CHANNEL_RETRIEVE_LIMIT = 15;
+
 router.get("/create", isAuthorized, (req, res) => {
 	Channel.findOne({twitchID: req.user.twitchID}).then((existingChannel) => {
 		if(existingChannel) {
@@ -751,8 +753,8 @@ router.post('/image', isAuthorized, (req, res) => {
 
 router.get("/user", isAuthorized, (req, res) => {
 
-	let favChannels = [];
 	let favLookup = {};
+	let favChannels, otherChannels, offset;
 
 	if(req.user.favorites) {
 		req.user.favorites.forEach(fav => {
@@ -761,43 +763,134 @@ router.get("/user", isAuthorized, (req, res) => {
 	}
 
 	let favArray = req.user.favorites.map(channel => new mongoose.Types.ObjectId(channel));
-	let channelArray = req.user.channels.map(channel => new mongoose.Types.ObjectId(channel.channelID));
+	
+	let channelArray = req.user.channels.filter(channel => !req.user.favorites.includes(channel.channelID)).map(channel => new mongoose.Types.ObjectId(channel.channelID));
+	
+	let favPromise = new Promise((resolve, reject) => {
+		Channel.find({'_id': { $in: favArray}}).exec((err, channels) => {
 
-	let queryArray = favArray.concat(channelArray);
+			let channelResponse = [];
 
-	Channel.find({'_id': { $in: queryArray}}).sort({'_id': 1}).limit(10).exec((err, channels) => {
+			let promises = channels.map(channel => {
+				let earnedAchievements = req.user.channels.find(userChannel => (userChannel.channelID === channel.id));
+				let percentage = 0;
 
-		let channelResponse = [];
+				return new Promise((resolve2, reject) => {
+					Achievement.countDocuments({channel: channel.owner}).then(count => {
 
+						if(count > 0) {
+							percentage = Math.round((earnedAchievements.achievements.length / count) * 100);
+						}
+
+						resolve2({
+				     		logo: channel.logo,
+				     		owner: channel.owner,
+				     		percentage: percentage,
+				     		favorite: true
+				     	});
+				    });
+				});
+			});
+
+			Promise.all(promises).then(channels => {
+
+				favChannels = channels;
+
+				resolve();
+			});
+		});
+	});
+
+	let otherPromise = new Promise((resolve, reject) => {
+		Channel.find({'_id': { $in: channelArray}}).limit(CHANNEL_RETRIEVE_LIMIT).exec((err, channels) => {
+
+			let channelResponse = [];
+
+			let promises = channels.map(channel => {
+				let earnedAchievements = req.user.channels.find(userChannel => (userChannel.channelID === channel.id));
+				let percentage = 0;
+
+				return new Promise((resolve2, reject) => {
+					Achievement.countDocuments({channel: channel.owner}).then(count => {
+
+						if(count > 0) {
+							percentage = Math.round((earnedAchievements.achievements.length / count) * 100);
+						}
+
+						resolve2({
+				     		logo: channel.logo,
+				     		owner: channel.owner,
+				     		percentage: percentage,
+				     		favorite: false
+				     	});
+				    });
+				});
+			});
+
+			Promise.all(promises).then(channels => {
+				otherChannels = channels;
+
+				if(channels.length < req.user.channels.length) {
+					offset = channels.length
+				} else {
+					offset = -1
+				}
+				
+				resolve();
+			});
+		});
+	});
+
+	Promise.all([favPromise, otherPromise]).then(done => {
+		res.json({
+			channels: favChannels.concat(otherChannels),
+			offset
+		});
+	});
+});
+
+router.get("/user/retrieve", isAuthorized, (req, res) => {
+	let offset = parseInt(req.query.offset);
+
+	let channelArray = req.user.channels.filter(channel => !req.user.favorites.includes(channel.channelID)).map(channel => new mongoose.Types.ObjectId(channel.channelID));
+
+	Channel.find({'_id': { $in: channelArray}}).skip(offset).limit(CHANNEL_RETRIEVE_LIMIT).exec((err, channels) => {
 		let promises = channels.map(channel => {
-			let earnedAchievements = req.user.channels.filter(userChannel => (userChannel.channelID === channel.id));
+			let earnedAchievements = req.user.channels.find(userChannel => (userChannel.channelID === channel.id));
 			let percentage = 0;
 
 			return new Promise((resolve, reject) => {
 				Achievement.countDocuments({channel: channel.owner}).then(count => {
 
 					if(count > 0) {
-						percentage = Math.round((earnedAchievements[0].achievements.length / count) * 100);
+						percentage = Math.round((earnedAchievements.achievements.length / count) * 100);
 					}
 
 					resolve({
 			     		logo: channel.logo,
 			     		owner: channel.owner,
 			     		percentage: percentage,
-			     		favorite: favLookup[channel.id] !== undefined
+			     		favorite: false
 			     	});
 			    });
 			});
 		});
 
-		Promise.all(promises).then(channels => {
+		Promise.all(promises).then(retChannels => {
+
+			if(retChannels.length + offset < req.user.channels.length) {
+				offset = retChannels.length + offset
+			} else {
+				offset = -1
+			}
+
 			res.json({
-				favChannels,
-				channels
+				channels: retChannels,
+				offset
 			});
 		});
-	});
-});
+	})
+})
 
 router.post("/signup", isAuthorized, (req, res) => {
 	//generate code
@@ -1023,12 +1116,11 @@ router.post('/favorite', isAuthorized, (req, res) => {
 	let channel = req.body.channel;
 	let task = req.body.task;
 
-	console.log(channel, task);
-
 	Channel.findOne({owner: channel}).then(foundChannel => {
 		if(foundChannel) {
 			if(task === 'add') {
-				req.user.favorites = [foundChannel.id];
+
+				req.user.favorites.push(foundChannel.id);
 
 				req.user.save().then(savedUser => {
 					res.json({
