@@ -725,6 +725,87 @@ router.get('/listeners', (req, res) => {
 		});
 });
 
+router.post('/award/chat', (req, res) => {
+
+	Channel.findOne({owner: req.body.channel}).then(foundChannel => {
+		if(foundChannel) {
+			let moderators = foundChannel.moderators || [];
+			moderators.push(req.body.channel);
+
+			if(moderators.includes(req.body.user)) {
+				//This user is allowed to gift
+				Achievement.findOne({title: req.body.achievement, channel: req.body.channel}).then(foundAchievement => {
+					if(foundAchievement) {
+
+						User.findOne({'name': req.body.target}).then(foundMember => {
+							if(foundMember) {
+
+								let channels = foundMember.channels;
+								let channelIdx = channels.findIndex(channel => channel.channelID === foundChannel.id);
+
+								channels[channelIdx].achievements.push({aid: foundAchievement.uid, earned: Date.now()});
+								foundMember.channels = channels;
+
+								foundMember.save().then(savedMember => {
+									if(foundChannel.overlay.chat) {
+										let alertData = {
+											'channel': foundChannel.owner,
+											'member': savedMember.name,
+											'achievement': foundAchievement.title
+										};
+
+										emitAwardedAchievement(req, alertData);
+									}
+
+									new Notice({
+										user: savedMember._id,
+										logo: foundChannel.logo,
+										message: `You have earned the "${foundAchievement.title}" achievement!`,
+										date: Date.now(),
+										type: 'achievement',
+										channel: foundChannel.owner,
+										status: 'new'
+									}).save().then(savedNotice => {
+										emitNotificationsUpdate(req, {
+											notification: {
+												id: savedNotice._id,
+												logo: savedNotice.logo,
+												message: savedNotice.message,
+												date: savedNotice.date,
+												type: savedNotice.type,
+												channel: savedNotice.channel,
+												status: savedNotice.status
+											},
+											user: savedMember.name
+										});
+									});
+									
+									let shouldAlert = foundAchievement.alert || true;
+									let unlocked = false;
+
+									if(foundChannel.gold) {
+										unlocked = true
+									}
+
+									if(shouldAlert) {
+										emitOverlayAlert(req, {
+											user: savedMember.name,
+											channel: foundChannel.owner,
+											title: foundAchievement.title,
+											icon: foundAchievement.icon,
+											unlocked
+										});	
+									}
+								});
+							}
+						})
+					}
+				});
+			}
+		}
+	})
+});
+
 router.post('/listeners', (req, res) => {
 	//Process achievements
 	console.log('achievements to process...');
