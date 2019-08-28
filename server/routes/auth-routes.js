@@ -111,93 +111,91 @@ router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) =>
 						});
 					}
 				} else {
-					// console.log('getting up to date info from patreon');
+					console.log('getting up to date info from patreon');
 
-					// axios.get(`https://www.patreon.com/api/oauth2/v2/members/${id}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
-					// 	headers: {
-					// 		Authorization: `Bearer ${access_token}`
-					// 	}
-					// }).then(response => {
-					// 	console.log('up to date info obtained');
-					// 	//active_patron, declined_patron, former_patron, null
-					// 	let patron_status = response.data.data.attributes.patron_status;
-					// 	let is_follower = response.data.data.attributes.is_follower;
-					// 	let tiers = response.data.data.relationships.currently_entitled_tiers;
-					// 	let isGold = tiers.data.map(tier => tier.id).indexOf(GOLD_TIER_ID) >= 0;
+					axios.get(`https://www.patreon.com/api/oauth2/v2/members/${id}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
+						headers: {
+							Authorization: `Bearer ${access_token}`
+						}
+					}).then(response => {
+						console.log('up to date info obtained');
+						//active_patron, declined_patron, former_patron, null
+						let patron_status = response.data.data.attributes.patron_status;
+						let is_follower = response.data.data.attributes.is_follower;
+						let tiers = response.data.data.relationships.currently_entitled_tiers;
+						let isGold = tiers.data.map(tier => tier.id).indexOf(GOLD_TIER_ID) >= 0;
 
-					// 	let patreonUpdate = {
-					// 		id: patreonInfo.id,
-					// 		thumb_url: patreonInfo.thumb_url,
-					// 		vanity: patreonInfo.vanity,
-					// 		at: at,
-					// 		rt: rt,
-					// 		is_follower,
-					// 		status: patron_status,
-					// 		is_gold: isGold,
-					// 		expires
-					// 	};
+						let patreonUpdate = {
+							id: patreonInfo.id,
+							thumb_url: patreonInfo.thumb_url,
+							vanity: patreonInfo.vanity,
+							at: at,
+							rt: rt,
+							is_follower,
+							status: patron_status,
+							is_gold: isGold,
+							expires
+						};
 
-					// 	let integration = Object.assign({}, req.user.integration);
+						let integration = Object.assign({}, req.user.integration);
 
-					// 	integration.patreon = {...patreonUpdate};
+						integration.patreon = {...patreonUpdate};
 
-					// 	req.user.integration = integration;
-					// 	req.user.lastLogin = Date.now();
-					// 	req.user.save().then(savedUser => {
+						req.user.integration = integration;
+						req.user.lastLogin = Date.now();
+						req.user.save().then(savedUser => {
 
-					// 		if(savedUser.type === 'verified' || savedUser.type === "admin") {
-					// 			Channel.findOne({owner: req.user.name}).then(foundChannel => {
-					// 				if(foundChannel.gold !== savedUser.integration.patreon.is_gold) {
-					// 					foundChannel.gold = savedUser.integration.patreon.is_gold;
-					// 					foundChannel.save();
-					// 				}
-					// 			});
-					// 		}
+							if(savedUser.type === 'verified' || savedUser.type === "admin") {
+								Channel.findOne({owner: req.user.name}).then(foundChannel => {
+									if(foundChannel.gold !== savedUser.integration.patreon.is_gold) {
+										foundChannel.gold = savedUser.integration.patreon.is_gold;
+										foundChannel.save();
+									}
+								});
+							}
 
-					// 		res.redirect(process.env.WEB_DOMAIN + 'home');
-					// 	});	
+							res.redirect(process.env.WEB_DOMAIN + 'home');
+						});			
+					}).catch(error => {
+						console.log(error.response);
+						if(error.response.status === 401 || error.response.status === 403) {
+							res.redirect('/auth/patreon');
+						} else if(error.response.status === 404) {
+							//Member used to follow, but now doesn't. Clear info
 
-					// }).catch(error => {
-					// 	console.log(error.response);
-					// 	if(error.response.status === 401) {
-					// 		res.redirect('/auth/patreon');
-					// 	} else if(error.response.status === 404) {
-					// 		//Member used to follow, but now doesn't. Clear info
+							let integration = Object.assign({}, req.user.integration);
 
-					// 		let integration = Object.assign({}, req.user.integration);
+							let patreonUpdate = {
+								id: null,
+								thumb_url: integration.patreon.thumb_url,
+								vanity: integration.patreon.vanity,
+								at: integration.patreon.at,
+								rt: integration.patreon.rt,
+								is_follower: null,
+								status: null,
+								is_gold: null,
+								expires: integration.patreon.expires
+							};
 
-					// 		let patreonUpdate = {
-					// 			id: null,
-					// 			thumb_url: integration.patreon.thumb_url,
-					// 			vanity: integration.patreon.vanity,
-					// 			at: integration.patreon.at,
-					// 			rt: integration.patreon.rt,
-					// 			is_follower: null,
-					// 			status: null,
-					// 			is_gold: null,
-					// 			expires: integration.patreon.expires
-					// 		};
+							integration.patreon = {...patreonUpdate};
 
-					// 		integration.patreon = {...patreonUpdate};
+							req.user.integration = integration;
+							req.user.lastLogin = Date.now();
+							req.user.save().then(savedUser => {
 
-					// 		req.user.integration = integration;
-					// 		req.user.lastLogin = Date.now();
-					// 		req.user.save().then(savedUser => {
+								if(savedUser.type === 'verified' || savedUser.type === "admin") {
+									Channel.findOne({owner: req.user.name}).then(foundChannel => {
+										if(foundChannel.gold !== savedUser.integration.patreon.is_gold) {
+											foundChannel.gold = false;
+											foundChannel.save();
+										}
+									});
+								}
 
-					// 			if(savedUser.type === 'verified' || savedUser.type === "admin") {
-					// 				Channel.findOne({owner: req.user.name}).then(foundChannel => {
-					// 					if(foundChannel.gold !== savedUser.integration.patreon.is_gold) {
-					// 						foundChannel.gold = false;
-					// 						foundChannel.save();
-					// 					}
-					// 				});
-					// 			}
-
-					// 			res.redirect(process.env.WEB_DOMAIN + 'home');
-					// 		});
-					// 	}
-					// });
-					res.redirect(process.env.WEB_DOMAIN + 'home');		
+								res.redirect(process.env.WEB_DOMAIN + 'home');
+							});
+						}
+					});
 				}
 			});
 			
