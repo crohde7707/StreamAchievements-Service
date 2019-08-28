@@ -21,6 +21,7 @@ const userSchema = new Schema({
 		}
 	],
 	favorites: Array,
+	delegate: Array,
 	integration: {
 		twitch: Object,
 		patreon: Object
