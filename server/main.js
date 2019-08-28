@@ -11,6 +11,7 @@ const allowAccess = require('./utils/access-utils').allowAccess;
 const {
     searchChannels,
     searchMembers,
+    searchMod,
     storeSocket,
     removeSocket,
     markNotificationRead,
@@ -91,6 +92,10 @@ WebSockets.on('connection', function (socket) {
 
     socket.on('search-gift-member', (data) => {
         searchMembers(socket, data);
+    });
+
+    socket.on('search-mod', (data) => {
+        searchMod(socket, data);
     });
 
     socket.on('mark-notification-read', (notification) => {

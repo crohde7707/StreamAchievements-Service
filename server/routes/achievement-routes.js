@@ -10,7 +10,7 @@ const Listener = require('../models/listener-model');
 const Queue = require('../models/queue-model');
 const Notice = require('../models/notice-model');
 const Image = require('../models/image-model');
-const {isAuthorized} = require('../utils/auth-utils');
+const {isAuthorized, isModAuthorized} = require('../utils/auth-utils');
 const {
 	emitNewListener,
 	emitUpdateListener,
@@ -500,6 +500,12 @@ router.post("/delete", isAuthorized, (req, res) => {
 	});
 });
 
+router.get("/mod/retrieve", isModAuthorized, (req, res) => {
+	let achievement = req.query.aid;
+
+	getAchievementData(req, res, req.channel, achievement);
+});
+
 router.get("/retrieve", isAuthorized, (req, res) => {
 	let channel = req.user.name;
 	let achievement = req.query.aid;
@@ -507,45 +513,7 @@ router.get("/retrieve", isAuthorized, (req, res) => {
 	if(achievement) {
 		Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
 			if(existingChannel) {
-				let achievementPromise = new Promise((resolve, reject) => {
-					Achievement.findOne({
-						uid: achievement,
-						channel: existingChannel.owner
-					}).then(existingAchievement => {
-						if(existingAchievement) {
-							let listenerID = existingAchievement.listener;
-							Listener.findOne({
-								"_id": existingAchievement.listener,
-								channel: existingAchievement.channel
-							}).then(existingListener => {
-								if(existingListener) {
-									let listenerData = Object.assign({}, existingListener['_doc']);
-									let achievementData = Object.assign({}, existingAchievement['_doc']);
-
-									delete listenerData._id;
-
-									let mergedAchievement = Object.assign(achievementData, listenerData);
-
-									resolve(mergedAchievement);
-								} else {
-									resolve(existingAchievement);
-								}
-							});
-						} else {
-							resolve(null);
-						}
-					});
-				});
-
-				let imagePromise = retrieveImages(existingChannel.owner);
-
-				Promise.all([achievementPromise, imagePromise]).then(responses => {
-					res.json({
-						achievement: responses[0],
-						images: responses[1],
-						defaultIcons: existingChannel.icons
-					});
-				});
+				getAchievementData(req, res, existingChannel, achievement);
 			} else {
 				//Current user isn't verified
 				res.json({
@@ -582,94 +550,145 @@ router.get("/retrieve", isAuthorized, (req, res) => {
 
 });
 
-router.post('/award', isAuthorized, (req, res) => {
+let getAchievementData = (req, res, existingChannel, achievement) => {
+	let achievementPromise = new Promise((resolve, reject) => {
+		Achievement.findOne({
+			uid: achievement,
+			channel: existingChannel.owner
+		}).then(existingAchievement => {
+			if(existingAchievement) {
+				let listenerID = existingAchievement.listener;
+				Listener.findOne({
+					"_id": existingAchievement.listener,
+					channel: existingAchievement.channel
+				}).then(existingListener => {
+					if(existingListener) {
+						let listenerData = Object.assign({}, existingListener['_doc']);
+						let achievementData = Object.assign({}, existingAchievement['_doc']);
+
+						delete listenerData._id;
+
+						let mergedAchievement = Object.assign(achievementData, listenerData);
+
+						resolve(mergedAchievement);
+					} else {
+						resolve(existingAchievement);
+					}
+				});
+			} else {
+				resolve(null);
+			}
+		});
+	});
+
+	let imagePromise = retrieveImages(existingChannel.owner);
+
+	Promise.all([achievementPromise, imagePromise]).then(responses => {
+		res.json({
+			achievement: responses[0],
+			images: responses[1],
+			defaultIcons: existingChannel.icons
+		});
+	});
+}
+
+router.post('/mod/award', isModAuthorized, (req, res) => {
+	manualAward(req, res, req.channel);
+});
+
+router.post('/award', isAuthorized, (req, res) => {	
+
+	Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
+		manualAward(req, res, existingChannel);
+	});
+});
+
+let manualAward = (req, res, existingChannel) => {
 	let members = req.body.members;
 	let achievementID = req.body.aid;
 
-	Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
-		Achievement.findOne({uid: achievementID, channel: req.user.name}).then(foundAchievement => {
-			User.find({'name': { $in: members}}).then(foundMembers => {
-				let promises = foundMembers.map((member, idx) => {
-					let channels = member.channels;
-					let channelIdx = channels.findIndex(channel => channel.channelID === existingChannel.id);
+	Achievement.findOne({uid: achievementID, channel: req.user.name}).then(foundAchievement => {
+		User.find({'name': { $in: members}}).then(foundMembers => {
+			let promises = foundMembers.map((member, idx) => {
+				let channels = member.channels;
+				let channelIdx = channels.findIndex(channel => channel.channelID === existingChannel.id);
 
-					channels[channelIdx].achievements.push({aid: achievementID, earned: Date.now()});
-					member.channels = channels;
+				channels[channelIdx].achievements.push({aid: achievementID, earned: Date.now()});
+				member.channels = channels;
 
-					return member.save().then(savedMember => {
-						if(existingChannel.overlay.chat) {
-							let alertData = {
-								'channel':existingChannel.owner,
-								'member': savedMember.name,
-								'achievement': foundAchievement.title
-							};
+				return member.save().then(savedMember => {
+					if(existingChannel.overlay.chat) {
+						let alertData = {
+							'channel':existingChannel.owner,
+							'member': savedMember.name,
+							'achievement': foundAchievement.title
+						};
 
-							emitAwardedAchievement(req, alertData);
-						}
+						emitAwardedAchievement(req, alertData);
+					}
 
-						new Notice({
-							user: savedMember._id,
-							logo: existingChannel.logo,
-							message: `You have earned the "${foundAchievement.title}" achievement!`,
-							date: Date.now(),
-							type: 'achievement',
+					new Notice({
+						user: savedMember._id,
+						logo: existingChannel.logo,
+						message: `You have earned the "${foundAchievement.title}" achievement!`,
+						date: Date.now(),
+						type: 'achievement',
+						channel: existingChannel.owner,
+						status: 'new'
+					}).save().then(savedNotice => {
+						emitNotificationsUpdate(req, {
+							notification: {
+								id: savedNotice._id,
+								logo: savedNotice.logo,
+								message: savedNotice.message,
+								date: savedNotice.date,
+								type: savedNotice.type,
+								channel: savedNotice.channel,
+								status: savedNotice.status
+							},
+							user: savedMember.name
+						});
+					});
+					
+					let shouldAlert = foundAchievement.alert || true;
+					let unlocked = false;
+
+					if(existingChannel.gold) {
+						unlocked = true
+					}
+
+					if(shouldAlert) {
+						emitOverlayAlert(req, {
+							user: savedMember.name,
 							channel: existingChannel.owner,
-							status: 'new'
-						}).save().then(savedNotice => {
-							emitNotificationsUpdate(req, {
-								notification: {
-									id: savedNotice._id,
-									logo: savedNotice.logo,
-									message: savedNotice.message,
-									date: savedNotice.date,
-									type: savedNotice.type,
-									channel: savedNotice.channel,
-									status: savedNotice.status
-								},
-								user: savedMember.name
-							});
-						});
-						
-						let shouldAlert = foundAchievement.alert || true;
-						let unlocked = false;
+							title: foundAchievement.title,
+							icon: foundAchievement.icon,
+							unlocked
+						});	
+					}
+				});
+			});
 
-						if(existingChannel.gold) {
-							unlocked = true
-						}
+			Promise.all(promises).then((responses) => {
+				User.find({'_id': { $in: existingChannel.members}}).then((members) => {
+					//Filter out member data: name, logo, achievements
 
-						if(shouldAlert) {
-							emitOverlayAlert(req, {
-								user: savedMember.name,
-								channel: existingChannel.owner,
-								title: foundAchievement.title,
-								icon: foundAchievement.icon,
-								unlocked
-							});	
+					let resMembers = members.map(member => {
+						return {
+							name: member.name,
+							logo: member.logo,
+							achievements: member.channels.filter((channel) => (channel.channelID === existingChannel.id))[0].achievements
 						}
 					});
-				});
 
-				Promise.all(promises).then((responses) => {
-					User.find({'_id': { $in: existingChannel.members}}).then((members) => {
-						//Filter out member data: name, logo, achievements
-
-						let resMembers = members.map(member => {
-							return {
-								name: member.name,
-								logo: member.logo,
-								achievements: member.channels.filter((channel) => (channel.channelID === existingChannel.id))[0].achievements
-							}
-						});
-
-						res.json({
-							members: resMembers
-						});
+					res.json({
+						members: resMembers
 					});
 				});
-			})
-		});
+			});
+		})
 	});
-});
+}
 
 router.get('/icons', isAuthorized, (req, res) => {
 	Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
@@ -729,22 +748,36 @@ router.post('/award/chat', (req, res) => {
 
 	let {achievement, channel, target, user} = req.body;
 
+	let award = false;
+
 	if(achievement && channel && target && user) {
 
 		Channel.findOne({owner: channel}).then(foundChannel => {
 
 			if(foundChannel && foundChannel.gold) {
-				let moderators = foundChannel.moderators || [];
-				moderators.push(channel);
+				if(user === channel) {
+					award = true;
+				} else {
 
-				if(moderators.includes(user)) {
+					let moderatorIds = foundChannel.moderators.map(moderator => moderator.uid);
+
+					User.find({'_id': { $in: moderatorIds}}, 'name').then(moderators => {
+						if(moderators) {
+							let modIdx = moderators.findIndex(mod => mod.name === user);
+
+							if(modIdx >= 0) {
+								award = true;
+							}
+						}
+					})
+				}
+				
+				if(award) {
 					
 					let achievementCriteria = {
 						title: achievement,
 						channel: channel
 					};
-
-					console.log(achievementCriteria);
 
 					let userCriteria = {
 						name: target.toLowerCase()

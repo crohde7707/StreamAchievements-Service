@@ -58,6 +58,8 @@ router.get('/users', isAdminAuthorized, (req, res) => {
 
 router.get("/user", isAuthorized, (req, res) => {
 	let uid = cryptr.encrypt(req.user._id);
+	let patreonInfo;
+	let isMod = false;
 
 	setTimeout(() => {
 		if(timeout) {
@@ -70,7 +72,7 @@ router.get("/user", isAuthorized, (req, res) => {
 	}, 10000)
 
 	//let timeout = true;
-	let patreonInfo;
+	
 	
 	if(req.user.integration.patreon) {
 
@@ -89,43 +91,58 @@ router.get("/user", isAuthorized, (req, res) => {
 
 	Notice.countDocuments({user: req.user._id, status: 'new'}).exec().then(count => {
 		Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
-			timeout = false;
-			if(existingChannel) {
-				res.json({
-					username: req.user.name,
-					logo: req.user.logo,
-					patreon: patreonInfo,
-					status: 'verified',
-					type: req.user.type,
-					preferences: req.user.preferences,
-					notificationCount: count,
-					uid
-				});
-			} else {
-				let status = 'viewer';
-				
-				Token.findOne({uid: req.user._id}).then(foundToken => {
-					
-					if(foundToken) {
-						if(foundToken.token === 'not issued') {
-							status = 'review'
-						} else {
-							status = 'pending'
-						}
-					}
 
+			//Check if user moderates for anyone
+
+			Channel.find({'moderators.uid': req.user._id}).then(channels => {
+				if(channels) {
+					isMod = true;
+				}
+
+				timeout = false;
+				
+				if(existingChannel) {
 					res.json({
 						username: req.user.name,
 						logo: req.user.logo,
 						patreon: patreonInfo,
-						status,
+						status: 'verified',
 						type: req.user.type,
 						preferences: req.user.preferences,
 						notificationCount: count,
-						uid
+						uid,
+						isMod
 					});
-				});
-			}
+				} else {
+					let status = 'viewer';
+					
+					Token.findOne({uid: req.user._id}).then(foundToken => {
+						
+						if(foundToken) {
+							if(foundToken.token === 'not issued') {
+								status = 'review'
+							} else {
+								status = 'pending'
+							}
+						}
+
+						res.json({
+							username: req.user.name,
+							logo: req.user.logo,
+							patreon: patreonInfo,
+							status,
+							type: req.user.type,
+							preferences: req.user.preferences,
+							notificationCount: count,
+							uid,
+							isMod
+						});
+					});
+				}
+
+			});
+
+			
 		});
 	});
 

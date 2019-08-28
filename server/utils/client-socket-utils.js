@@ -8,7 +8,7 @@ let SearchChannels = (socket, value) => {
 	let regex = new RegExp(value, 'gi');
 	
 	Channel.find({ owner: regex }).sort({'_id': -1}).limit(25).exec((err, docs) => {
-		console.log(err);
+
 		let results = docs.map((doc) => {
 			return {
 				owner: doc.owner,
@@ -22,7 +22,7 @@ let SearchChannels = (socket, value) => {
 
 let SearchMembers = (socket, data) => {
 	let regex = new RegExp(data.value, 'gi');
-	console.log(data.owner);
+
 	Channel.findOne({owner: data.owner}).then(foundChannel => {
 		if(foundChannel) {
 			User.find({'_id': { $in: foundChannel.members}, name: regex}).sort({'_id': -1}).limit(25).exec((err, docs) => {
@@ -39,6 +39,30 @@ let SearchMembers = (socket, data) => {
 						name: member.name,
 						logo: member.logo,
 						earned: achIndex >= 0
+					}
+				});
+
+				socket.emit('members-retrieved', resMembers);
+			});
+		}
+	})
+}
+
+let SearchMod = (socket, data) => {
+	let regex = new RegExp(data.value, 'gi');
+	
+	Channel.findOne({owner: data.owner}).then(foundChannel => {
+		if(foundChannel) {
+			User.find({'_id': { $in: foundChannel.members}, name: regex}).sort({'_id': -1}).limit(25).exec((err, docs) => {
+				
+				let resMembers = docs.map(member => {
+
+					let modIdx = foundChannel.moderators.findIndex(mod => mod.uid === member.id);
+
+					return {
+						name: member.name,
+						logo: member.logo,
+						isMod: modIdx >= 0
 					}
 				});
 
@@ -168,6 +192,7 @@ let DeleteNotification = (socket, notification) => {
 module.exports = {
 	searchChannels: SearchChannels,
 	searchMembers: SearchMembers,
+	searchMod: SearchMod,
 	storeSocket: StoreSocket,
 	removeSocket: RemoveSocket,
 	markNotificationRead: MarkNotificationRead,
