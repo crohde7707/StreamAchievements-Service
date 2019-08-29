@@ -732,42 +732,238 @@ router.post('/award/chat', (req, res) => {
 	if(achievement && channel && target && user) {
 
 		Channel.findOne({owner: channel}).then(foundChannel => {
+
 			if(foundChannel && foundChannel.gold) {
 				let moderators = foundChannel.moderators || [];
 				moderators.push(channel);
 
 				if(moderators.includes(user)) {
-					//This user is allowed to gift
-					Achievement.findOne({title: achievement, channel: channel}).then(foundAchievement => {
-						if(foundAchievement) {
+					
+					let achievementCriteria = {
+						title: achievement,
+						channel: channel
+					};
 
-							let name = target && target.toLowerCase();
+					console.log(achievementCriteria);
 
-							User.findOne({name}).then(foundMember => {
-								if(foundMember) {
+					let userCriteria = {
+						name: target.toLowerCase()
+					};
 
-									let channels = foundMember.channels;
-									let channelIdx = channels.findIndex(curChannel => curChannel.channelID === foundChannel.id);
+					handleAchievement(req, res, foundChannel, achievementCriteria, userCriteria);
+				}
+			}
+		})
+	}
+});
 
-									channels[channelIdx].achievements.push({aid: foundAchievement.uid, earned: Date.now()});
-									foundMember.channels = channels;
+let handleAchievement = (req, res, foundChannel, achievementCriteria, userCriteria) => {
+	let currentDate = new Date();
 
-									foundMember.save().then(savedMember => {
+	Achievement.findOne(achievementCriteria).then(foundAchievement => {
+		if(foundAchievement) {
+			if(foundAchievement.earnable) {
+
+				User.findOne(userCriteria).then((foundUser) => {
+					if(foundUser) {
+						console.log('> User: ' + foundUser.name);
+
+						let entryIdx = foundUser.channels.findIndex(savedChannel => {
+							return savedChannel.channelID === foundChannel.id;
+						});
+
+						if(entryIdx >= 0) {
+							console.log('> ' + foundUser.name + ' is a part of this channel');
+							//User already a part of this channel
+							let userAchievements = foundUser.channels[entryIdx].achievements;
+							let sync = foundUser.channels[entryIdx].sync;
+
+							let achIdx = userAchievements.findIndex(usrAch => {
+								return usrAch.aid === foundAchievement.uid;
+							});
+
+							if(achIdx < 0) {
+								console.log('> ' + foundUser.name + ' doesn\'t have this achievement yet');
+								foundUser.channels[entryIdx].achievements.push({
+									aid: foundAchievement.uid,
+									earned: currentDate
+								});
+
+								new Notice({
+									user: foundUser._id,
+									logo: foundChannel.logo,
+									message: `You have earned the "${foundAchievement.title}" achievement!`,
+									date: currentDate,
+									type: 'achievement',
+									channel: foundChannel.owner,
+									status: 'new'
+								}).save().then(savedNotice => {
+									emitNotificationsUpdate(req, {
+										notification: {
+											id: savedNotice._id,
+											logo: savedNotice.logo,
+											message: savedNotice.message,
+											date: savedNotice.date,
+											type: savedNotice.type,
+											channel: savedNotice.channel,
+											status: savedNotice.status
+										},
+										user: foundUser.name
+									});
+								});
+
+								foundUser.save().then(savedUser => {
+									if(sync) {
+										console.log("syncing for " + savedUser.name);
+
+										handleSubBackfill(foundAchievement.id, savedUser, foundChannel);
+
 										if(foundChannel.overlay.chat) {
 											let alertData = {
 												'channel': foundChannel.owner,
-												'member': savedMember.name,
+												'member': savedUser.name,
 												'achievement': foundAchievement.title
 											};
 
+											console.log('> Sending achievement to alert the stream');
 											emitAwardedAchievement(req, alertData);
 										}
+										
+										let shouldAlert = foundAchievement.alert || true;
+										let unlocked = false;
 
+										if(foundChannel.gold) {
+											unlocked = true
+										}
+
+										if(shouldAlert) {
+											emitOverlayAlert(req, {
+												user: savedUser.name,
+												channel: foundChannel.owner,
+												title: foundAchievement.title,
+												icon: foundAchievement.icon,
+												unlocked
+											});	
+										}
+									} else {
+
+										if(foundChannel.overlay.chat) {
+											let alertData = {
+												'channel': foundChannel.owner,
+												'member': savedUser.name,
+												'achievement': foundAchievement.title
+											};
+											
+											emitAwardedAchievement(req, alertData);	
+										}
+										
+										
+										let shouldAlert = foundAchievement.alert || true;
+										let unlocked = false;
+
+										if(foundChannel.gold) {
+											unlocked = true
+										}
+
+										if(shouldAlert) {
+											emitOverlayAlert(req, {
+												user: savedUser.name,
+												channel: foundChannel.owner,
+												title: foundAchievement.title,
+												icon: foundAchievement.icon,
+												unlocked
+											});	
+										}
+									}
+								});
+
+							}
+						} else {
+							console.log("couldn't find the channel");
+							//TODO: User preference to auto join channel?
+							if(foundUser.preferences.autojoin) {
+								foundUser.channels.push({
+									channelID: foundChannel.id,
+									achievements: [{
+										aid: foundAchievement.uid,
+										earned: currentDate
+									}]
+								});
+								foundUser.save().then(savedUser => {
+									foundChannel.members.push(savedUser.id);
+									foundChannel.save().then(savedChannel => {
+										
 										new Notice({
-											user: savedMember._id,
+											user: foundUser._id,
 											logo: foundChannel.logo,
 											message: `You have earned the "${foundAchievement.title}" achievement!`,
-											date: Date.now(),
+											date: currentDate,
+											type: 'achievement',
+											channel: foundChannel.owner,
+											status: 'new'
+										}).save().then(savedNotice => {
+											if(foundChannel.overlay.chat) {
+												let alertData = {
+													'channel': foundChannel.owner,
+													'member': foundUser.name,
+													'achievement': foundAchievement.title
+												};
+
+												emitAwardedAchievement(req, alertData);
+
+												emitNotificationsUpdate(req, {
+													notification: {
+														id: savedNotice._id,
+														logo: savedNotice.logo,
+														message: savedNotice.message,
+														date: savedNotice.date,
+														type: savedNotice.type,
+														channel: savedNotice.channel,
+														status: savedNotice.status
+													},
+													user: foundUser.name
+												});
+											};
+
+											let shouldAlert = foundAchievement.alert || true;
+											let unlocked = false;
+
+											if(foundChannel.gold) {
+												unlocked = true
+											}
+
+											if(shouldAlert) {
+												emitOverlayAlert(req, {
+													user: foundUser.name,
+													channel: foundChannel.owner,
+													title: foundAchievement.title,
+													icon: foundAchievement.icon,
+													unlocked
+												});
+											}
+										});	
+									})
+								});
+							} else {
+								Queue.findOne({
+									name: foundUser.name,
+									channelID: foundChannel._id,
+									achievementID: foundAchievement.uid
+								}).then(foundQueue => {
+									if(!foundQueue) {
+										new Queue({
+											twitchID: foundUser.integration.twitch.etid,
+											name: foundUser.name,
+											channelID: foundChannel._id,
+											achievementID: foundAchievement.uid,
+											earned: currentDate
+										}).save();
+
+										new Notice({
+											user: foundUser._id,
+											logo: foundChannel.logo,
+											message: `You have earned the "${foundAchievement.title}" achievement!`,
+											date: currentDate,
 											type: 'achievement',
 											channel: foundChannel.owner,
 											status: 'new'
@@ -782,10 +978,20 @@ router.post('/award/chat', (req, res) => {
 													channel: savedNotice.channel,
 													status: savedNotice.status
 												},
-												user: savedMember.name
+												user: foundUser.name
 											});
 										});
-										
+
+										if(foundChannel.overlay.chat) {
+											let alertData = {
+												'channel': foundChannel.owner,
+												'member': foundUser.name,
+												'achievement': foundAchievement.title
+											};
+
+											emitAwardedAchievement(req, alertData);
+										}
+
 										let shouldAlert = foundAchievement.alert || true;
 										let unlocked = false;
 
@@ -795,23 +1001,104 @@ router.post('/award/chat', (req, res) => {
 
 										if(shouldAlert) {
 											emitOverlayAlert(req, {
-												user: savedMember.name,
+												user: foundUser.name,
 												channel: foundChannel.owner,
 												title: foundAchievement.title,
 												icon: foundAchievement.icon,
 												unlocked
-											});	
+											});
 										}
-									});
-								}
-							})
+									}
+								})
+							}
 						}
-					});
-				}
+					} else {
+						// User doesn't exist yet, so store the event off to award when signed up!
+						let apiURL;
+						let userPromise;
+						let userObj = {};
+
+						if(userCriteria.name) {
+							apiURL = `https://api.twitch.tv/helix/users/?login=${userCriteria.name}`;
+						} else if(userCriteria['integration.twitch.etid']) {
+							apiURL = `https://api.twitch.tv/helix/users/?id=${userCriteria['integration.twitch.etid']}`;
+						}
+
+						if(apiURL) {
+							userPromise = new Promise((resolve, reject) => {
+								axios.get(apiURL, {
+									headers: {
+										'Client-ID': process.env.TCID
+									}
+								}).then(res => {
+									if(res.data && res.data.data && res.data.data[0]) {
+										userObj.userID = res.data.data[0].id;
+										userObj.name = res.data.data[0].login
+									}
+
+									resolve();
+								});
+							})
+						} else {
+							userPromise = Promise.resolve();
+						}
+
+						userPromise.then(() => {
+							if(userObj.userId && userObj.name) {
+								Queue.findOne({twitchID: userObj.userID, channelID: foundChannel._id, achievementID: foundAchievement.uid}).then(foundQueue => {
+									if(!foundQueue) {
+										new Queue({
+											twitchID: userObj.userID,
+											name: userObj.name,
+											channelID: foundChannel._id,
+											achievementID: foundAchievement.uid,
+											earned: currentDate
+										}).save().then(savedQueue => {
+											if(foundChannel.overlay.chat) {
+												let alertData = {
+													'channel': foundChannel.owner,
+													'member': userObj.name,
+													'achievement': foundAchievement.title
+												};
+												
+												emitAwardedAchievementNonMember(req, alertData);
+											}
+
+											let shouldAlert = foundAchievement.alert || true;
+											let unlocked = false;
+
+											if(foundChannel.gold) {
+												unlocked = true
+											}
+
+											if(shouldAlert) {
+												emitOverlayAlert(req, {
+													user: userObj.name,
+													channel: foundChannel.owner,
+													title: foundAchievement.title,
+													icon: foundAchievement.icon,
+													unlocked
+												});
+											}
+										})
+									}
+								});
+							}
+						});
+					}
+				});
+
+			} else {
+				//achievement found, but it is not earnable
+				res.json({});
 			}
-		})
-	}
-});
+
+		} else {
+			//achievement wasn't found, do nothing
+			res.json({});
+		}
+	});
+}
 
 router.post('/listeners', (req, res) => {
 	//Process achievements
@@ -860,344 +1147,17 @@ router.post('/listeners', (req, res) => {
 						console.log('<<<< No user came from IRC >>>>');
 					}
 
-					Achievement.findById(achievementID).then(foundAchievement => {
-						if(foundAchievement && foundAchievement.earnable) {
-							console.log('> Achievement: ' + foundAchievement.title);
-							User.findOne(userCriteria).then((foundUser) => {
-								
-								if(foundUser) {
-									console.log('> User: ' + foundUser.name);
-									userID = foundUser.integration.twitch.etid;
+					let achievementCriteria = {
+						'_id': achievementID
+					};
 
-									let entryIdx = foundUser.channels.findIndex(savedChannel => {
-										return savedChannel.channelID === foundChannel.id;
-									});
+					handleAchievement(req, res, foundChannel, achievementCriteria, userCriteria);
 
-									if(entryIdx >= 0) {
-										console.log('> ' + foundUser.name + ' is a part of this channel');
-										//User already a part of this channel
-										let userAchievements = foundUser.channels[entryIdx].achievements;
-										let sync = foundUser.channels[entryIdx].sync;
-
-										let achIdx = userAchievements.findIndex(usrAch => {
-											return usrAch.aid === foundAchievement.uid;
-										});
-
-										if(achIdx < 0) {
-											console.log('> ' + foundUser.name + ' doesn\'t have this achievement yet');
-											foundUser.channels[entryIdx].achievements.push({
-												aid: foundAchievement.uid,
-												earned: currentDate
-											});
-
-											new Notice({
-												user: foundUser._id,
-												logo: foundChannel.logo,
-												message: `You have earned the "${foundAchievement.title}" achievement!`,
-												date: currentDate,
-												type: 'achievement',
-												channel: foundChannel.owner,
-												status: 'new'
-											}).save().then(savedNotice => {
-												emitNotificationsUpdate(req, {
-													notification: {
-														id: savedNotice._id,
-														logo: savedNotice.logo,
-														message: savedNotice.message,
-														date: savedNotice.date,
-														type: savedNotice.type,
-														channel: savedNotice.channel,
-														status: savedNotice.status
-													},
-													user: foundUser.name
-												});
-											});
-
-											foundUser.save().then(savedUser => {
-												if(sync && tier) {
-													console.log("syncing for " + savedUser.name);
-
-													handleSubBackfill(foundAchievement.id, savedUser, foundChannel);
-
-													if(foundChannel.overlay.chat) {
-														let alertData = {
-															'channel': achievementOwner,
-															'member': savedUser.name,
-															'achievement': foundAchievement.title
-														};
-
-														console.log('> Sending achievement to alert the stream');
-														emitAwardedAchievement(req, alertData);
-													}
-													
-													let shouldAlert = foundAchievement.alert || true;
-													let unlocked = false;
-
-													if(foundChannel.gold) {
-														unlocked = true
-													}
-
-													if(shouldAlert) {
-														emitOverlayAlert(req, {
-															user: savedUser.name,
-															channel: achievementOwner,
-															title: foundAchievement.title,
-															icon: foundAchievement.icon,
-															unlocked
-														});	
-													}
-												} else {
-
-													if(foundChannel.overlay.chat) {
-														let alertData = {
-															'channel': achievementOwner,
-															'member': savedUser.name,
-															'achievement': foundAchievement.title
-														};
-														
-														emitAwardedAchievement(req, alertData);	
-													}
-													
-													
-													let shouldAlert = foundAchievement.alert || true;
-													let unlocked = false;
-
-													if(foundChannel.gold) {
-														unlocked = true
-													}
-
-													if(shouldAlert) {
-														emitOverlayAlert(req, {
-															user: savedUser.name,
-															channel: achievementOwner,
-															title: foundAchievement.title,
-															icon: foundAchievement.icon,
-															unlocked
-														});	
-													}
-												}
-											});
-
-										}
-									} else {
-										console.log("couldn't find the channel");
-										//TODO: User preference to auto join channel?
-										if(foundUser.preferences.autojoin) {
-											foundUser.channels.push({
-												channelID: foundChannel.id,
-												achievements: [{
-													id: achievementID,
-													earned: currentDate
-												}]
-											});
-											foundUser.save().then(savedUser => {
-												foundChannel.members.push(savedUser.id);
-												foundChannel.save().then(savedChannel => {
-													//TODO: Reorganize notice model
-													new Notice({
-														user: foundUser._id,
-														logo: foundChannel.logo,
-														message: `You have earned the "${foundAchievement.title}" achievement!`,
-														date: currentDate,
-														type: 'achievement',
-														channel: foundChannel.owner,
-														status: 'new'
-													}).save().then(savedNotice => {
-														if(foundChannel.overlay.chat) {
-															let alertData = {
-																'channel':achievementOwner,
-																'member': foundUser.name,
-																'achievement': foundAchievement.title
-															};
-
-															emitAwardedAchievement(req, alertData);
-
-															emitNotificationsUpdate(req, {
-																notification: {
-																	id: savedNotice._id,
-																	logo: savedNotice.logo,
-																	message: savedNotice.message,
-																	date: savedNotice.date,
-																	type: savedNotice.type,
-																	channel: savedNotice.channel,
-																	status: savedNotice.status
-																},
-																user: foundUser.name
-															});
-														};
-
-														let shouldAlert = foundAchievement.alert || true;
-														let unlocked = false;
-
-														if(foundChannel.gold) {
-															unlocked = true
-														}
-
-														if(shouldAlert) {
-															emitOverlayAlert(req, {
-																user: foundUser.name,
-																channel: achievementOwner,
-																title: foundAchievement.title,
-																icon: foundAchievement.icon,
-																unlocked
-															});
-														}
-													});	
-												})
-											});
-										} else {
-											Queue.findOne({
-												name: foundUser.name,
-												channelID: foundChannel._id,
-												achievementID: foundAchievement.uid
-											}).then(foundQueue => {
-												if(!foundQueue) {
-													new Queue({
-														twitchID: foundUser.integration.twitch.etid,
-														name: foundUser.name,
-														channelID: foundChannel._id,
-														achievementID: foundAchievement.uid,
-														earned: currentDate
-													}).save();
-
-													new Notice({
-														user: foundUser._id,
-														logo: foundChannel.logo,
-														message: `You have earned the "${foundAchievement.title}" achievement!`,
-														date: currentDate,
-														type: 'achievement',
-														channel: foundChannel.owner,
-														status: 'new'
-													}).save().then(savedNotice => {
-														emitNotificationsUpdate(req, {
-															notification: {
-																id: savedNotice._id,
-																logo: savedNotice.logo,
-																message: savedNotice.message,
-																date: savedNotice.date,
-																type: savedNotice.type,
-																channel: savedNotice.channel,
-																status: savedNotice.status
-															},
-															user: foundUser.name
-														});
-													});
-
-													if(foundChannel.overlay.chat) {
-														let alertData = {
-															'channel': achievementOwner,
-															'member': foundUser.name,
-															'achievement': foundAchievement.title
-														};
-
-														emitAwardedAchievement(req, alertData);
-													}
-
-													let shouldAlert = foundAchievement.alert || true;
-													let unlocked = false;
-
-													if(foundChannel.gold) {
-														unlocked = true
-													}
-
-													if(shouldAlert) {
-														emitOverlayAlert(req, {
-															user: foundUser.name,
-															channel: achievementOwner,
-															title: foundAchievement.title,
-															icon: foundAchievement.icon,
-															unlocked
-														});
-													}
-												}
-											})
-										}
-									}	
-								} else {
-									// User doesn't exist yet, so store the event off to award when signed up!
-									//TODO: Handle this (make call to users API to get name from ID, or ID from name)
-									let userObj = {
-										userID: achievement.userID,
-										name: achievement.user
-									};
-									let apiURL;
-									let userPromise;
-
-									if(!userObj.userID) {
-										apiURL = `https://api.twitch.tv/helix/users/?login=${achievement.user}`;
-									} else if(!userObj.name) {
-										apiURL = `https://api.twitch.tv/helix/users/?id=${achievement.userID}`;
-									}
-
-									if(apiURL) {
-										userPromise = new Promise((resolve, reject) => {
-											axios.get(apiURL, {
-												headers: {
-													'Client-ID': process.env.TCID
-												}
-											}).then(res => {
-												userObj.userID = res.data.data[0].id;
-												userObj.name = res.data.data[0].login
-
-												resolve();
-											});
-										})
-									} else {
-										userPromise = Promise.resolve();
-									}
-
-									userPromise.then(() => {
-										Queue.findOne({twitchID: userObj.userID, channelID: foundChannel._id, achievementID: foundAchievement.uid}).then(foundQueue => {
-											if(!foundQueue) {
-												new Queue({
-													twitchID: userObj.userID,
-													name: userObj.name,
-													channelID: foundChannel._id,
-													achievementID: foundAchievement.uid,
-													earned: currentDate
-												}).save().then(savedQueue => {
-													if(foundChannel.overlay.chat) {
-														let alertData = {
-															'channel': achievementOwner,
-															'member': userObj.name,
-															'achievement': foundAchievement.title
-														};
-														
-														emitAwardedAchievementNonMember(req, alertData);
-													}
-
-													let shouldAlert = foundAchievement.alert || true;
-													let unlocked = false;
-
-													if(foundChannel.gold) {
-														unlocked = true
-													}
-
-													if(shouldAlert) {
-														emitOverlayAlert(req, {
-															user: userObj.name,
-															channel: achievementOwner,
-															title: foundAchievement.title,
-															icon: foundAchievement.icon,
-															unlocked
-														});
-													}
-												})
-											}
-										});
-									});
-								}
-							});
-						} else {
-							console.log("uh oh, no achievement found while awarding " + achievementID);
-						}
-					});
 				});
 			}	
 		});
 	});
 
-	res.json({});
 });
 
 let handleSubBackfill = (achievement, user, foundChannel) => {
