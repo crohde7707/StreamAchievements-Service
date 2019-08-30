@@ -816,7 +816,7 @@ let handleAchievement = (req, res, foundChannel, achievementCriteria, userCriter
 									if(sync) {
 										console.log("syncing for " + savedUser.name);
 
-										handleSubBackfill(foundAchievement.id, savedUser, foundChannel);
+										handleSubBackfill(req, foundAchievement.id, savedUser, foundChannel);
 
 										if(foundChannel.overlay.chat) {
 											let alertData = {
@@ -1160,7 +1160,7 @@ router.post('/listeners', (req, res) => {
 
 });
 
-let handleSubBackfill = (achievement, user, foundChannel) => {
+let handleSubBackfill = (req, achievement, user, foundChannel) => {
 
 	//First time user getting an achievement, lets backfill award
 	//Get all sub, resub, & gifted sub listeners for the channel
