@@ -7,6 +7,15 @@ const channelSchema = new Schema({
 	theme: String,
 	logo: String,
 	members: Array,
+	moderators: [
+		{
+			uid: String,
+			permissions: {
+				channel: Boolean,
+				chat: Boolean
+			}
+		}
+	],
 	icons: {
 		default: String,
 		hidden: String

@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const passport = require('passport');
 const uuid = require('uuid/v1');
-const {isAuthorized, isAdminAuthorized} = require('../utils/auth-utils');
+const {isAuthorized, isModAuthorized, isAdminAuthorized} = require('../utils/auth-utils');
 const mongoose = require('mongoose');
 const Cryptr = require('cryptr');
 const cryptr = new Cryptr(process.env.SCK);
@@ -411,28 +411,6 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 					//Get Images
 					Image.find({channel: existingChannel.owner}).then(foundImages => {
 						if(foundImages) {
-							//filter out default img
-							//filter out hidden img
-							// let defaultImg, hiddenImg;
-
-							// let returnImgs = foundImages.filter((img) => {
-							// 	if(img.type === 'default') {
-							// 		defaultImg = img;
-							// 		return false;
-							// 	} else if(img.type === 'hidden') {
-							// 		hiddenImg = img;
-							// 		return false;
-							// 	}
-
-							// 	return true;
-							// });
-
-							// resolve({
-							// 	gallery: returnImgs,
-							// 	default: defaultImg,
-							// 	hidden: hiddenImg
-							// });
-
 							resolve({
 								gallery: foundImages
 							})
@@ -460,7 +438,28 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 					});
 				});
 
-				Promise.all([achievementsPromise, imagesPromise, membersPromise]).then(values => {
+				let moderatorsPromise = new Promise((resolve, reject) => {
+
+					let moderatorIds = existingChannel.moderators.map(moderator => moderator.uid);
+
+					User.find({'_id': { $in: moderatorIds}}).then(moderators => {
+						let resModerators = moderators.map(moderator => {
+
+							let mod = existingChannel.moderators.find(channelMod => channelMod.uid === moderator.id);
+
+							return {
+								id: moderator.id,
+								name: moderator.name,
+								logo: moderator.logo,
+								permissions: mod.permissions
+							}
+						});
+
+						resolve(resModerators);
+					})
+				})
+
+				Promise.all([achievementsPromise, imagesPromise, membersPromise, moderatorsPromise]).then(values => {
 					let retChannel;
 
 					if(!existingChannel.oid) {
@@ -478,6 +477,7 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 								achievements: values[0],
 								images: values[1],
 								members: values[2],
+								moderators: values[3]
 							});
 						});
 					} else if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
@@ -493,6 +493,7 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 								achievements: values[0],
 								images: values[1],
 								members: values[2],
+								moderators: values[3]
 							});
 						})
 					} else {
@@ -505,6 +506,7 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 							achievements: values[0],
 							images: values[1],
 							members: values[2],
+							moderators: values[3]
 						});
 					}
 				});
@@ -517,6 +519,78 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 		});
 	}
 });
+
+router.post('/mod', isAuthorized, (req, res) => {
+	let mods = req.body.mods;
+	let retMods = [];
+
+	Channel.findOne({owner: req.user.name}).then(existingChannel => {
+		User.find({'name': { $in: mods}}).then(foundMembers => {
+		
+			let moderators = existingChannel.moderators;
+
+			foundMembers.forEach(mod => {
+				moderators.push({
+					uid: mod.id,
+					permissions: {
+						channel: true,
+						chat: true
+					}
+				});
+
+				retMods.push({
+					name: mod.name,
+					logo: mod.logo,
+					permissions: {
+						channel: true,
+						chat: true
+					}
+				})
+			});
+
+			existingChannel.moderators = moderators;
+
+			existingChannel.save().then(savedChannel => {
+				res.json({
+					moderators: retMods
+				});
+			});
+		});
+	})
+});
+
+router.post('/mod/revoke', isAuthorized, (req, res) => {
+	let mod = req.body.mod;
+
+	Channel.findOne({owner: req.user.name}).then(existingChannel => {
+		if(existingChannel) {
+			User.findOne({'name': mod}).then(foundMod => {
+				if(foundMod) {
+
+					let channelMods = existingChannel.moderators;
+
+					let modIndex = channelMods.findIndex(moderator => moderator.uid === foundMod.id);
+
+					if(modIndex >= 0) {
+						channelMods.splice(modIndex, 1);
+
+						existingChannel.moderators = channelMods;
+
+						existingChannel.save().then(savedChannel => {
+							res.json({
+								removed: modIndex
+							});
+						});
+					} else {
+						res.json({
+							error: 'Error removing mod'
+						});
+					}
+				}
+			});	
+		}
+	})
+})
 
 router.post('/update', isAuthorized, (req, res) => {
 	Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
@@ -532,133 +606,146 @@ router.post('/update', isAuthorized, (req, res) => {
 	})
 });
 
+router.post('/mod/preferences', isModAuthorized, (req, res) => {
+	updateChannelPreferences(req, res, req.channel);
+});
+
 router.post('/preferences', isAuthorized, (req, res) => {
 	Channel.findOne({twitchID: req.user.integration.twitch.etid}).then(existingChannel => {
-		
-		let defaultPromise, hiddenPromise, overlayPromise;
-		//upload images if needed
-		defaultPromise = new Promise((resolve, reject) => {
-			if(req.body.defaultIcon && validDataUrl(req.body.defaultIcon)) {
-				//got an image to upload
-				uploadImage(req.body.defaultIcon, req.body.defaultIconName, existingChannel.owner, 'default').then(iconImg => {
-					resolve(iconImg.url);
-				});
-			} else if(req.body.defaultImage && imgURLRegex.test(req.body.defaultImage)) {
-				resolve(req.body.defaultImage);
-			} else {
-				resolve();
-			}
-		});
-
-		hiddenPromise = new Promise((resolve, reject) => {
-			if(req.body.hiddenIcon && validDataUrl(req.body.hiddenIcon)) {
-				//got an image to upload
-				uploadImage(req.body.hiddenIcon, req.body.hiddenIconName, existingChannel.owner, 'hidden').then(iconImg => {
-					resolve(iconImg.url);
-				});
-			} else if(req.body.hiddenImage && imgURLRegex.test(req.body.hiddenImage)) {
-				resolve(req.body.hiddenImage);
-			} else {
-				resolve();
-			}
-		});
-
-		overlayPromise = new Promise((resolve, reject) => {
-			if(req.body.overlay) {
-				let {chat, chatMessage, sfx, enterEffect, exitEffect, duration, volume, delay} = req.body.overlay;
-				let overlay = existingChannel.overlay || {};
-
-				if(chat) {
-					overlay.chat = chat;
-				}
-
-				if(chatMessage) {
-					overlay.chatMessage = chatMessage;
-				}
-
-				if(sfx) {
-					overlay.sfx = process.env.WEB_DOMAIN + 'sounds/achievement.' + sfx + '.mp3';
-				}
-
-				if(enterEffect) {
-					overlay.enterEffect = enterEffect;
-				}
-
-				if(exitEffect) {
-					overlay.exitEffect = exitEffect;
-				}
-
-				if(duration) {
-					overlay.duration = duration
-				}
-
-				if(volume) {
-					overlay.volume = volume
-				}
-
-				if(delay) {
-					overlay.delay = delay;
-				}
-
-				resolve(overlay);
-			} else {
-				resolve();
-			}
-		});
-
-		Promise.all([defaultPromise, hiddenPromise, overlayPromise]).then((results) => {
-
-			let iconsUpdate = {
-				default: existingChannel.icons.default,
-				hidden: existingChannel.icons.hidden
-			};
-
-			if(results[0]) {
-				iconsUpdate.default = results[0];
-			}
-
-			if(results[1]) {
-				iconsUpdate.hidden = results[1];
-			}
-
-			if(results[2]) {
-				existingChannel.overlay = results[2];
-				updateSettings = true;
-			}
-
-			existingChannel.icons = iconsUpdate;
-
-			existingChannel.save().then(savedChannel => {
-
-				if(results[0] !== savedChannel.icons.default) {
-					console.log('uh oh');
-				}
-
-				if(updateSettings) {
-					emitOverlaySettingsUpdate(req, {
-						channel: savedChannel.owner,
-						overlay: savedChannel.overlay
-					});
-				}
-
-				Image.find({channel: existingChannel.owner}).then(foundImages => {
-					if(foundImages) {
-						res.json({
-							channel: savedChannel,
-							images: {
-								gallery: foundImages
-							}
-						});
-					} else {
-						res.json({
-							channel: savedChannel
-						});
-					}
-				});
+		if(existingChannel) {
+			updateChannelPreferences(req, res, existingChannel);
+		} else {
+			res.json({
+				error: 'Issue updating preferences'
 			});
-		})
+		}
 	});
 });
+
+let updateChannelPreferences = (req, res, existingChannel) => {
+	let defaultPromise, hiddenPromise, overlayPromise;
+		//upload images if needed
+	defaultPromise = new Promise((resolve, reject) => {
+		if(req.body.defaultIcon && validDataUrl(req.body.defaultIcon)) {
+			//got an image to upload
+			uploadImage(req.body.defaultIcon, req.body.defaultIconName, existingChannel.owner, 'default').then(iconImg => {
+				resolve(iconImg.url);
+			});
+		} else if(req.body.defaultImage && imgURLRegex.test(req.body.defaultImage)) {
+			resolve(req.body.defaultImage);
+		} else {
+			resolve();
+		}
+	});
+
+	hiddenPromise = new Promise((resolve, reject) => {
+		if(req.body.hiddenIcon && validDataUrl(req.body.hiddenIcon)) {
+			//got an image to upload
+			uploadImage(req.body.hiddenIcon, req.body.hiddenIconName, existingChannel.owner, 'hidden').then(iconImg => {
+				resolve(iconImg.url);
+			});
+		} else if(req.body.hiddenImage && imgURLRegex.test(req.body.hiddenImage)) {
+			resolve(req.body.hiddenImage);
+		} else {
+			resolve();
+		}
+	});
+
+	overlayPromise = new Promise((resolve, reject) => {
+		if(req.body.overlay) {
+			let {chat, chatMessage, sfx, enterEffect, exitEffect, duration, volume, delay} = req.body.overlay;
+			let overlay = existingChannel.overlay || {};
+
+			if(chat) {
+				overlay.chat = chat;
+			}
+
+			if(chatMessage) {
+				overlay.chatMessage = chatMessage;
+			}
+
+			if(sfx) {
+				overlay.sfx = process.env.WEB_DOMAIN + 'sounds/achievement.' + sfx + '.mp3';
+			}
+
+			if(enterEffect) {
+				overlay.enterEffect = enterEffect;
+			}
+
+			if(exitEffect) {
+				overlay.exitEffect = exitEffect;
+			}
+
+			if(duration) {
+				overlay.duration = duration
+			}
+
+			if(volume) {
+				overlay.volume = volume
+			}
+
+			if(delay) {
+				overlay.delay = delay;
+			}
+
+			resolve(overlay);
+		} else {
+			resolve();
+		}
+	});
+
+	Promise.all([defaultPromise, hiddenPromise, overlayPromise]).then((results) => {
+
+		let iconsUpdate = {
+			default: existingChannel.icons.default,
+			hidden: existingChannel.icons.hidden
+		};
+
+		if(results[0]) {
+			iconsUpdate.default = results[0];
+		}
+
+		if(results[1]) {
+			iconsUpdate.hidden = results[1];
+		}
+
+		if(results[2]) {
+			existingChannel.overlay = results[2];
+			updateSettings = true;
+		}
+
+		existingChannel.icons = iconsUpdate;
+
+		existingChannel.save().then(savedChannel => {
+
+			if(results[0] !== savedChannel.icons.default) {
+				console.log('uh oh');
+			}
+
+			if(updateSettings) {
+				emitOverlaySettingsUpdate(req, {
+					channel: savedChannel.owner,
+					overlay: savedChannel.overlay
+				});
+			}
+
+			Image.find({channel: existingChannel.owner}).then(foundImages => {
+				if(foundImages) {
+					res.json({
+						channel: savedChannel,
+						images: {
+							gallery: foundImages
+						}
+					});
+				} else {
+					res.json({
+						channel: savedChannel
+					});
+				}
+			});
+		});
+	});
+}
 
 router.post('/image', isAuthorized, (req, res) => {
 	//delete image from Cloudinary
@@ -1019,6 +1106,7 @@ router.post('/verify', isAuthorized, (req, res) => {
 					theme: '',
 					logo: req.user.logo,
 					members: [],
+					moderators: [],
 					icons: {
 						default: DEFAULT_ICON,
 						hidden: HIDDEN_ICON
@@ -1149,5 +1237,128 @@ router.post('/favorite', isAuthorized, (req, res) => {
 	})
 
 });
+
+router.get('/mod', isAuthorized, (req, res) => {
+
+	Channel.find({'moderators.uid': req.user._id}).then(channels => {
+		
+		let retChannels = channels.map(channel => {
+			return {
+				owner: channel.owner,
+				logo: channel.logo
+			}
+		});
+
+		res.json({
+			channels: retChannels
+		});
+	});
+
+});
+
+router.get('/mod/retrieve', isModAuthorized, (req, res) => {
+	retrieveChannel(req, res, req.channel);
+});
+
+let retrieveChannel = (req, res, existingChannel) => {
+	let achievementsPromise = new Promise((resolve, reject) => {
+		Achievement.find({channel: existingChannel.owner}).then((achievements) => { 
+
+			if(achievements) {
+				let listenerIds = achievements.map(achievement => {
+					return achievement.listener
+				});
+
+				Listener.find({'_id': { $in: listenerIds}}).then((listeners) => {
+
+					let mergedAchievements = achievements.map(achievement => {
+						
+						let listenerData = listeners.find(listener => {
+							return listener.id === achievement.listener;
+						});
+						
+						if(listenerData) {
+
+							let merge = {
+								"_id": achievement['_id'],
+								uid: achievement.uid,
+								channel: achievement.owner,
+								title: achievement.title,
+								description: achievement.description,
+								icon: achievement.icon,
+								earnable: achievement.earnable,
+								limited: achievement.limited,
+								secret: achievement.secret,
+								listener: achievement.listener,
+								code: listenerData.code,
+								order: achievement.order
+							}
+							
+							if(listenerData.resubType) {
+								merge.resubType = listenerData.resubType;
+							}
+							if(listenerData.query) {
+								merge.query = listenerData.query;
+							}
+							
+							return merge;
+						} else {
+							return achievement;
+						}
+					});
+
+					mergedAchievements.sort((a, b) => (a.order > b.order) ? 1 : -1);
+
+					resolve(mergedAchievements);
+				});
+			} else {
+				resolve(achievements);
+			}
+		});	
+	});
+
+	Promise.all([achievementsPromise]).then(values => {
+		let retChannel;
+
+		if(!existingChannel.oid) {
+			existingChannel.oid = uuid();
+			if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
+				existingChannel.overlay = DEFAULT_OVERLAY_CONFIG;
+			}
+			existingChannel.save().then(savedChannel => {
+				retChannel = {...savedChannel['_doc']};
+				delete retChannel['__v'];
+				delete retChannel['_id'];
+
+				res.json({
+					channel: retChannel,
+					achievements: values[0]
+				});
+			});
+		} else if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
+			
+			existingChannel.overlay = DEFAULT_OVERLAY_CONFIG;
+			existingChannel.save().then(savedChannel => {
+				retChannel = {...savedChannel['_doc']};
+				delete retChannel['__v'];
+				delete retChannel['_id'];
+
+				res.json({
+					channel: retChannel,
+					achievements: values[0]
+				});
+			})
+		} else {
+			retChannel = {...existingChannel['_doc']};
+			delete retChannel['__v'];
+			delete retChannel['_id'];
+
+			res.json({
+				channel: retChannel,
+				achievements: values[0]
+			});
+		}
+	});
+}
 
 module.exports = router;

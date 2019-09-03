@@ -1,4 +1,5 @@
 const User = require('../models/user-model');
+const Channel = require('../models/channel-model');
 const Cryptr = require('cryptr');
 const cryptr = new Cryptr(process.env.SCK);
 
@@ -37,6 +38,35 @@ const isAuthorized = async (req, res, next) => {
 	
 }
 
+const isModAuthorized = async (req, res, next) => {
+	if(req.cookies.etid && req.query.channel) {
+		let etid = cryptr.decrypt(req.cookies.etid);
+
+		let foundUser = await User.findOne({'integration.twitch.etid': etid});
+
+		if(foundUser) {
+			req.user = foundUser;
+
+			let channel = await Channel.findOne({owner: req.query.channel, 'moderators.uid': req.user._id});
+
+			if(channel) {
+				req.channel = channel;
+				next();
+			} else {
+				res.status(401);
+				res.redirect(process.env.WEB_DOMAIN + '/mod');
+			}
+		} else {
+			res.clearCookie('etid');
+			res.status(401);
+			res.redirect(process.env.WEB_DOMAIN);
+		}
+	} else {
+		res.status(401);
+		res.redirect(process.env.WEB_DOMAIN);
+	}
+}
+
 const isAdminAuthorized = async (req, res, next) => {
 	let etid = cryptr.decrypt(req.cookies.etid);
 
@@ -71,5 +101,6 @@ const isAdminAuthorized = async (req, res, next) => {
 module.exports = {
 	authCheck: authCheck,
 	isAuthorized,
+	isModAuthorized,
 	isAdminAuthorized
 }
