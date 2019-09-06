@@ -1,4 +1,5 @@
 const router = require('express').Router();
+const axios = require('axios');
 const User = require('../models/user-model');
 const Listener = require('../models/listener-model');
 const Token = require('../models/token-model');
@@ -232,5 +233,18 @@ router.post('/notice', isAdminAuthorized, (req, res) => {
 		res.json(savedNotice);
 	});
 })
+
+router.post('/tier2', isAdminAuthorized, (req, res) => {
+	axios({
+		method: 'post',
+		url: '/api/achievement/listeners',
+		data: [{
+			'channel': 'phirehero',
+			'achievementID': '5d7661fa447cce56ece85ef8',
+			'tier': '2000',
+			'userID': '70967393'
+		}]
+	});
+});
 
 module.exports = router;
