@@ -215,7 +215,7 @@ router.get('/list', (req, res) => {
 });
 
 router.get('/retrieve', isAuthorized, (req, res) => {
-	let channel = req.query.id;
+	let channel = req.query.channel;
 	let bb = req.query.bb;
 
 	if(bb) {
@@ -346,158 +346,132 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 				});
 			}
 		});
-	} else {
-		//use current logged in person's channel
-		Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
-			if(existingChannel) {
+	}
+});
 
-				let achievementsPromise = new Promise((resolve, reject) => {
-					Achievement.find({channel: existingChannel.owner}).then((achievements) => { 
+router.get('/dashboard', isAuthorized, (req, res) => {
 
-						if(achievements) {
-							let listenerIds = achievements.map(achievement => {
-								return achievement.listener
-							});
+	Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
+		if(existingChannel) {
 
-							Listener.find({'_id': { $in: listenerIds}}).then((listeners) => {
+			let achievementsPromise = new Promise((resolve, reject) => {
+				Achievement.find({channel: existingChannel.owner}).then((achievements) => { 
 
-								let mergedAchievements = achievements.map(achievement => {
-									
-									let listenerData = listeners.find(listener => {
-										return listener.id === achievement.listener;
-									});
-									
-									if(listenerData) {
+					if(achievements) {
+						let listenerIds = achievements.map(achievement => {
+							return achievement.listener
+						});
 
-										let merge = {
-											"_id": achievement['_id'],
-											uid: achievement.uid,
-											channel: achievement.owner,
-											title: achievement.title,
-											description: achievement.description,
-											icon: achievement.icon,
-											earnable: achievement.earnable,
-											limited: achievement.limited,
-											secret: achievement.secret,
-											listener: achievement.listener,
-											code: listenerData.code,
-											order: achievement.order
-										}
-										
-										if(listenerData.resubType) {
-											merge.resubType = listenerData.resubType;
-										}
-										if(listenerData.query) {
-											merge.query = listenerData.query;
-										}
-										
-										return merge;
-									} else {
-										return achievement;
-									}
+						Listener.find({'_id': { $in: listenerIds}}).then((listeners) => {
+
+							let mergedAchievements = achievements.map(achievement => {
+								
+								let listenerData = listeners.find(listener => {
+									return listener.id === achievement.listener;
 								});
+								
+								if(listenerData) {
 
-								mergedAchievements.sort((a, b) => (a.order > b.order) ? 1 : -1);
-
-								resolve(mergedAchievements);
+									let merge = {
+										"_id": achievement['_id'],
+										uid: achievement.uid,
+										channel: achievement.owner,
+										title: achievement.title,
+										description: achievement.description,
+										icon: achievement.icon,
+										earnable: achievement.earnable,
+										limited: achievement.limited,
+										secret: achievement.secret,
+										listener: achievement.listener,
+										code: listenerData.code,
+										order: achievement.order
+									}
+									
+									if(listenerData.resubType) {
+										merge.resubType = listenerData.resubType;
+									}
+									if(listenerData.query) {
+										merge.query = listenerData.query;
+									}
+									
+									return merge;
+								} else {
+									return achievement;
+								}
 							});
-						} else {
-							resolve(achievements);
-						}
-					});	
-				});
 
-				let imagesPromise = new Promise((resolve, reject) => {
-					//Get Images
-					Image.find({channel: existingChannel.owner}).then(foundImages => {
-						if(foundImages) {
-							resolve({
-								gallery: foundImages
-							})
-						} else {
-							resolve({
-								gallery: []
-							});
-						}
-					});
-				});
+							mergedAchievements.sort((a, b) => (a.order > b.order) ? 1 : -1);
 
-				let membersPromise = new Promise((resolve, reject) => {
-					User.find({'_id': { $in: existingChannel.members}}).then((members) => {
-						//Filter out member data: name, logo, achievements
-
-						let resMembers = members.map(member => {
-							return {
-								name: member.name,
-								logo: member.logo,
-								achievements: member.channels.filter((channel) => (channel.channelID === existingChannel.id))[0].achievements
-							}
+							resolve(mergedAchievements);
 						});
+					} else {
+						resolve(achievements);
+					}
+				});	
+			});
 
-						resolve(resMembers);
-					});
-				});
-
-				let moderatorsPromise = new Promise((resolve, reject) => {
-
-					let moderatorIds = existingChannel.moderators.map(moderator => moderator.uid);
-
-					User.find({'_id': { $in: moderatorIds}}).then(moderators => {
-						let resModerators = moderators.map(moderator => {
-
-							let mod = existingChannel.moderators.find(channelMod => channelMod.uid === moderator.id);
-
-							return {
-								id: moderator.id,
-								name: moderator.name,
-								logo: moderator.logo,
-								permissions: mod.permissions
-							}
-						});
-
-						resolve(resModerators);
-					})
-				})
-
-				Promise.all([achievementsPromise, imagesPromise, membersPromise, moderatorsPromise]).then(values => {
-					let retChannel;
-
-					if(!existingChannel.oid) {
-						existingChannel.oid = uuid();
-						if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
-							existingChannel.overlay = DEFAULT_OVERLAY_CONFIG;
-						}
-						existingChannel.save().then(savedChannel => {
-							retChannel = {...savedChannel['_doc']};
-							delete retChannel['__v'];
-							delete retChannel['_id'];
-
-							res.json({
-								channel: retChannel,
-								achievements: values[0],
-								images: values[1],
-								members: values[2],
-								moderators: values[3]
-							});
-						});
-					} else if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
-						
-						existingChannel.overlay = DEFAULT_OVERLAY_CONFIG;
-						existingChannel.save().then(savedChannel => {
-							retChannel = {...savedChannel['_doc']};
-							delete retChannel['__v'];
-							delete retChannel['_id'];
-
-							res.json({
-								channel: retChannel,
-								achievements: values[0],
-								images: values[1],
-								members: values[2],
-								moderators: values[3]
-							});
+			let imagesPromise = new Promise((resolve, reject) => {
+				//Get Images
+				Image.find({channel: existingChannel.owner}).then(foundImages => {
+					if(foundImages) {
+						resolve({
+							gallery: foundImages
 						})
 					} else {
-						retChannel = {...existingChannel['_doc']};
+						resolve({
+							gallery: []
+						});
+					}
+				});
+			});
+
+			let membersPromise = new Promise((resolve, reject) => {
+				User.find({'_id': { $in: existingChannel.members}}).then((members) => {
+					//Filter out member data: name, logo, achievements
+
+					let resMembers = members.map(member => {
+						return {
+							name: member.name,
+							logo: member.logo,
+							achievements: member.channels.filter((channel) => (channel.channelID === existingChannel.id))[0].achievements
+						}
+					});
+
+					resolve(resMembers);
+				});
+			});
+
+			let moderatorsPromise = new Promise((resolve, reject) => {
+
+				let moderatorIds = existingChannel.moderators.map(moderator => moderator.uid);
+
+				User.find({'_id': { $in: moderatorIds}}).then(moderators => {
+					let resModerators = moderators.map(moderator => {
+
+						let mod = existingChannel.moderators.find(channelMod => channelMod.uid === moderator.id);
+
+						return {
+							id: moderator.id,
+							name: moderator.name,
+							logo: moderator.logo,
+							permissions: mod.permissions
+						}
+					});
+
+					resolve(resModerators);
+				})
+			})
+
+			Promise.all([achievementsPromise, imagesPromise, membersPromise, moderatorsPromise]).then(values => {
+				let retChannel;
+
+				if(!existingChannel.oid) {
+					existingChannel.oid = uuid();
+					if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
+						existingChannel.overlay = DEFAULT_OVERLAY_CONFIG;
+					}
+					existingChannel.save().then(savedChannel => {
+						retChannel = {...savedChannel['_doc']};
 						delete retChannel['__v'];
 						delete retChannel['_id'];
 
@@ -508,17 +482,45 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 							members: values[2],
 							moderators: values[3]
 						});
-					}
-				});
-				
-			} else {
-				res.json({
-					error: 'User doesn\'t manage a channel'
-				});
-			}	
-		});
-	}
-});
+					});
+				} else if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
+					
+					existingChannel.overlay = DEFAULT_OVERLAY_CONFIG;
+					existingChannel.save().then(savedChannel => {
+						retChannel = {...savedChannel['_doc']};
+						delete retChannel['__v'];
+						delete retChannel['_id'];
+
+						res.json({
+							channel: retChannel,
+							achievements: values[0],
+							images: values[1],
+							members: values[2],
+							moderators: values[3]
+						});
+					})
+				} else {
+					retChannel = {...existingChannel['_doc']};
+					delete retChannel['__v'];
+					delete retChannel['_id'];
+
+					res.json({
+						channel: retChannel,
+						achievements: values[0],
+						images: values[1],
+						members: values[2],
+						moderators: values[3]
+					});
+				}
+			});
+			
+		} else {
+			res.json({
+				error: 'User doesn\'t manage a channel'
+			});
+		}	
+	});
+})
 
 router.post('/mod', isAuthorized, (req, res) => {
 	let mods = req.body.mods;
@@ -1065,7 +1067,7 @@ router.post('/confirm', isAdminAuthorized, (req, res) => {
 				   	new Notice({
 						user: uid,
 						logo: DEFAULT_ICON,
-						message: "Your channel has been approved! Go check your email for your confirmation code!",
+						message: "Your channel has been approved! Go check your email for your confirmation code! Don't forget to check your spam folder, too!",
 						date: Date.now(),
 						type: 'confirmation',
 						status: 'new'

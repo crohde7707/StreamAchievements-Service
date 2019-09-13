@@ -22,6 +22,7 @@ const {
 } = require('../utils/socket-utils');
 
 const uploadImage = require('../utils/image-utils').uploadImage;
+const DEFAULT_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png";
 const mongoose = require('mongoose');
 
 let combineAchievementAndListeners = (achievement, listener) => {
@@ -945,7 +946,8 @@ let handleTieredBackfill = (req, tier, foundChannel, userAchievements, savedUser
 	}
 }
 
-let handleAchievement = (req, res, foundChannel, achievementCriteria, userCriteria, tier) => {
+let handleAchievement = (req, res, foundChannel, achievementCriteria, userCriteria, tier, retry=2) => {
+	
 	let currentDate = new Date();
 
 	Achievement.findOne(achievementCriteria).then(foundAchievement => {
@@ -972,68 +974,18 @@ let handleAchievement = (req, res, foundChannel, achievementCriteria, userCriter
 
 							if(achIdx < 0) {
 								console.log('> ' + foundUser.name + ' doesn\'t have this achievement yet');
-								foundUser.channels[entryIdx].achievements.push({
-									aid: foundAchievement.uid,
-									earned: currentDate
-								});
+								
+								try {
 
-								new Notice({
-									user: foundUser._id,
-									logo: foundChannel.logo,
-									message: `You have earned the "${foundAchievement.title}" achievement!`,
-									date: currentDate,
-									type: 'achievement',
-									channel: foundChannel.owner,
-									status: 'new'
-								}).save().then(savedNotice => {
-									emitNotificationsUpdate(req, {
-										notification: {
-											id: savedNotice._id,
-											logo: savedNotice.logo,
-											message: savedNotice.message,
-											date: savedNotice.date,
-											type: savedNotice.type,
-											channel: savedNotice.channel,
-											status: savedNotice.status
-										},
-										user: foundUser.name
-									});
-								});
-
-								foundUser.save().then(savedUser => {
-
-									handleTieredBackfill(req, tier, foundChannel, userAchievements, savedUser, currentDate, entryIdx);
-
-									if(sync) {
-										console.log("syncing for " + savedUser.name);
-
-										handleSubBackfill(req, foundAchievement.id, savedUser, foundChannel);
-									}
-
-									alertAchievement(req, foundChannel, savedUser, foundAchievement);
-								});
-
-							} else {
-								//User already has achievement, but reward those past
-								handleTieredBackfill(req, tier, foundChannel, userAchievements, foundUser, currentDate, entryIdx);
-							}
-						} else {
-							console.log("couldn't find the channel");
-							
-							if(foundUser.preferences.autojoin) {
-								foundUser.channels.push({
-									channelID: foundChannel.id,
-									achievements: [{
+									foundUser.channels[entryIdx].achievements.push({
 										aid: foundAchievement.uid,
 										earned: currentDate
-									}]
-								});
-								foundUser.save().then(savedUser => {
-									foundChannel.members.push(savedUser.id);
-									foundChannel.save().then(savedChannel => {
-										
+									});
+
+									foundUser.save().then(savedUser => {
+
 										new Notice({
-											user: savedUser._id,
+											user: foundUser._id,
 											logo: foundChannel.logo,
 											message: `You have earned the "${foundAchievement.title}" achievement!`,
 											date: currentDate,
@@ -1051,19 +1003,128 @@ let handleAchievement = (req, res, foundChannel, achievementCriteria, userCriter
 													channel: savedNotice.channel,
 													status: savedNotice.status
 												},
-												user: savedUser.name
+												user: foundUser.name
 											});
+										});
 
-											let channelIdx = savedUser.channels.findIndex(savedChannel => {
-												return savedChannel.channelID === foundChannel.id;
-											});
+										handleTieredBackfill(req, tier, foundChannel, userAchievements, savedUser, currentDate, entryIdx);
 
-											handleTieredBackfill(req, tier, foundChannel, false, savedUser, currentDate, channelIdx);
+										if(sync) {
+											console.log("syncing for " + savedUser.name);
 
-											alertAchievement(req, foundChannel, savedUser, foundAchievement);
-										});	
-									})
-								});
+											handleSubBackfill(req, foundAchievement.id, savedUser, foundChannel);
+										}
+
+										alertAchievement(req, foundChannel, savedUser, foundAchievement);
+									});
+								} catch (err) {
+									//Error saving achievement, retry
+									if(retry > 0) {
+										let remaining = retry - 1;
+										handleAchievement(req, res, foundChannel, achievementCriteria, userCriteria, tier, remaining);	
+									} else {
+										console.log('sending notice');
+										console.log(process.env.NOTICE_USER);
+										new Notice({
+											user: process.env.NOTICE_USER,
+											logo: DEFAULT_ICON,
+											message: `Issue awarding ${foundChannel.owner}'s '${foundAchievement.title}' to ${foundUser.name}`,
+											date: currentDate,
+											type: 'admin',
+											status: 'new'
+										}).save();
+
+										User.findOne({name: foundChannel.owner}).then(foundOwner => {
+											new Notice({
+												user: foundOwner._id,
+												logo: DEFAULT_ICON,
+												message: `Issue awarding '${foundAchievement.title}' to ${foundUser.name}! We are looking into the issue, feel free to manually award the achievement!`,
+												date: currentDate,
+												type: 'admin',
+												status: 'new'
+											}).save();
+										});
+									}
+								}
+
+							} else {
+								//User already has achievement, but reward those past
+								handleTieredBackfill(req, tier, foundChannel, userAchievements, foundUser, currentDate, entryIdx);
+							}
+						} else {
+							console.log("couldn't find the channel");
+							
+							if(foundUser.preferences.autojoin) {
+								try {
+									foundUser.channels.push({
+										channelID: foundChannel.id,
+										achievements: [{
+											aid: foundAchievement.uid,
+											earned: currentDate
+										}]
+									});
+									foundUser.save().then(savedUser => {
+										foundChannel.members.push(savedUser.id);
+										foundChannel.save().then(savedChannel => {
+											
+											new Notice({
+												user: savedUser._id,
+												logo: foundChannel.logo,
+												message: `You have earned the "${foundAchievement.title}" achievement!`,
+												date: currentDate,
+												type: 'achievement',
+												channel: foundChannel.owner,
+												status: 'new'
+											}).save().then(savedNotice => {
+												emitNotificationsUpdate(req, {
+													notification: {
+														id: savedNotice._id,
+														logo: savedNotice.logo,
+														message: savedNotice.message,
+														date: savedNotice.date,
+														type: savedNotice.type,
+														channel: savedNotice.channel,
+														status: savedNotice.status
+													},
+													user: savedUser.name
+												});
+
+												let channelIdx = savedUser.channels.findIndex(savedChannel => {
+													return savedChannel.channelID === foundChannel.id;
+												});
+
+												handleTieredBackfill(req, tier, foundChannel, false, savedUser, currentDate, channelIdx);
+
+												alertAchievement(req, foundChannel, savedUser, foundAchievement);
+											});	
+										})
+									});
+								} catch(err) {
+									if(retry > 0) {
+										let remaining = retry - 1;
+										handleAchievement(req, res, foundChannel, achievementCriteria, userCriteria, tier, remaining);	
+									} else {
+										new Notice({
+											user: process.env.NOTICE_USER,
+											logo: DEFAULT_ICON,
+											message: `Issue awarding ${foundChannel.owner}'s '${foundAchievement.title}' to ${foundUser.name}`,
+											date: currentDate,
+											type: 'admin',
+											status: 'new'
+										}).save();
+
+										User.findOne({name: foundChannel.owner}).then(foundOwner => {
+											new Notice({
+												user: foundOwner._id,
+												logo: DEFAULT_ICON,
+												message: `Issue awarding '${foundAchievement.title}' to ${foundUser.name}! We are looking into the issue, feel free to manually award the achievement!`,
+												date: currentDate,
+												type: 'admin',
+												status: 'new'
+											}).save();
+										});
+									}
+								}
 							} else {
 								Queue.findOne({
 									name: foundUser.name,

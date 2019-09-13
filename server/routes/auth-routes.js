@@ -28,7 +28,7 @@ router.get('/twitch', passport.authenticate('twitch.js', {
 
 //callback for twitch to redirect to
 router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) => {
-
+	console.log(req.cookies);
 	req.session.user = req.user;
 
 	//Set Cookie
@@ -107,7 +107,7 @@ router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) =>
 					if(!id) {
 						req.user.lastLogin = Date.now();
 						req.user.save().then(savedUser => {
-							res.redirect(process.env.WEB_DOMAIN + 'home');
+							handleRedirect(req, res);
 						});
 					}
 				} else {
@@ -154,7 +154,7 @@ router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) =>
 								});
 							}
 
-							res.redirect(process.env.WEB_DOMAIN + 'home');
+							handleRedirect(req, res);
 						});			
 					}).catch(error => {
 						console.log(error.response);
@@ -192,7 +192,7 @@ router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) =>
 									});
 								}
 
-								res.redirect(process.env.WEB_DOMAIN + 'home');
+								handleRedirect(req, res);
 							});
 						}
 					});
@@ -203,7 +203,7 @@ router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) =>
 			req.user.lastLogin = Date.now();
 
 			req.user.save().then(savedUser => {
-				res.redirect(process.env.WEB_DOMAIN + 'home');
+				handleRedirect(req, res);
 			});	
 		}
 	});
@@ -367,6 +367,33 @@ router.post('/patreon/unlink', isAuthorized, (req, res) => {
 		
 	});	
 });
+
+let handleRedirect = (req, res) => {
+	let ru = req.cookies['_ru'];
+
+	if(ru) {
+		let redirectURL = cryptr.decrypt(ru);
+
+		if(process.env.NODE_ENV === 'production') {
+			res.clearCookie('_ru', { domain: 'streamachievements.com' });
+		} else {
+			res.clearCookie('_ru');
+		}
+
+		if(redirectURL) {
+			//Check if trusted
+			if(redirectURL.indexOf(process.env.WEB_DOMAIN) != 0) {
+				res.redirect(process.env.WEB_DOMAIN + 'home');
+			} else {
+				res.redirect(redirectURL);
+			}
+		} else {
+			res.redirect(process.env.WEB_DOMAIN + 'home');	
+		}
+	} else {
+		res.redirect(process.env.WEB_DOMAIN + 'home');	
+	}
+}
 
 let isExpired = (expires) => {
 	let expireDate = new Date(expires);

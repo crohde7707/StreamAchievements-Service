@@ -2,6 +2,7 @@ const User = require('../models/user-model');
 const Channel = require('../models/channel-model');
 const Cryptr = require('cryptr');
 const cryptr = new Cryptr(process.env.SCK);
+const setRedirectCookie = require('../utils/redirect-mapper');
 
 const authCheck = (req, res, next) => {
 	if(!req.user) {
@@ -13,27 +14,37 @@ const authCheck = (req, res, next) => {
 
 const isAuthorized = async (req, res, next) => {
 	if(req.cookies.etid) {
-		let etid = cryptr.decrypt(req.cookies.etid);
+		try {
+			let etid = cryptr.decrypt(req.cookies.etid);
 
-		let foundUser = await User.findOne({'integration.twitch.etid': etid})
+			let foundUser = await User.findOne({'integration.twitch.etid': etid})
+					
+			if(foundUser) {
+				req.user = foundUser;
 				
-		if(foundUser) {
-			req.user = foundUser;
-			
-			if(process.env.NODE_ENV === 'production') {
-				res.cookie('etid', req.cookies.etid, { maxAge: 4 * 60 * 60 * 1000, secure: true, httpOnly: false, domain: 'streamachievements.com' });
+				if(process.env.NODE_ENV === 'production') {
+					res.cookie('etid', req.cookies.etid, { maxAge: 8 * 60 * 60 * 1000, secure: true, httpOnly: false, domain: 'streamachievements.com' });
+				} else {
+					res.cookie('etid', req.cookies.etid, { maxAge: 8 * 60 * 60 * 1000, httpOnly: false });
+				}
+				next();
 			} else {
-				res.cookie('etid', req.cookies.etid, { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
+
+				res.clearCookie('etid'); //set path to streamachievements.com when ready
+				res.status(401);
+				res.json({});
+				//res.redirect(process.env.WEB_DOMAIN);
 			}
-			next();
-		} else {
+		} catch(err) {
 			res.clearCookie('etid'); //set path to streamachievements.com when ready
 			res.status(401);
-			res.redirect(process.env.WEB_DOMAIN);
+			res.json({});
 		}	
 	} else {
+		setRedirectCookie(req, res);
 		res.status(401);
-		res.redirect(process.env.WEB_DOMAIN);
+		res.json({foo: 'bar'});
+		//res.redirect(process.env.WEB_DOMAIN);
 	}
 	
 }
