@@ -1012,7 +1012,7 @@ let handleAchievement = (req, res, foundChannel, achievementCriteria, userCriter
 										if(sync) {
 											console.log("syncing for " + savedUser.name);
 
-											handleSubBackfill(req, foundAchievement.id, savedUser, foundChannel);
+											handleSubBackfill(req, foundAchievement.id, savedUser, foundChannel, tier);
 										}
 
 										alertAchievement(req, foundChannel, savedUser, foundAchievement);
@@ -1332,7 +1332,7 @@ router.post('/listeners', (req, res) => {
 
 });
 
-let handleSubBackfill = (req, achievement, user, foundChannel) => {
+let handleSubBackfill = (req, achievement, user, foundChannel, tier) => {
 
 	//First time user getting an achievement, lets backfill award
 	//Get all sub, resub, & gifted sub listeners for the channel
@@ -1355,7 +1355,9 @@ let handleSubBackfill = (req, achievement, user, foundChannel) => {
 					//Total Achievement: Backfill only totals
 					listeners.forEach(listener => {
 						if(listener.achType === "0") {
-							listenersToAward.push(listener);
+							if(parseInt(listener.condition) <= parseInt(tier)) {
+								listenersToAward.push(listener);
+							}
 						} else if(parseInt(listener.condition) <= parseInt(condition)) {
 							listenersToAward.push(listener);
 						}
@@ -1371,39 +1373,48 @@ let handleSubBackfill = (req, achievement, user, foundChannel) => {
 
 						let userAchievements = user.channels[channelIdx].achievements;
 
+						let awardedPreviousSub = false;
+
 						listenersToAward.forEach(listener => {
 							let achIdx = userAchievements.findIndex(usrAch => {
 								return usrAch.aid === listener.aid;
 							});
 
 							if(achIdx < 0) {
+
+								awardedPreviousSub = true;
+								
 								userChannels[channelIdx].achievements.push({aid: listener.aid, earned: Date.now()});
-								new Notice({
-									user: user._id,
-									logo: foundChannel.logo,
-									message: `Your previous subs have been backfilled!`,
-									date: new Date(),
-									type: 'achievement',
-									channel: foundChannel.owner,
-									status: 'new'
-								}).save().then(savedNotice => {
-									emitNotificationsUpdate(req, {
-										notification: {
-											id: savedNotice._id,
-											logo: savedNotice.logo,
-											message: savedNotice.message,
-											date: savedNotice.date,
-											type: savedNotice.type,
-											channel: savedNotice.channel,
-											status: savedNotice.status
-										},
-										user: user.name
-									});
-								});
+								
 							} else {
 								console.log('> Achievement already earned: ' + listener.aid)
 							}
 						});
+
+						if(awardedPreviousSub) {
+							new Notice({
+								user: user._id,
+								logo: foundChannel.logo,
+								message: `Your previous subs have been backfilled!`,
+								date: new Date(),
+								type: 'achievement',
+								channel: foundChannel.owner,
+								status: 'new'
+							}).save().then(savedNotice => {
+								emitNotificationsUpdate(req, {
+									notification: {
+										id: savedNotice._id,
+										logo: savedNotice.logo,
+										message: savedNotice.message,
+										date: savedNotice.date,
+										type: savedNotice.type,
+										channel: savedNotice.channel,
+										status: savedNotice.status
+									},
+									user: user.name
+								});
+							});
+						}
 						
 						userChannels[channelIdx].sync = false;
 
