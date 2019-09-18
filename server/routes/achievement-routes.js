@@ -605,7 +605,7 @@ let manualAward = (req, res, existingChannel) => {
 	let members = req.body.members;
 	let achievementID = req.body.aid;
 
-	Achievement.findOne({uid: achievementID, channel: req.user.name}).then(foundAchievement => {
+	Achievement.findOne({uid: achievementID, channel: existingChannel.owner}).then(foundAchievement => {
 		User.find({'name': { $in: members}}).then(foundMembers => {
 			let promises = foundMembers.map((member, idx) => {
 				let channels = member.channels;
