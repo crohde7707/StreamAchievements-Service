@@ -1055,6 +1055,8 @@ let handleAchievement = (req, res, foundChannel, achievementCriteria, userCriter
 										}
 
 										alertAchievement(req, foundChannel, savedUser, foundAchievement);
+
+
 									});
 								} catch (err) {
 									//Error saving achievement, retry
@@ -1259,37 +1261,41 @@ let handleAchievement = (req, res, foundChannel, achievementCriteria, userCriter
 											earned: currentDate
 										}).save().then(savedQueue => {
 
-											handleTieredBackfill(req, tier, foundChannel, false, userObj, currentDate, false, true);
+											if(savedQueue) {
+												handleTieredBackfill(req, tier, foundChannel, false, userObj, currentDate, false, true);
 
-											if(foundChannel.overlay.chat) {
-												let alertData = {
-													'channel': foundChannel.owner,
-													'member': userObj.name,
-													'achievement': foundAchievement.title
-												};
-												
-												emitAwardedAchievementNonMember(req, alertData);
+												if(foundChannel.overlay.chat) {
+													let alertData = {
+														'channel': foundChannel.owner,
+														'member': userObj.name,
+														'achievement': foundAchievement.title
+													};
+													
+													emitAwardedAchievementNonMember(req, alertData);
+												}
+
+												let shouldAlert = foundAchievement.alert || true;
+												let unlocked = false;
+
+												if(foundChannel.gold) {
+													unlocked = true
+												}
+
+												if(shouldAlert) {
+													emitOverlayAlert(req, {
+														user: userObj.name,
+														channel: foundChannel.owner,
+														title: foundAchievement.title,
+														icon: foundAchievement.icon,
+														unlocked
+													});
+												}
+											} else {
+
 											}
-
-											let shouldAlert = foundAchievement.alert || true;
-											let unlocked = false;
-
-											if(foundChannel.gold) {
-												unlocked = true
-											}
-
-											if(shouldAlert) {
-												emitOverlayAlert(req, {
-													user: userObj.name,
-													channel: foundChannel.owner,
-													title: foundAchievement.title,
-													icon: foundAchievement.icon,
-													unlocked
-												});
-											}
-										})
+										});
 									} else {
-										console.log(foundQueue.id);
+										console.log(userObj.name + ' already had this achievement');
 									}
 								}).catch(err => {
 									console.log(err);
@@ -1301,12 +1307,10 @@ let handleAchievement = (req, res, foundChannel, achievementCriteria, userCriter
 
 			} else {
 				//achievement found, but it is not earnable
-				res.json({});
 			}
 
 		} else {
 			//achievement wasn't found, do nothing
-			res.json({});
 		}
 	});
 }
@@ -1368,6 +1372,8 @@ router.post('/listeners', (req, res) => {
 			}	
 		});
 	});
+
+	res.json({});
 
 });
 
