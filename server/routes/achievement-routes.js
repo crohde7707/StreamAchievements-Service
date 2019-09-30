@@ -604,12 +604,15 @@ let getAchievementData = (req, res, existingChannel, achievement) => {
 
 	let imagePromise = retrieveImages(existingChannel.owner);
 
-	Promise.all([achievementPromise, imagePromise]).then(responses => {
+	let customAllowed = isCustomAllowed(existingChannel.owner, existingChannel.gold);
+
+	Promise.all([achievementPromise, imagePromise, customAllowed]).then(responses => {
 		res.json({
 			achievement: responses[0],
 			images: responses[1],
 			defaultIcons: existingChannel.icons,
-			isGoldChannel: ((req.channel && req.channel.gold))
+			isGoldChannel: ((req.channel && req.channel.gold)),
+			customAllowed: responses[2]
 		});
 	});
 }
@@ -750,8 +753,30 @@ let getIcons = (req, res, existingChannel, isMod) => {
 			resObj.isGoldChannel = existingChannel.gold;
 		}
 
-		res.json(resObj);
+		isCustomAllowed(existingChannel.owner, existingChannel.gold).then(isAllowed => {
+			resObj.customAllowed = isAllowed;
+
+			res.json(resObj);
+		});
 	});
+}
+
+let isCustomAllowed = (channel, isGold) => {
+	if(isGold) {
+		return Promise.resolve(true);
+	} else {
+		return new Promise((resolve, reject) => {
+			console.log(channel);
+			Listener.find({channel: channel, achType: "4"}).then(listeners => {
+				console.log(listeners);
+				if(listeners && listeners.length > 0) {
+					resolve(false);
+				} else {
+					resolve(true);
+				}
+			});
+		});
+	}
 }
 
 router.get('/listeners', (req, res) => {
