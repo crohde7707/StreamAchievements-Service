@@ -11,6 +11,28 @@ const mongoose = require('mongoose');
 const {isAdminAuthorized} = require('../utils/auth-utils');
 const {emitOverlayAlert} = require('../utils/socket-utils');
 
+router.post('/dedupMembers', isAdminAuthorized, (req, res) => {
+	Channel.findOne({owner: 'phirehero'}).then(foundChannel => {
+		console.log(foundChannel.members);
+		let storedMembers = foundChannel.members;
+		console.log(storedMembers);
+		let newMemberArray = [];
+
+		User.find({'_id': { $in: storedMembers}}).sort({'name': 1}).exec((err, members) => {
+			members.forEach(member => {
+				let memberId = storedMembers.splice(storedMembers.indexOf(member.id), 1);
+
+				newMemberArray.push(memberId[0]);
+			});
+
+			console.log(newMemberArray);
+			console.log(newMemberArray.length);
+		});
+	});
+
+
+})
+
 router.post('/dedup', isAdminAuthorized, (req, res) => {
 	User.find({}).then(foundUsers => {
 		foundUsers.forEach(user => {

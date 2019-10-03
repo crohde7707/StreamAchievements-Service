@@ -6,6 +6,10 @@ const cryptr = new Cryptr(process.env.SCK);
 const isAuthorized = require('../utils/auth-utils').isAuthorized;
 const User = require('../models/user-model');
 const Channel = require('../models/channel-model');
+const {
+	emitBecomeGold,
+	emitRemoveGold
+} = require('../utils/socket-utils');
 
 //patreon
 let url = require('url');
@@ -136,6 +140,24 @@ router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) =>
 							is_gold: isGold,
 							expires
 						};
+
+						if(req.user.integration.patreon) {
+							if(!req.user.integration.patreon.is_gold && isGold) {
+								//user became gold, enable on IRC side
+								emitBecomeGold(req, req.user.name);
+							} else if(req.user.integration.patreon.is_gold && !isGold) {
+								//user lost gold status, disable on IRC side
+								emitRemoveGold(req, req.user.name);
+							} 	
+						} else {
+							if(isGold) {
+								//user became gold, enable on IRC side
+								emitBecomeGold(req, req.user.name);
+							} else {
+								//user lost gold status, disable on IRC side
+								emitRemoveGold(req, req.user.name);
+							} 
+						}
 
 						let integration = Object.assign({}, req.user.integration);
 
@@ -300,6 +322,14 @@ router.get('/patreon/redirect', isAuthorized, (req, res) => {
 
 		integration.patreon = {id, thumb_url, vanity, at, rt, is_follower, status, is_gold, expires};
 
+		if(is_gold) {
+			//user became gold, enable on IRC side
+			emitBecomeGold(req, req.user.name);
+		} else {
+			//user lost gold status, disable on IRC side
+			emitRemoveGold(req, req.user.name);
+		} 
+
 		req.user.integration = integration;
 
 		req.user.save().then(savedUser => {
@@ -327,7 +357,7 @@ router.post('/twitch/sync', isAuthorized, (req, res) => {
 
 router.post('/patreon/sync', isAuthorized, (req, res) => {
 	
-	patreonSync(req.user, req.cookies.etid).then((patreonData) => {
+	patreonSync(req, req.cookies.etid).then((patreonData) => {
 		res.json(patreonData);
 	});
 });
@@ -336,6 +366,10 @@ router.post('/patreon/unlink', isAuthorized, (req, res) => {
 	let integration = Object.assign({}, req.user.integration);
 
 	delete integration.patreon;
+
+	if(req.user.type === 'verified') {
+		emitRemoveGold(req, req.user.name);
+	}
 
 	req.user.integration = integration;
 
@@ -463,17 +497,17 @@ let twitchSync = (user, etid) => {
 	}
 }
 
-let patreonSync = (user, etid) => {
-	if(user.integration.patreon) {
+let patreonSync = (req, etid) => {
+	if(req.user.integration.patreon) {
 		return new Promise((resolve, reject) => {
-			let {at, rt, id, expires} = user.integration.patreon;
+			let {at, rt, id, expires} = req.user.integration.patreon;
 
 			let refreshPromise;
 
 			if(isExpired(expires)) {
 				
 				refreshPromise = new Promise((res2, rej2) => {
-				   refreshPatreonToken(user, rt).then(newTokens => {
+				   refreshPatreonToken(req.user, rt).then(newTokens => {
 						
 						if(newTokens) {
 							at = newTokens.at;
@@ -536,15 +570,23 @@ let patreonSync = (user, etid) => {
 								expires
 							};
 
-							let integration = Object.assign({}, user.integration);
+							if(!req.user.integration.patreon.is_gold && isGold) {
+								//user became gold, enable on IRC side
+								emitBecomeGold(req, req.user.name);
+							} else if(req.user.integration.patreon.is_gold && !isGold) {
+								//user lost gold status, disable on IRC side
+								emitRemoveGold(req, req.user.name);
+							} 
+
+							let integration = Object.assign({}, req.user.integration);
 
 							integration.patreon = {...patreonData};
 
-							user.integration = integration;
+							req.user.integration = integration;
 
-							user.save().then(savedUser => {
+							req.user.save().then(savedUser => {
 								if(savedUser.type === 'verified') {
-									Channel.findOne({owner: user.name}).then(foundChannel => {
+									Channel.findOne({owner: savedUser.name}).then(foundChannel => {
 										if(foundChannel.gold !== savedUser.integration.patreon.is_gold) {
 											foundChannel.gold = savedUser.integration.patreon.is_gold
 											foundChannel.save();	

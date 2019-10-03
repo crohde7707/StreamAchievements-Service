@@ -30,18 +30,19 @@ let emitRemoveListener = (req, listener) => {
 	ws.to(sid).emit('remove-listener', listener);
 }
 
-let emitBecomeGold = (req) => {
+let emitBecomeGold = (req, channel) => {
+	console.log(channel + ' is becoming gold');
 	let ws = req.app.get('ws');
 	let sid = req.app.get('IRCSOCKET');
 	
-	ws.to(sid).emit('become-gold', {});
+	ws.to(sid).emit('become-gold', channel);
 }
 
-let emitRemoveGold = (req) => {
+let emitRemoveGold = (req, channel) => {
 	let ws = req.app.get('ws');
 	let sid = req.app.get('IRCSOCKET');
 	
-	ws.to(sid).emit('remove-gold', {});
+	ws.to(sid).emit('remove-gold', channel);
 }
 
 let emitAwardedAchievement = (req, achievement) => {

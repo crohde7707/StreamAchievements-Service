@@ -27,7 +27,7 @@ const imgURLRegex = /^https:\/\/res\.cloudinary\.com\/phirehero\/.*\.(png|jpg|jp
 
 const DEFAULT_OVERLAY_CONFIG = require('../configs/default-overlay-configs');
 
-const CHANNEL_RETRIEVE_LIMIT = 15;
+const RETRIEVE_LIMIT = 15;
 
 router.get("/create", isAuthorized, (req, res) => {
 	Channel.findOne({twitchID: req.user.twitchID}).then((existingChannel) => {
@@ -426,18 +426,19 @@ router.get('/dashboard', isAuthorized, (req, res) => {
 			});
 
 			let membersPromise = new Promise((resolve, reject) => {
-				User.find({'_id': { $in: existingChannel.members}}).then((members) => {
-					//Filter out member data: name, logo, achievements
+				let offset = 0;
 
-					let resMembers = members.map(member => {
-						return {
-							name: member.name,
-							logo: member.logo,
-							achievements: member.channels.filter((channel) => (channel.channelID === existingChannel.id))[0].achievements
-						}
+				getMembersOffset(req, res, offset).then(data => {
+					if(data.members.length < data.channel.members.length) {
+						offset = data.members.length
+					} else {
+						offset = -1
+					}
+
+					resolve({
+						members: data.members,
+						offset
 					});
-
-					resolve(resMembers);
 				});
 			});
 
@@ -479,8 +480,9 @@ router.get('/dashboard', isAuthorized, (req, res) => {
 							channel: retChannel,
 							achievements: values[0],
 							images: values[1],
-							members: values[2],
-							moderators: values[3]
+							members: values[2].members,
+							moderators: values[3],
+							membersOffset: values[2].offset
 						});
 					});
 				} else if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
@@ -495,8 +497,9 @@ router.get('/dashboard', isAuthorized, (req, res) => {
 							channel: retChannel,
 							achievements: values[0],
 							images: values[1],
-							members: values[2],
-							moderators: values[3]
+							members: values[2].members,
+							moderators: values[3],
+							membersOffset: values[2].offset
 						});
 					})
 				} else {
@@ -508,8 +511,9 @@ router.get('/dashboard', isAuthorized, (req, res) => {
 						channel: retChannel,
 						achievements: values[0],
 						images: values[1],
-						members: values[2],
-						moderators: values[3]
+						members: values[2].members,
+						moderators: values[3],
+						membersOffset: values[2].offset
 					});
 				}
 			});
@@ -662,7 +666,9 @@ let updateChannelPreferences = (req, res, existingChannel) => {
 				overlay.chat = chat;
 			}
 
-			if(chatMessage) {
+			console.log(chatMessage);
+			if(chatMessage !== undefined) {
+				console.log('hello');
 				overlay.chatMessage = chatMessage;
 			}
 
@@ -891,7 +897,7 @@ router.get("/user", isAuthorized, (req, res) => {
 	});
 
 	let otherPromise = new Promise((resolve, reject) => {
-		Channel.find({'_id': { $in: channelArray}}).limit(CHANNEL_RETRIEVE_LIMIT).exec((err, channels) => {
+		Channel.find({'_id': { $in: channelArray}}).limit(RETRIEVE_LIMIT).exec((err, channels) => {
 
 			let channelResponse = [];
 
@@ -938,12 +944,61 @@ router.get("/user", isAuthorized, (req, res) => {
 	});
 });
 
+router.get("/member/retrieve", isAuthorized, (req, res) => {
+	let offset = parseInt(req.query.offset);
+
+	getMembersOffset(req, res, offset).then(data => {
+		console.log(data.members.length + offset);
+		console.log(data.channel.members.length);
+		if(data.members.length + offset < data.channel.members.length) {
+			offset = data.members.length + offset
+		} else {
+			offset = -1
+		}
+
+		res.json({
+			members: data.members,
+			offset
+		});
+	})
+});
+
+let getMembersOffset = (req, res, offset) => {
+	return new Promise((resolve, reject) => {
+		Channel.findOne({'owner': req.user.name}).then(foundChannel => {
+			if(foundChannel) {
+				let memberArray = foundChannel.members;
+
+				User.find({'_id': { $in: memberArray}}).sort({'name': 1}).skip(offset).limit(RETRIEVE_LIMIT).exec((err, members) => {
+					console.log(members);
+					let retMembers = members.map(member => {
+						let channelInfo = member.channels.find(channel => channel.channelID === foundChannel.id);
+
+						return {
+							name: member.name,
+							logo: member.logo,
+							achievementsEarned: channelInfo.achievements.length
+						}
+					});
+
+					resolve({
+						members: retMembers,
+						channel: foundChannel
+					});
+				});
+			} else {
+				reject();
+			}
+		});
+	});
+}
+
 router.get("/user/retrieve", isAuthorized, (req, res) => {
 	let offset = parseInt(req.query.offset);
 
 	let channelArray = req.user.channels.filter(channel => !req.user.favorites.includes(channel.channelID)).map(channel => new mongoose.Types.ObjectId(channel.channelID));
 
-	Channel.find({'_id': { $in: channelArray}}).skip(offset).limit(CHANNEL_RETRIEVE_LIMIT).exec((err, channels) => {
+	Channel.find({'_id': { $in: channelArray}}).skip(offset).limit(RETRIEVE_LIMIT).exec((err, channels) => {
 		let promises = channels.map(channel => {
 			let earnedAchievements = req.user.channels.find(userChannel => (userChannel.channelID === channel.id));
 			let percentage = 0;

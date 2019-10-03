@@ -20,6 +20,7 @@ const {
 	emitOverlayAlert,
 	emitNotificationsUpdate
 } = require('../utils/socket-utils');
+const { build } = require('../utils/regex-builder');
 
 const uploadImage = require('../utils/image-utils').uploadImage;
 const DEFAULT_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png";
@@ -628,6 +629,28 @@ router.post('/award', isAuthorized, (req, res) => {
 	});
 });
 
+let buildAchievementMessage = (channel, achievementData) => {
+	let overlaySettings = channel.overlay;
+	let chatMessage;
+
+	if(overlaySettings.chatMessage && overlaySettings.chatMessage !== '') {
+		chatMessage = build({
+			chatMessage: overlaySettings.chatMessage,
+			member: achievementData.member,
+			achievement: achievementData.achievement
+		});
+	} else {
+		chatMessage = `${achievementData.member} just earned the "${achievementData.achievement}" achievement! PogChamp`;
+	}
+
+	console.log(chatMessage);
+
+	return {
+		channel: channel.owner,
+		message: chatMessage
+	}
+}
+
 let manualAward = (req, res, existingChannel) => {
 	let members = req.body.members;
 	let achievementID = req.body.aid;
@@ -649,7 +672,7 @@ let manualAward = (req, res, existingChannel) => {
 							'achievement': foundAchievement.title
 						};
 
-						emitAwardedAchievement(req, alertData);
+						emitAwardedAchievement(req, buildAchievementMessage(existingChannel, alertData));
 					}
 
 					new Notice({
@@ -860,7 +883,7 @@ let alertAchievement = (req, foundChannel, savedUser, foundAchievement) => {
 			'achievement': foundAchievement.title
 		};
 		
-		emitAwardedAchievement(req, alertData);	
+		emitAwardedAchievement(req, buildAchievementMessage(foundChannel, alertData));	
 	}
 	
 	
@@ -1296,7 +1319,7 @@ let handleAchievement = (req, res, foundChannel, achievementCriteria, userCriter
 														'achievement': foundAchievement.title
 													};
 													
-													emitAwardedAchievementNonMember(req, alertData);
+													emitAwardedAchievementNonMember(req, buildAchievementMessage(foundChannel, alertData));
 												}
 
 												let shouldAlert = foundAchievement.alert || true;
