@@ -48,7 +48,7 @@ let emitRemoveGold = (req, channel) => {
 let emitAwardedAchievement = (req, achievement) => {
 	let ws = req.app.get('ws');
 	let sid = req.app.get('IRCSOCKET');
-
+	
 	ws.to(sid).emit('achievement-awarded', achievement);
 }
 

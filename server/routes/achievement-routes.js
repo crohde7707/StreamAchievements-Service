@@ -310,7 +310,7 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 
 	query.channel = existingChannel.owner
 
-	if(req.body.achType === "3" && existingChannel.gold) {
+	if(req.body.achType === "4" && !existingChannel.gold) {
 		res.json({
 			created: false,
 			message: "This type of achievement is for Stream Achievements Gold! Sync your Patreon if your account is, or reach out on Discord!",

@@ -425,23 +425,6 @@ router.get('/dashboard', isAuthorized, (req, res) => {
 				});
 			});
 
-			let membersPromise = new Promise((resolve, reject) => {
-				let offset = 0;
-
-				getMembersOffset(req, res, offset).then(data => {
-					if(data.members.length < data.channel.members.length) {
-						offset = data.members.length
-					} else {
-						offset = -1
-					}
-
-					resolve({
-						members: data.members,
-						offset
-					});
-				});
-			});
-
 			let moderatorsPromise = new Promise((resolve, reject) => {
 
 				let moderatorIds = existingChannel.moderators.map(moderator => moderator.uid);
@@ -463,7 +446,7 @@ router.get('/dashboard', isAuthorized, (req, res) => {
 				})
 			})
 
-			Promise.all([achievementsPromise, imagesPromise, membersPromise, moderatorsPromise]).then(values => {
+			Promise.all([achievementsPromise, imagesPromise, moderatorsPromise]).then(values => {
 				let retChannel;
 
 				if(!existingChannel.oid) {
@@ -480,9 +463,7 @@ router.get('/dashboard', isAuthorized, (req, res) => {
 							channel: retChannel,
 							achievements: values[0],
 							images: values[1],
-							members: values[2].members,
-							moderators: values[3],
-							membersOffset: values[2].offset
+							moderators: values[2]
 						});
 					});
 				} else if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
@@ -497,9 +478,7 @@ router.get('/dashboard', isAuthorized, (req, res) => {
 							channel: retChannel,
 							achievements: values[0],
 							images: values[1],
-							members: values[2].members,
-							moderators: values[3],
-							membersOffset: values[2].offset
+							moderators: values[2]
 						});
 					})
 				} else {
@@ -511,9 +490,7 @@ router.get('/dashboard', isAuthorized, (req, res) => {
 						channel: retChannel,
 						achievements: values[0],
 						images: values[1],
-						members: values[2].members,
-						moderators: values[3],
-						membersOffset: values[2].offset
+						moderators: values[2]
 					});
 				}
 			});
@@ -666,9 +643,7 @@ let updateChannelPreferences = (req, res, existingChannel) => {
 				overlay.chat = chat;
 			}
 
-			console.log(chatMessage);
 			if(chatMessage !== undefined) {
-				console.log('hello');
 				overlay.chatMessage = chatMessage;
 			}
 
@@ -970,14 +945,14 @@ let getMembersOffset = (req, res, offset) => {
 				let memberArray = foundChannel.members;
 
 				User.find({'_id': { $in: memberArray}}).sort({'name': 1}).skip(offset).limit(RETRIEVE_LIMIT).exec((err, members) => {
-					console.log(members);
+
 					let retMembers = members.map(member => {
 						let channelInfo = member.channels.find(channel => channel.channelID === foundChannel.id);
 
 						return {
 							name: member.name,
 							logo: member.logo,
-							achievementsEarned: channelInfo.achievements.length
+							achievementsEarned: channelInfo.achievements.map((achievement => achievement.aid))
 						}
 					});
 

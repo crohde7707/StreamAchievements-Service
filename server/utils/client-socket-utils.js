@@ -48,6 +48,34 @@ let SearchMembers = (socket, data) => {
 	})
 }
 
+let SearchMembersDetailed = (socket, data) => {
+	let regex = new RegExp(data.value, 'gi');
+
+	Channel.findOne({owner: data.owner}).then(foundChannel => {
+		if(foundChannel) {
+			User.find({'_id': { $in: foundChannel.members}, name: regex}).sort({'_id': -1}).limit(25).exec((err, docs) => {
+				//Filter out member data: name, logo, achievements
+
+				let resMembers = docs.map(member => {
+
+					let channelIndex = member.channels.findIndex(channel => (channel.channelID === foundChannel.id));
+					let achievements = member.channels[channelIndex].achievements.map((achievement => achievement.aid));
+
+					return {
+						name: member.name,
+						logo: member.logo,
+						achievements: achievements
+					}
+				});
+
+				console.log(resMembers);
+
+				socket.emit('member-results', resMembers);
+			});
+		}
+	})
+}
+
 let SearchMod = (socket, data) => {
 	let regex = new RegExp(data.value, 'gi');
 	
@@ -192,6 +220,7 @@ let DeleteNotification = (socket, notification) => {
 module.exports = {
 	searchChannels: SearchChannels,
 	searchMembers: SearchMembers,
+	searchMembersDetailed: SearchMembersDetailed,
 	searchMod: SearchMod,
 	storeSocket: StoreSocket,
 	removeSocket: RemoveSocket,
