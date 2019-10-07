@@ -485,9 +485,31 @@ let twitchSync = (user, etid) => {
 					user.logo = response.data.data[0].profile_image_url;
 
 					user.save().then(savedUser => {
-						resolve({
-							username: savedUser.name,
-							logo: savedUser.logo
+
+						Channel.findOne({twitchID: savedUser.integration.twitch.etid}).then(foundChannel => {
+							if(foundChannel) {
+								if(foundChannel.owner !== savedUser.name) {
+									updated = true;
+									foundChannel.owner = savedUser.name;
+								}
+
+								if(foundChannel.logo !== savedUser.logo) {
+									updated = true;
+									foundChannel.logo = savedUser.logo;
+								}
+
+								foundChannel.save().then(savedChannel => {
+									resolve({
+										username: savedUser.name,
+										logo: savedUser.logo
+									});		
+								});
+							} else {
+								resolve({
+									username: savedUser.name,
+									logo: savedUser.logo
+								});
+							}
 						});
 					});
 				});

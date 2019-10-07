@@ -1,6 +1,7 @@
 const passport = require('passport');
 const TwitchStrategy = require('passport-twitch.js').Strategy;
 const User = require('../models/user-model');
+const Channel = require('../models/channel-model');
 const Notice = require('../models/notice-model');
 const Cryptr = require('cryptr');
 const cryptr = new Cryptr(process.env.SCK);
@@ -51,18 +52,49 @@ passport.use(
 				}
 
 				existingUser.save().then(savedUser => {
-					if(updated) {
-						new Notice({
-							user: savedUser._id,
-							logo: "https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png",
-							message: "We noticed some information has been updated on Twitch, so we went ahead and updated your profile with those changes!",
-							date: Date.now(),
-							type: 'profile',
-							status: 'new'
-						}).save();
-					}
 
-					done(null, savedUser);	
+					Channel.findOne({twitchID: savedUser.integration.twitch.etid}).then(foundChannel => {
+
+						if(foundChannel) {
+							if(foundChannel.owner !== savedUser.name) {
+								updated = true;
+								foundChannel.owner = savedUser.name;
+							}
+
+							if(foundChannel.logo !== savedUser.logo) {
+								updated = true;
+								foundChannel.logo = savedUser.logo;
+							}
+
+							foundChannel.save().then(savedChannel => {
+								if(updated) {
+									new Notice({
+										user: savedUser._id,
+										logo: "https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png",
+										message: "We noticed some information has been updated on Twitch, so we went ahead and updated your profile with those changes!",
+										date: Date.now(),
+										type: 'profile',
+										status: 'new'
+									}).save();
+								}
+
+								done(null, savedUser);
+							});
+						} else {
+							if(updated) {
+								new Notice({
+									user: savedUser._id,
+									logo: "https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png",
+									message: "We noticed some information has been updated on Twitch, so we went ahead and updated your profile with those changes!",
+									date: Date.now(),
+									type: 'profile',
+									status: 'new'
+								}).save();
+							}
+
+							done(null, savedUser);
+						}
+					});
 				});
 			} else {
 				new User({

@@ -1187,6 +1187,16 @@ router.post('/verify', isAuthorized, (req, res) => {
 						twitch: type
 					}
 				}).save().then((newChannel) => {
+
+					new Notice({
+						user: process.env.NOTICE_USER,
+						logo: newChannel.logo,
+						message: `${newChannel.owner} just created their channel!`,
+						date: Date.now(),
+						type: 'confirmation',
+						status: 'new'
+					}).save();
+
 					req.user.type = 'verified';
 					req.user.save().then((savedUser) => {
 						Token.deleteOne({uid: req.user._id, token}).then(err => {
