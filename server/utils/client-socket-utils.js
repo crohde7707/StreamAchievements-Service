@@ -64,11 +64,10 @@ let SearchMembersDetailed = (socket, data) => {
 					return {
 						name: member.name,
 						logo: member.logo,
-						achievements: achievements
+						achievements: achievements,
+						banned: member.channels[channelIndex].banned || false
 					}
 				});
-
-				console.log(resMembers);
 
 				socket.emit('member-results', resMembers);
 			});

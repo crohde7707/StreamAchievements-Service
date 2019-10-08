@@ -17,7 +17,8 @@ const userSchema = new Schema({
 					earned: Date
 				}
 			],
-			sync: Boolean
+			sync: Boolean,
+			banned: Boolean
 		}
 	],
 	favorites: Array,

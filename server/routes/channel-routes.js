@@ -18,7 +18,7 @@ const Token = require('../models/token-model');
 const Queue = require('../models/queue-model');
 const Notice = require('../models/notice-model');
 const {uploadImage, destroyImage} = require('../utils/image-utils');
-const {emitNewChannel, emitOverlaySettingsUpdate, emitOverlayAlert} = require('../utils/socket-utils');
+const {emitNewChannel, emitOverlaySettingsUpdate, emitOverlayAlert, emitNotificationsUpdate} = require('../utils/socket-utils');
 
 const DEFAULT_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png";
 const HIDDEN_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811887/hidden-icon.png";
@@ -145,7 +145,8 @@ router.post('/join', isAuthorized, (req, res) => {
 					req.user.channels.push({
 						channelID: existingChannel.id,
 						achievements: [],
-						sync: true
+						sync: true,
+						banned: false
 					});
 					req.user.save().then((savedUser) => {
 						res.json({
@@ -163,7 +164,8 @@ router.post('/join', isAuthorized, (req, res) => {
 				let newChannelObj = {
 					channelID: existingChannel.id,
 					achievements: [],
-					sync: true
+					sync: true,
+					banned: false
 				};
 				console.log('checking queues...');
 
@@ -250,7 +252,7 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 				Achievement.find({channel: channel}).then((foundAchievements) => {
 
 					let joined = foundChannel.members.includes(req.user.id);
-					let earned, retAchievements;
+					let earned, retAchievements, banned;
 
 					if(joined) {
 						let channelIDX = req.user.channels.findIndex((channel) => {
@@ -258,6 +260,8 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 						});
 
 						let earnedAchievements = req.user.channels[channelIDX].achievements;
+
+						banned = req.user.channels[channelIDX].banned || false;
 
 						//Clean up deleted achievements
 
@@ -330,7 +334,8 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 								achievements: strippedAchievements,
 								joined: joined,
 								fullAccess,
-								favorited
+								favorited,
+								banned
 							});	
 						} else {
 							res.json({
@@ -865,7 +870,7 @@ router.get("/user", isAuthorized, (req, res) => {
 			Promise.all(promises).then(channels => {
 
 				favChannels = channels;
-
+				console.log(favChannels);
 				resolve();
 			});
 		});
@@ -917,6 +922,170 @@ router.get("/user", isAuthorized, (req, res) => {
 			offset
 		});
 	});
+});
+
+router.post('/member/save', isAuthorized, (req, res) => {
+	User.findOne({name: req.body.id}).then(foundUser => {
+		if(foundUser) {
+			Channel.findOne({owner: req.user.name}).then(foundChannel => {
+				if(foundChannel) {
+					let channelIdx = foundUser.channels.findIndex(channel => channel.channelID === foundChannel.id);
+
+					if(channelIdx >= 0 && !foundUser.channels[channelIdx].banned) {
+						let achievements = req.body.achievements;
+						let currentAchievements = foundUser.channels[channelIdx].achievements;
+
+						if(achievements.length > 0) {
+							let currentDate = Date.now();
+
+							achievements.forEach(achievement => {
+								let idx = currentAchievements.findIndex(cAchievement => cAchievement.aid === achievement);
+
+								if(idx >= 0) {
+									currentAchievements.splice(idx, 1);
+								} else {
+									currentAchievements.push({
+										aid: achievement,
+										earned: currentDate
+									});
+								}
+							});
+
+							foundUser.save().then(savedUser => {
+
+								new Notice({
+									user: savedUser._id,
+									logo: foundChannel.logo,
+									message: `Your achievements have been adjusted by the owner of the channel!`,
+									date: Date.now(),
+									type: 'achievement',
+									channel: foundChannel.owner,
+									status: 'new'
+								}).save().then(savedNotice => {
+									emitNotificationsUpdate(req, {
+										notification: {
+											id: savedNotice._id,
+											logo: savedNotice.logo,
+											message: savedNotice.message,
+											date: savedNotice.date,
+											type: savedNotice.type,
+											channel: savedNotice.channel,
+											status: savedNotice.status
+										},
+										user: savedUser.name
+									});
+
+									res.json({
+										member: {
+											name: savedUser.name,
+											logo: savedUser.logo,
+											achievements: savedUser.channels[channelIdx].achievements.map((achievement => achievement.aid)),
+											banned: savedUser.channels[channelIdx].banned
+										}
+									});
+								});
+							})
+						}
+					}
+				}
+			})
+		}
+	})
+})
+
+router.post("/member/reset", isAuthorized, (req, res) => {
+	User.findOne({name: req.body.id}).then(foundUser => {
+		if(foundUser) {
+			Channel.findOne({owner: req.user.name}).then(foundChannel => {
+				if(foundChannel) {
+					let channelIdx = foundUser.channels.findIndex(channel => channel.channelID === foundChannel.id);
+
+					if(channelIdx >= 0) {
+						foundUser.channels[channelIdx].achievements = [];
+						foundUser.save().then(savedUser => {
+							res.json({
+								member: {
+									name: savedUser.name,
+									logo: savedUser.logo,
+									achievements: []
+								}
+							});
+						})
+					}
+				}
+			})
+		} else {
+			res.json({
+				error: 'Unexpected error occured'
+			});
+		}
+	})
+});
+
+router.post("/member/ban", isAuthorized, (req, res) => {
+	User.findOne({name: req.body.id}).then(foundUser => {
+		if(foundUser) {
+			Channel.findOne({owner: req.user.name}).then(foundChannel => {
+				if(foundChannel) {
+					let channelIdx = foundUser.channels.findIndex(channel => channel.channelID === foundChannel.id);
+
+					if(channelIdx >= 0) {
+						foundUser.channels[channelIdx].banned = true;
+
+						if(req.body.resetAchievements) {
+							foundUser.channels[channelIdx].achievements = [];
+						}
+						
+						foundUser.save().then(savedUser => {
+							res.json({
+								member: {
+									name: savedUser.name,
+									logo: savedUser.logo,
+									achievements: savedUser.channels[channelIdx].achievements.map((achievement => achievement.aid)),
+									banned: true
+								}
+							});
+						})
+					}
+				}
+			})
+		} else {
+			res.json({
+				error: 'Unexpected error occured'
+			});
+		}
+	})
+});
+
+router.post("/member/unban", isAuthorized, (req, res) => {
+	User.findOne({name: req.body.id}).then(foundUser => {
+		if(foundUser) {
+			Channel.findOne({owner: req.user.name}).then(foundChannel => {
+				if(foundChannel) {
+					let channelIdx = foundUser.channels.findIndex(channel => channel.channelID === foundChannel.id);
+
+					if(channelIdx >= 0) {
+						foundUser.channels[channelIdx].banned = false;
+						
+						foundUser.save().then(savedUser => {
+							res.json({
+								member: {
+									name: savedUser.name,
+									logo: savedUser.logo,
+									achievements: savedUser.channels[channelIdx].achievements.map((achievement => achievement.aid)),
+									banned: false
+								}
+							});
+						})
+					}
+				}
+			})
+		} else {
+			res.json({
+				error: 'Unexpected error occured'
+			});
+		}
+	})
 });
 
 router.get("/member/retrieve", isAuthorized, (req, res) => {
