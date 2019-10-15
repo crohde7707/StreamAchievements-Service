@@ -30,7 +30,8 @@ const userSchema = new Schema({
 	preferences: {
 		autojoin: Boolean
 	},
-	lastLogin: Date
+	lastLogin: Date,
+	new: Boolean
 });
 
 const User = mongoose.model("user", userSchema);

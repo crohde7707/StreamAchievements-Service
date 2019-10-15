@@ -1,6 +1,7 @@
 const Channel = require('../models/channel-model');
 const User = require('../models/user-model');
 const Notice = require('../models/notice-model');
+const Earned = require('../models/earned-model');
 const Cryptr = require('cryptr');
 const cryptr = new Cryptr(process.env.SCK);
 
@@ -28,21 +29,27 @@ let SearchMembers = (socket, data) => {
 			User.find({'_id': { $in: foundChannel.members}, name: regex}).sort({'_id': -1}).limit(25).exec((err, docs) => {
 				//Filter out member data: name, logo, achievements
 
-				let resMembers = docs.map(member => {
+				let members = docs.map(member => member.id);
+				let earnedLookup = {};
 
-					let channelIndex = member.channels.findIndex(channel => (channel.channelID === foundChannel.id));
-					let achievements = member.channels[channelIndex].achievements;
+				Earned.find({userID: { $in: members }, channelID: foundChannel.id, achievementID: data.aid}).then(foundEarneds => {
+					foundEarneds.forEach(earned => {
+						earnedLookup[earned.userID] = true;
+					});
 
-					let achIndex = achievements.findIndex(achievement => (achievement.aid === data.aid));
+					let resMembers = docs.map(member => {
+						let earned = earnedLookup[member.id] || false;
 
-					return {
-						name: member.name,
-						logo: member.logo,
-						earned: achIndex >= 0
-					}
-				});
+						return {
+							name: member.name,
+							logo: member.logo,
+							earned
+						}
+					});
 
-				socket.emit('members-retrieved', resMembers);
+					socket.emit('members-retrieved', resMembers);
+				})
+				
 			});
 		}
 	})
@@ -59,12 +66,10 @@ let SearchMembersDetailed = (socket, data) => {
 				let resMembers = docs.map(member => {
 
 					let channelIndex = member.channels.findIndex(channel => (channel.channelID === foundChannel.id));
-					let achievements = member.channels[channelIndex].achievements.map((achievement => achievement.aid));
 
 					return {
 						name: member.name,
 						logo: member.logo,
-						achievements: achievements,
 						banned: member.channels[channelIndex].banned || false
 					}
 				});
@@ -115,7 +120,7 @@ let StoreSocket = (socket, app) => {
 				} else {
 					sockets = [socket.id];
 				}
-				console.log(foundChannel.owner + '\'s sockets: ' + sockets.join(','));
+				
 				app.set(foundChannel.owner + "-OVERLAYS", sockets);
 				
 				socketLookup[socket.id] = {

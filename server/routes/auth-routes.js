@@ -32,7 +32,6 @@ router.get('/twitch', passport.authenticate('twitch.js', {
 
 //callback for twitch to redirect to
 router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) => {
-	console.log(req.cookies);
 	req.session.user = req.user;
 
 	//Set Cookie

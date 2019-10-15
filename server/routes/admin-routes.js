@@ -7,6 +7,7 @@ const Queue = require('../models/queue-model');
 const Channel = require('../models/channel-model');
 const Notice = require('../models/notice-model');
 const Achievement = require('../models/achievement-model');
+const Earned = require('../models/earned-model');
 const mongoose = require('mongoose');
 const {isAdminAuthorized} = require('../utils/auth-utils');
 const {emitOverlayAlert} = require('../utils/socket-utils');
@@ -244,6 +245,21 @@ router.post('/alertSync', isAdminAuthorized, (req, res) => {
 	});
 });
 
+router.post('/testTable', isAdminAuthorized, (req, res) => {
+	Earned.find({channelID: "5d068493b87afc2f80cf21d5", achievementID: 12}).limit(1).exec((err, earnedDocs) => {
+		console.log(earnedDocs);
+	});
+	// let earnedObj = {
+	// 	userID: 70967393,
+	// 	channelID: "5d068493b87afc2f80cf21d5",
+	// 	achievementID: 11
+	// };
+
+	// Earned.findOneAndUpdate(earnedObj, {earned: Date.now(), first: false}, {upsert: true, new: true}).then(earnedDoc => {
+	// 	console.log(earnedDoc);
+	// });
+})
+
 router.post('/notice', isAdminAuthorized, (req, res) => {
 	new Notice({
 		user: "5cfc5f04a33c32ad539abe0c",
@@ -268,5 +284,106 @@ router.post('/tier2', isAdminAuthorized, (req, res) => {
 		}]
 	});
 });
+
+
+router.post('/migrate', isAdminAuthorized, (req, res) => {
+	handleMigrate();
+});
+
+async function handleMigrate() {
+	let totalUserCount = 0;
+	let offset = 0;
+	let limit = 25;
+	let i;
+
+	let users;
+
+	totalUserCount = await User.countDocuments();
+		
+
+	console.log("Migrating data for " + totalUserCount + " members...");
+
+	while (offset < totalUserCount) {
+		i = 0;
+
+		console.log('\n\nMigrating ' + offset + ' - ' + (offset + limit - 1) + '...\n');
+		users = await User.find().sort({'_id': -1}).skip(offset).limit(limit).exec();
+
+		await asyncForEach(users, async (user) => {
+			let channels = user.channels;
+			console.log('> Migrating ' + channels.length + ' channels for ' + user.name) + '...';
+
+			await asyncForEach(channels, async (channel) => {
+				let achievements = channel.achievements;
+				let earnedCreated = 0;
+				console.log('  > ' + achievements.length + ' achievements found for channel: ' + channel.channelID);
+
+				//TODO: Call for all achievements, add ones that don't exist
+
+				await asyncForEach(achievements, async (achievement) => {
+					try {
+						let earned = await addEarned(user, channel, achievement);
+						console.log('    > Migrated ' + achievement.aid + '!');
+						earnedCreated = earnedCreated + 1;
+					} catch (err) {
+						console.log(err);
+						console.log('\x1b[31m    (!) Error occurred migrating entry. achievementID: ' + achievement.aid + ', channelID: ' + channel.channelID + '\x1b[0m');
+					}
+				})
+
+				if(earnedCreated === achievements.length) {
+					console.log('\x1b[32m    > Migrated achievements successfully for channelID: ' + channel.channelID + '\x1b[0m');
+				} else {
+					console.log('\x1b[33m    > Not all achievements migrated successfully for channelID: ' + channel.channelID + '! Count awarded: ' + earnedCreated + '\x1b[0m');
+				}
+			})
+		});
+
+		offset = offset + limit;
+	}
+}
+
+async function asyncForEach(array, callback) {
+  for (let index = 0; index < array.length; index++) {
+    await callback(array[index], index, array);
+  }
+}
+
+async function addEarned(user, channel, achievement) {
+
+	return new Promise((resolve, reject) => {
+		let earnedObj = {
+			userID: user._id,
+			channelID: channel.channelID,
+			achievementID: achievement.aid
+		};
+
+
+		asyncSleep().then(async () => {
+			let existing = await Earned.findOne(earnedObj);
+
+			if(!existing) {
+				console.log('not there');
+				earnedObj.earned = achievement.earned;
+
+				console.log(earnedObj);
+
+				new Earned(earnedObj).save().then((savedEarned) => {
+					resolve(savedEarned);
+				})
+			} else {
+				console.log('entry exists in table');
+				resolve();
+			}
+		});
+		
+	});
+}
+
+function asyncSleep() {
+	return new Promise((resolve, reject) => {
+		setTimeout(resolve, 500);
+	});
+}
 
 module.exports = router;

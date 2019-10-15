@@ -4,6 +4,7 @@ const User = require('../models/user-model');
 const Channel = require('../models/channel-model');
 const Notice = require('../models/notice-model');
 const Achievement = require('../models/achievement-model');
+const Earned = require('../models/earned-model');
 const Token = require('../models/token-model');
 const mongoose = require('mongoose');
 const Cryptr = require('cryptr');
@@ -111,7 +112,8 @@ router.get("/user", isAuthorized, (req, res) => {
 						preferences: req.user.preferences,
 						notificationCount: count,
 						uid,
-						isMod
+						isMod,
+						new: req.user.new
 					});
 				} else {
 					let status = 'viewer';
@@ -135,7 +137,8 @@ router.get("/user", isAuthorized, (req, res) => {
 							preferences: req.user.preferences,
 							notificationCount: count,
 							uid,
-							isMod
+							isMod,
+							new: req.user.new
 						});
 					});
 				}
@@ -148,26 +151,83 @@ router.get("/user", isAuthorized, (req, res) => {
 
 });
 
+router.get("/user/catch", isAuthorized, (req, res) => {
+	Earned.find({userID: req.user.integration.twitch.etid}).then(foundEarned => {
+		if(foundEarned.length > 0) {
+
+			let channels = foundEarned.map(found => found.channelID);
+			
+			Channel.find({'_id': { $in: channels}}).then(foundChannels => {
+
+				let retChannels = foundChannels.map(channel => {
+					return {
+						name: channel.owner,
+						logo: channel.logo
+					}
+				})
+
+				let promises = foundEarned.map(earned => {
+					return new Promise((resolve, reject) => {
+						earned.userID = req.user.id;
+						earned.save().then(() => {
+							resolve();
+						});
+					})
+				})
+
+				Promise.all(promises).then(() => {
+					res.json({
+						catch: true,
+						channels: retChannels
+					});
+				})
+			});
+
+		} else {
+			//No achievements earned
+			res.json({
+				catch: false,
+				channels: []
+			});
+		}
+	});
+});
+
+router.post("/user/catch", isAuthorized, (req, res) => {
+	req.user.new = false;
+	req.user.preferences.autojoin = req.body.autojoin;
+
+	req.user.save().then(savedUser => {
+		res.json({});
+	});
+})
+
 router.get("/profile", isAuthorized, (req, res) => {
 	let channelArray = req.user.channels.map(channel => new mongoose.Types.ObjectId(channel.channelID));
 
 	Channel.find({'_id': { $in: channelArray}}).then((channels) => {
 
 		let promises = channels.map(channel => {
+			//TODO: Get count from Earned table
 			let earnedAchievements = req.user.channels.filter(userChannel => (userChannel.channelID === channel.id));
 			let percentage = 0;
 
 			return new Promise((resolve, reject) => {
-				Achievement.countDocuments({channel: channel.owner}).then(count => {
-					if(count > 0) {
-						percentage = Math.round((earnedAchievements[0].achievements.length / count) * 100);
-					}
+				Earned.countDocuments({userID: req.user.id, channelID: channel.id}).then(achCount => {
+					let percentage = 0;		
+					Achievement.countDocuments({channel: channel.owner}).then(count => {
 
-					resolve({
-			     		logo: channel.logo,
-			     		owner: channel.owner,
-			     		percentage: percentage
-			     	});
+						if(count > 0) {
+							percentage = Math.round((achCount / count) * 100);
+						}
+
+
+						resolve({
+				     		logo: channel.logo,
+				     		owner: channel.owner,
+				     		percentage: percentage
+				     	});
+					});
 			    });
 			});
 		});

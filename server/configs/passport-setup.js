@@ -3,6 +3,7 @@ const TwitchStrategy = require('passport-twitch.js').Strategy;
 const User = require('../models/user-model');
 const Channel = require('../models/channel-model');
 const Notice = require('../models/notice-model');
+const Earned = require('../models/earned-model');
 const Cryptr = require('cryptr');
 const cryptr = new Cryptr(process.env.SCK);
 
@@ -108,9 +109,12 @@ passport.use(
 					},
 					preferences: {
 						autojoin: true
-					}
+					},
+					new: true
 				}).save().then((newUser) => {
+
 					done(null, newUser);
+
 				});		
 			}
 		})

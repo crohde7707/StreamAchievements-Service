@@ -15,8 +15,8 @@ const Achievement = require('../models/achievement-model');
 const Listener = require('../models/listener-model');
 const Image = require('../models/image-model');
 const Token = require('../models/token-model');
-const Queue = require('../models/queue-model');
 const Notice = require('../models/notice-model');
+const Earned = require('../models/earned-model');
 const {uploadImage, destroyImage} = require('../utils/image-utils');
 const {emitNewChannel, emitOverlaySettingsUpdate, emitOverlayAlert, emitNotificationsUpdate} = require('../utils/socket-utils');
 
@@ -116,6 +116,88 @@ router.post('/leave', isAuthorized, (req, res) => {
 	});
 });
 
+router.post('/setup/join', isAuthorized, (req, res) => {
+	Channel.findOne({owner: req.body.channel}).then((existingChannel) => {
+		if(existingChannel) {
+			let joinedChannels = req.user.channels;
+
+			let alreadyJoined = joinedChannels.some((channel) => (channel.channelID === existingChannel.id));
+			let memberAlready = existingChannel.members.includes(req.user.id);
+
+			if(alreadyJoined) {
+				//This channel already joined by user
+				if(!memberAlready) {
+					existingChannel.members.push(req.user.id);
+					existingChannel.save().then((savedChannel) => {
+						res.json({
+							user: req.user,
+							channel: savedChannel
+						});
+					})
+				} else {
+					res.json({
+						user: req.user,
+						channel: existingChannel
+					});
+				}
+			} else if(memberAlready) {			
+				if(!alreadyJoined) {
+					req.user.channels.push({
+						channelID: existingChannel.id,
+						sync: true,
+						banned: false
+					});
+					req.user.save().then((savedUser) => {
+						res.json({
+							user: savedUser,
+							channel: existingChannel
+						});
+					});
+				} else {
+					res.json({
+						user: req.user,
+						channel: existingChannel
+					});
+				}
+			} else {
+				let newChannelObj = {
+					channelID: existingChannel.id,
+					sync: true,
+					banned: false
+				};
+				req.user.channels.push(newChannelObj);
+				req.user.save().then((savedUser) => {
+
+					existingChannel.members.push(savedUser.id);
+					existingChannel.save().then((savedChannel) => {
+
+
+						Earned.countDocuments({userID: req.user.id, channelID: savedChannel.id}).then(achCount => {
+							let percentage = 0;
+
+							Achievement.countDocuments({channel: savedChannel.owner}).then(count => {
+
+								if(count > 0) {
+									percentage = Math.round((achCount / count) * 100);
+								}
+
+								res.json({
+									owner: savedChannel.owner,
+									logo: savedChannel.logo,
+									percentage
+								});
+							});
+						});
+					});
+				});
+			}
+		} else {
+			res.status(405);
+			res.send('Channel requested to join does not exist!');
+		}
+	});
+})
+
 router.post('/join', isAuthorized, (req, res) => {
 	Channel.findOne({owner: req.body.channel}).then((existingChannel) => {
 		if(existingChannel) {
@@ -144,7 +226,6 @@ router.post('/join', isAuthorized, (req, res) => {
 				if(!alreadyJoined) {
 					req.user.channels.push({
 						channelID: existingChannel.id,
-						achievements: [],
 						sync: true,
 						banned: false
 					});
@@ -163,42 +244,18 @@ router.post('/join', isAuthorized, (req, res) => {
 			} else {
 				let newChannelObj = {
 					channelID: existingChannel.id,
-					achievements: [],
 					sync: true,
 					banned: false
 				};
-				console.log('checking queues...');
+				req.user.channels.push(newChannelObj);
+				req.user.save().then((savedUser) => {
 
-				Queue.find({twitchID: req.user.integration.twitch.etid, channelID: existingChannel.id}).then(queues => {
-					if(queues) {
-						console.log('Giving achievements to ' + req.user.name);
-						queues.forEach(ach => {
+					existingChannel.members.push(savedUser.id);
+					existingChannel.save().then((savedChannel) => {
 
-							console.log('awarding ' + ach.achievementID);
-							
-							newChannelObj.achievements.push({
-								aid: ach.achievementID,
-								earned: ach.earned || new Date()
-							});
-
-							Queue.deleteOne({ _id: ach.id}).then(err => {
-								console.log(err);
-							});
-						});
-						console.log('---------------');
-					}
-
-
-					req.user.channels.push(newChannelObj);
-					req.user.save().then((savedUser) => {
-
-						existingChannel.members.push(savedUser.id);
-						existingChannel.save().then((savedChannel) => {
-
-							res.json({
-								user: savedUser,
-								channel: savedChannel
-							});
+						res.json({
+							user: savedUser,
+							channel: savedChannel
 						});
 					});
 				});
@@ -254,94 +311,81 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 					let joined = foundChannel.members.includes(req.user.id);
 					let earned, retAchievements, banned;
 
+					let achPromise;
+
 					if(joined) {
-						let channelIDX = req.user.channels.findIndex((channel) => {
-							return (channel.channelID === foundChannel.id)
-						});
 
-						let earnedAchievements = req.user.channels[channelIDX].achievements;
+						achPromise = new Promise((resolve, reject) => {
+							let channelIDX = req.user.channels.findIndex((channel) => {
+								return (channel.channelID === foundChannel.id)
+							});
 
-						banned = req.user.channels[channelIDX].banned || false;
+							banned = req.user.channels[channelIDX].banned || false;
 
-						//Clean up deleted achievements
+							Earned.find({userID: req.user.id, channelID: foundChannel.id}).then(foundEarneds => {
+								earned = foundEarneds.map(found => found.achievementID);
 
-						let foundMap = {};
+								retAchievements = foundAchievements.map(achievement => {
+									let ach = Object.assign({}, achievement._doc);
 
-						let cleanedUpAchievements = earnedAchievements.filter((ach, idx) => {
-							let filtered = foundAchievements.findIndex(fach => {
-						        return fach.uid === ach.aid
-						    });
+									let aIdx = earned.findIndex(aid => aid === ach.uid);
 
-							if(filtered >= 0 && !foundMap[ach.aid]) {
-								//achievement found
-								foundMap[ach.aid] = true;
-								return true;
-							} else {
-								return false;
-							}
+									if(aIdx >= 0) {
+										ach.earned = true;
+									} else {
+										ach.earned = false;
+									}
 
-						});
+									return ach
+								})
 
-						if(cleanedUpAchievements.length !== earnedAchievements.length) {
-							req.user.channels[channelIDX].achievements = cleanedUpAchievements;
-							req.user.save();
-							console.log('synced achievements...');
-							earnedAchievements = cleanedUpAchievements;
-						}
-
-						earned = earnedAchievements.map(achievement => achievement.aid);
-
-						retAchievements = foundAchievements.map(achievement => {
-							let ach = Object.assign({}, achievement._doc);
-
-							let aIdx = earned.findIndex(aid => aid === ach.uid);
-
-							if(aIdx >= 0) {
-								ach.earned = earnedAchievements[aIdx].earned;
-							}
-
-							return ach
+								resolve();
+							});
 						})
+
 					} else {
 						retAchievements = foundAchievements;
+						achPromise = Promise.resolve();
 					}
 
-					let strippedAchievements = retAchievements.map(ach => {
-						let tempAch = (ach['_doc']) ? {...ach['_doc']} : ach;
-						delete tempAch['__v'];
-						delete tempAch['_id'];
+					achPromise.then(() => {
+						let strippedAchievements = retAchievements.map(ach => {
+							let tempAch = (ach['_doc']) ? {...ach['_doc']} : ach;
+							delete tempAch['__v'];
+							delete tempAch['_id'];
 
-						return tempAch;
-					});
+							return tempAch;
+						});
 
-					strippedAchievements.sort((a, b) => (a.order > b.order) ? 1 : -1);
+						strippedAchievements.sort((a, b) => (a.order > b.order) ? 1 : -1);
 
-					//check if patreon active, return full access or not
-					User.findOne({name: channel}).then((foundUser) => {
-						if(foundUser) {
-							let fullAccess = false;
+						//check if patreon active, return full access or not
+						User.findOne({name: channel}).then((foundUser) => {
+							if(foundUser) {
+								let fullAccess = false;
 
-							if(foundUser.integration.patreon && foundUser.integration.patreon.is_gold) {
-								fullAccess = true;
+								if(foundUser.integration.patreon && foundUser.integration.patreon.is_gold) {
+									fullAccess = true;
+								}
+
+								let retChannel = {...foundChannel['_doc']};
+								delete retChannel['__v'];
+								delete retChannel['_id'];
+
+								res.json({
+									channel: retChannel,
+									achievements: strippedAchievements,
+									joined: joined,
+									fullAccess,
+									favorited,
+									banned
+								});	
+							} else {
+								res.json({
+									error: "Channel doesn't exist"
+								});
 							}
-
-							let retChannel = {...foundChannel['_doc']};
-							delete retChannel['__v'];
-							delete retChannel['_id'];
-
-							res.json({
-								channel: retChannel,
-								achievements: strippedAchievements,
-								joined: joined,
-								fullAccess,
-								favorited,
-								banned
-							});	
-						} else {
-							res.json({
-								error: "Channel doesn't exist"
-							});
-						}
+						});
 					});
 				});	
 				
@@ -579,20 +623,6 @@ router.post('/mod/revoke', isAuthorized, (req, res) => {
 		}
 	})
 })
-
-router.post('/update', isAuthorized, (req, res) => {
-	Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
-		if(existingChannel) {
-			//grab updates from body
-
-			//upload image to cloudinary if upload is needed
-
-			//update 
-		} else {
-
-		}
-	})
-});
 
 router.post('/mod/preferences', isModAuthorized, (req, res) => {
 	updateChannelPreferences(req, res, req.channel);
@@ -847,30 +877,31 @@ router.get("/user", isAuthorized, (req, res) => {
 			let channelResponse = [];
 
 			let promises = channels.map(channel => {
-				let earnedAchievements = req.user.channels.find(userChannel => (userChannel.channelID === channel.id));
-				let percentage = 0;
-
+				
 				return new Promise((resolve2, reject) => {
-					Achievement.countDocuments({channel: channel.owner}).then(count => {
+					Earned.countDocuments({userID: req.user.id, channelID: channel.id}).then(achCount => {
+						let percentage = 0;
 
-						if(count > 0) {
-							percentage = Math.round((earnedAchievements.achievements.length / count) * 100);
-						}
+						Achievement.countDocuments({channel: channel.owner}).then(count => {
 
-						resolve2({
-				     		logo: channel.logo,
-				     		owner: channel.owner,
-				     		percentage: percentage,
-				     		favorite: true
-				     	});
-				    });
+							if(count > 0) {
+								percentage = Math.round((achCount / count) * 100);
+							}
+
+							resolve2({
+					     		logo: channel.logo,
+					     		owner: channel.owner,
+					     		percentage: percentage,
+					     		favorite: true
+					     	});
+					    });
+					});
 				});
 			});
 
 			Promise.all(promises).then(channels => {
 
 				favChannels = channels;
-				console.log(favChannels);
 				resolve();
 			});
 		});
@@ -882,23 +913,25 @@ router.get("/user", isAuthorized, (req, res) => {
 			let channelResponse = [];
 
 			let promises = channels.map(channel => {
-				let earnedAchievements = req.user.channels.find(userChannel => (userChannel.channelID === channel.id));
-				let percentage = 0;
-
+				
 				return new Promise((resolve2, reject) => {
-					Achievement.countDocuments({channel: channel.owner}).then(count => {
+					Earned.countDocuments({userID: req.user.id, channelID: channel.id}).then(achCount => {
+						let percentage = 0;
 
-						if(count > 0) {
-							percentage = Math.round((earnedAchievements.achievements.length / count) * 100);
-						}
+						Achievement.countDocuments({channel: channel.owner}).then(count => {
 
-						resolve2({
-				     		logo: channel.logo,
-				     		owner: channel.owner,
-				     		percentage: percentage,
-				     		favorite: false
-				     	});
-				    });
+							if(count > 0) {
+								percentage = Math.round((achCount / count) * 100);
+							}
+
+							resolve2({
+					     		logo: channel.logo,
+					     		owner: channel.owner,
+					     		percentage: percentage,
+					     		favorite: false
+					     	});
+					    });
+					});
 				});
 			});
 
@@ -924,37 +957,64 @@ router.get("/user", isAuthorized, (req, res) => {
 	});
 });
 
+router.get('/member/select', isAuthorized, (req, res) => {
+	User.findOne({name: req.query.uid}).then(foundUser => {
+		if(foundUser) {
+			Channel.findOne({owner: req.query.owner}).then(foundChannel => {
+				if(foundChannel) {
+					Earned.find({userID: foundUser.id, channelID: foundChannel.id}, ['achievementID']).then(foundEarned => {
+
+						let channelIndex = foundUser.channels.findIndex(channel => (channel.channelID === foundChannel.id));
+						let banned = foundUser.channels[channelIndex].banned;
+						let achievements = foundEarned.map(found => found.achievementID);
+
+						res.json({
+							name: foundUser.name,
+							logo: foundUser.logo,
+							achievements,
+							banned
+						});
+					})
+				}
+			});
+			
+		}
+	})
+})
+
 router.post('/member/save', isAuthorized, (req, res) => {
+	let currentDate = Date.now();
+
 	User.findOne({name: req.body.id}).then(foundUser => {
 		if(foundUser) {
 			Channel.findOne({owner: req.user.name}).then(foundChannel => {
 				if(foundChannel) {
+
 					let channelIdx = foundUser.channels.findIndex(channel => channel.channelID === foundChannel.id);
 
 					if(channelIdx >= 0 && !foundUser.channels[channelIdx].banned) {
+
 						let achievements = req.body.achievements;
-						let currentAchievements = foundUser.channels[channelIdx].achievements;
 
-						if(achievements.length > 0) {
-							let currentDate = Date.now();
+						Earned.find({achievementID: { $in: achievements}}).then(earneds => {
+							let foundAchs = earneds.map(earned => earned.achievementID);
 
-							achievements.forEach(achievement => {
-								let idx = currentAchievements.findIndex(cAchievement => cAchievement.aid === achievement);
-
-								if(idx >= 0) {
-									currentAchievements.splice(idx, 1);
-								} else {
-									currentAchievements.push({
-										aid: achievement,
-										earned: currentDate
-									});
+							let newAchs = req.body.achievements.map(ach => {
+								if(foundAchs.indexOf(ach) < 0) {
+									new Earned({
+										userID: foundUser.id,
+										channelID: foundChannel.id,
+										achievementID: ach,
+										earned: currentDate,
+										first: false
+									}).save();
 								}
 							});
 
-							foundUser.save().then(savedUser => {
+							Earned.deleteMany({achievementID: { $in: foundAchs}}).then(err => {
 
 								new Notice({
-									user: savedUser._id,
+									user: foundUser._id,
 									logo: foundChannel.logo,
 									message: `Your achievements have been adjusted by the owner of the channel!`,
 									date: Date.now(),
@@ -972,20 +1032,25 @@ router.post('/member/save', isAuthorized, (req, res) => {
 											channel: savedNotice.channel,
 											status: savedNotice.status
 										},
-										user: savedUser.name
+										user: foundUser.name
 									});
+									
+									Earned.find({userID: foundUser.id, channelID: foundChannel.id}, ['achievementID']).then(latestEarned => {
 
-									res.json({
-										member: {
-											name: savedUser.name,
-											logo: savedUser.logo,
-											achievements: savedUser.channels[channelIdx].achievements.map((achievement => achievement.aid)),
-											banned: savedUser.channels[channelIdx].banned
-										}
-									});
+										let userAchievements = latestEarned.map(latest => latest.achievementID);
+
+										res.json({
+											member: {
+												name: foundUser.name,
+												logo: foundUser.logo,
+												achievements: userAchievements,
+												banned: foundUser.channels[channelIdx].banned
+											}
+										});
+									})
 								});
 							})
-						}
+						});
 					}
 				}
 			})
@@ -998,20 +1063,41 @@ router.post("/member/reset", isAuthorized, (req, res) => {
 		if(foundUser) {
 			Channel.findOne({owner: req.user.name}).then(foundChannel => {
 				if(foundChannel) {
-					let channelIdx = foundUser.channels.findIndex(channel => channel.channelID === foundChannel.id);
+					//TODO: Delete all entries in Earned for this member
 
-					if(channelIdx >= 0) {
-						foundUser.channels[channelIdx].achievements = [];
-						foundUser.save().then(savedUser => {
-							res.json({
-								member: {
-									name: savedUser.name,
-									logo: savedUser.logo,
-									achievements: []
-								}
+					Earned.deleteMany({userID: foundUser.id, channelID: foundChannel.id}).then(err => {
+
+						new Notice({
+							user: foundUser._id,
+							logo: foundChannel.logo,
+							message: `Your achievements have been adjusted by the owner of the channel!`,
+							date: Date.now(),
+							type: 'achievement',
+							channel: foundChannel.owner,
+							status: 'new'
+						}).save().then(savedNotice => {
+							emitNotificationsUpdate(req, {
+								notification: {
+									id: savedNotice._id,
+									logo: savedNotice.logo,
+									message: savedNotice.message,
+									date: savedNotice.date,
+									type: savedNotice.type,
+									channel: savedNotice.channel,
+									status: savedNotice.status
+								},
+								user: foundUser.name
 							});
-						})
-					}
+						});
+
+						res.json({
+							member: {
+								name: foundUser.name,
+								logo: foundUser.logo,
+								achievements: []
+							}
+						});
+					});
 				}
 			})
 		} else {
@@ -1033,17 +1119,25 @@ router.post("/member/ban", isAuthorized, (req, res) => {
 						foundUser.channels[channelIdx].banned = true;
 
 						if(req.body.resetAchievements) {
-							foundUser.channels[channelIdx].achievements = [];
+							Earned.deleteMany({userID: foundUser.id, channelID: foundChannel.id}).then(err => {
+
+							});
 						}
 						
 						foundUser.save().then(savedUser => {
-							res.json({
-								member: {
-									name: savedUser.name,
-									logo: savedUser.logo,
-									achievements: savedUser.channels[channelIdx].achievements.map((achievement => achievement.aid)),
-									banned: true
-								}
+							
+							Earned.find({userID: foundUser.id, channelID: foundChannel.id}, ['achievementID']).then(latestEarned => {
+
+								let userAchievements = latestEarned.map(latest => latest.achievementID);
+
+								res.json({
+									member: {
+										name: savedUser.name,
+										logo: savedUser.logo,
+										achievements: userAchievements,
+										banned: true
+									}
+								});
 							});
 						})
 					}
@@ -1068,13 +1162,19 @@ router.post("/member/unban", isAuthorized, (req, res) => {
 						foundUser.channels[channelIdx].banned = false;
 						
 						foundUser.save().then(savedUser => {
-							res.json({
-								member: {
-									name: savedUser.name,
-									logo: savedUser.logo,
-									achievements: savedUser.channels[channelIdx].achievements.map((achievement => achievement.aid)),
-									banned: false
-								}
+							
+							Earned.find({userID: foundUser.id, channelID: foundChannel.id}, ['achievementID']).then(latestEarned => {
+
+								let userAchievements = latestEarned.map(latest => latest.achievementID);
+
+								res.json({
+									member: {
+										name: savedUser.name,
+										logo: savedUser.logo,
+										achievements: userAchievements,
+										banned: false
+									}
+								});
 							});
 						})
 					}
@@ -1088,55 +1188,6 @@ router.post("/member/unban", isAuthorized, (req, res) => {
 	})
 });
 
-router.get("/member/retrieve", isAuthorized, (req, res) => {
-	let offset = parseInt(req.query.offset);
-
-	getMembersOffset(req, res, offset).then(data => {
-		console.log(data.members.length + offset);
-		console.log(data.channel.members.length);
-		if(data.members.length + offset < data.channel.members.length) {
-			offset = data.members.length + offset
-		} else {
-			offset = -1
-		}
-
-		res.json({
-			members: data.members,
-			offset
-		});
-	})
-});
-
-let getMembersOffset = (req, res, offset) => {
-	return new Promise((resolve, reject) => {
-		Channel.findOne({'owner': req.user.name}).then(foundChannel => {
-			if(foundChannel) {
-				let memberArray = foundChannel.members;
-
-				User.find({'_id': { $in: memberArray}}).sort({'name': 1}).skip(offset).limit(RETRIEVE_LIMIT).exec((err, members) => {
-
-					let retMembers = members.map(member => {
-						let channelInfo = member.channels.find(channel => channel.channelID === foundChannel.id);
-
-						return {
-							name: member.name,
-							logo: member.logo,
-							achievementsEarned: channelInfo.achievements.map((achievement => achievement.aid))
-						}
-					});
-
-					resolve({
-						members: retMembers,
-						channel: foundChannel
-					});
-				});
-			} else {
-				reject();
-			}
-		});
-	});
-}
-
 router.get("/user/retrieve", isAuthorized, (req, res) => {
 	let offset = parseInt(req.query.offset);
 
@@ -1144,22 +1195,25 @@ router.get("/user/retrieve", isAuthorized, (req, res) => {
 
 	Channel.find({'_id': { $in: channelArray}}).skip(offset).limit(RETRIEVE_LIMIT).exec((err, channels) => {
 		let promises = channels.map(channel => {
+			
 			let earnedAchievements = req.user.channels.find(userChannel => (userChannel.channelID === channel.id));
-			let percentage = 0;
 
 			return new Promise((resolve, reject) => {
-				Achievement.countDocuments({channel: channel.owner}).then(count => {
+				Earned.countDocuments({userID: req.user.id, channelID: channel.id}).then(achCount => {
+					let percentage = 0;		
+					Achievement.countDocuments({channel: channel.owner}).then(count => {
 
-					if(count > 0) {
-						percentage = Math.round((earnedAchievements.achievements.length / count) * 100);
-					}
+						if(count > 0) {
+							percentage = Math.round((achCount / count) * 100);
+						}
 
-					resolve({
-			     		logo: channel.logo,
-			     		owner: channel.owner,
-			     		percentage: percentage,
-			     		favorite: false
-			     	});
+						resolve({
+				     		logo: channel.logo,
+				     		owner: channel.owner,
+				     		percentage: percentage,
+				     		favorite: false
+				     	});
+					});
 			    });
 			});
 		});
@@ -1227,7 +1281,7 @@ router.post("/signup", isAuthorized, (req, res) => {
 				type: 'confirmation',
 				status: 'new'
 			}).save().then(savedNotice => {
-				console.log(savedNotice);
+				//Do nothing
 			});
 
 		    res.json({
@@ -1235,88 +1289,6 @@ router.post("/signup", isAuthorized, (req, res) => {
 		    });
 		});
 
-	});
-});
-
-router.post('/queue', isAdminAuthorized, (req, res) => {
-	let uid = req.body.uid;
-
-	Token.deleteOne({uid}).then(err => {
-		User.findById(uid).then(foundUser => {
-			let email = foundUser.email;
-			var transporter = nodemailer.createTransport({
-				service: 'gmail',
-				auth: {
-					user: process.env.GML,
-					pass: process.env.GMLP
-				}
-			});
-
-			const mailOptions = {
-			    from: 'Stream Achievements <' + process.env.GML + '>', // sender address
-			    to: email, // list of receivers
-			    subject: 'Info on your request!', // Subject line
-			    html: '<h1>Thank you for your interest in Stream Achievements!</h1><p>We reviewed your channel and have placed you in the queue as we slowly add people to the system! We want to ensure the best experience for streamer and viewer alike, so we are taking every percaution to have a top performing app!</p><p>Keep an eye on your email / notifications, and the moment you are added, you will be send a confirmation code to enter on the site!</p><p>Thank you again for wanting to join in on the fun, can\'t wait to have you join us!</p>'// plain text body
-			};
-		});
-	});
-});
-
-router.post('/confirm', isAdminAuthorized, (req, res) => {
-
-	User.findOne({name: req.body.name}).then(foundMember => {
-		let uid = foundMember['_id'];
-
-		Token.findOne({uid}).then(foundToken => {
-			let generatedToken = crypto.randomBytes(16).toString('hex');
-			foundToken.token = generatedToken;
-			foundToken.created = Date.now();
-			foundToken.save().then(savedToken => {
-				
-				let email = foundMember.email;
-
-				var auth = {
-				    type: 'oauth2',
-				    user: process.env.GML,
-				    clientId: process.env.GMLCID,
-				    clientSecret: process.env.GMLCS,
-				    refreshToken: process.env.GMLRT
-				};
-
-				var transporter = nodemailer.createTransport({
-					service: 'gmail',
-					auth: auth
-				});
-
-				const mailOptions = {
-				    from: process.env.GML, // sender address
-				    to: email, // list of receivers
-				    subject: 'Your Confirmation Code!', // Subject line
-				    html: '<div style="background:#222938;padding-bottom:30px;"><h1 style="text-align:center;background:#2f4882;padding:15px;margin-top:0;"><img style="max-width:600px;" src="https://res.cloudinary.com/phirehero/image/upload/v1557947921/sa-logo.png" /></h1><h2 style="color:#FFFFFF; text-align: center;margin-top:30px;margin-bottom:25px;font-size:22px;">Thank you for your interest in Stream Achievements!</h2><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">We reviewed your channel and feel you are a perfect fit to join in on this pilot, and test the new features we aim to provide for streamers!</p><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">To get started, all you need to do is <a style="color: #ecdc19;" href="http://streamachievements.com/channel/verify?id=' + generatedToken + '&utm_medium=Email">verify your account</a>, and you\'ll be all set!</p><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">We are truly excited to see what you bring in terms of Achievements, and can\'t wait to see how much your community engages!</p></div>'
-				};
-
-				transporter.sendMail(mailOptions, function (err, info) {
-				   if(err)
-				     console.log(err)
-				   else
-
-				   	new Notice({
-						user: uid,
-						logo: DEFAULT_ICON,
-						message: "Your channel has been approved! Go check your email for your confirmation code! Don't forget to check your spam folder, too!",
-						date: Date.now(),
-						type: 'confirmation',
-						status: 'new'
-					}).save().then(savedNotice => {
-						console.log(savedNotice);
-					});
-
-				    res.json({
-				    	message: "email sent"
-				    });
-				});
-			});
-		});
 	});
 });
 
@@ -1336,7 +1308,14 @@ router.post('/verify', isAuthorized, (req, res) => {
 					expired: true
 				});
 			} else {
+				let fullAccess = false;
+
 				let type = req.user.broadcaster_type;
+				let patreon = req.user.integration.patreon;
+
+				if(patreon && (patreon.type === 'forever' || patreon.is_gold)) {
+					fullAccess = true;
+				}
 
 				new Channel({
 					owner: req.user.name,
@@ -1352,10 +1331,13 @@ router.post('/verify', isAuthorized, (req, res) => {
 					oid: uuid(),
 					overlay: DEFAULT_OVERLAY_CONFIG,
 					nextUID: 1,
+					gold: fullAccess,
 					broadcaster_type: {
 						twitch: type
 					}
 				}).save().then((newChannel) => {
+
+					//TODO: Send email detailing info from confirmation page
 
 					new Notice({
 						user: process.env.NOTICE_USER,
@@ -1369,6 +1351,13 @@ router.post('/verify', isAuthorized, (req, res) => {
 					req.user.type = 'verified';
 					req.user.save().then((savedUser) => {
 						Token.deleteOne({uid: req.user._id, token}).then(err => {
+
+							emitNewChannel({
+								name: savedUser.name,
+								'full-access': fullAccess,
+								online: false
+							});
+
 							res.json({
 								verified: true
 							});	
