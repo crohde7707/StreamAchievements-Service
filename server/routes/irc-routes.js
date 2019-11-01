@@ -2,7 +2,54 @@ const router = require('express').Router();
 const User = require('../models/user-model');
 const Listener = require('../models/listener-model');
 const Token = require('../models/token-model');
+const Irc = require('../models/irc-model');
 const mongoose = require('mongoose');
+
+router.get('/init', (req, res) => {
+	Irc.findOne().then(ircData => {
+		if(ircData) {
+			res.json({
+				at: ircData.at,
+				rt: ircData.rt,
+				last: ircData.last,
+				expires_in: ircData.expires_in
+			});
+		} else {
+			res.json({
+				success: false
+			})
+		}
+	});
+});
+
+router.put('/init', (req, res) => {
+	Irc.findOne().then(ircData => {
+
+		if(ircData) {
+			ircData.at = req.body.at;
+			ircData.rt = req.body.rt;
+			ircData.last = Date.now();
+			ircData.expires_in = req.body.expires_in;
+
+			ircData.save().then(savedIRC => {
+				res.json({
+					success: true
+				});
+			})
+		} else {
+			new Irc({
+				at: req.body.at,
+				rt: req.body.rt,
+				last: Date.now(),
+				expires_in: req.body.expires_in
+			}).save().then(savedIRC => {
+				res.json({
+					success: true
+				});
+			})
+		}
+	});
+})
 
 router.get('/channels', (req, res) => {
 	let offset = parseInt(req.query.offset) || 0;

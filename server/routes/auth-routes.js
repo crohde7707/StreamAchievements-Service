@@ -84,10 +84,8 @@ router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) =>
 			let refreshPromise;
 
 			if(isExpired(expires)) {
-				console.log('patreon token expired');
 				refreshPromise = new Promise((res2, rej2) => {
 				   refreshPatreonToken(req, patreonInfo.rt).then(newTokens => {
-						console.log('token is refreshed');
 						if(newTokens) {
 							at = newTokens.at;
 							rt = newTokens.rt;
@@ -104,7 +102,6 @@ router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) =>
 				let access_token = cryptr.decrypt(at);
 				
 				if(!id) {
-					console.log('grabbing id from user');
 					id = req.user.integration.patreon.id;
 
 					if(!id) {
@@ -114,14 +111,11 @@ router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) =>
 						});
 					}
 				} else {
-					console.log('getting up to date info from patreon');
-
 					axios.get(`https://www.patreon.com/api/oauth2/v2/members/${id}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
 						headers: {
 							Authorization: `Bearer ${access_token}`
 						}
 					}).then(response => {
-						console.log('up to date info obtained');
 						//active_patron, declined_patron, former_patron, null
 						let patron_status = response.data.data.attributes.patron_status;
 						let is_follower = response.data.data.attributes.is_follower;
@@ -232,7 +226,6 @@ router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) =>
 });
 
 router.get('/patreon', isAuthorized, (req, res) => {
-	console.log('why tho?');
 	let patreonURL = 'https://www.patreon.com/oauth2/authorize?';
 	patreonURL += 'response_type=code&';
 	patreonURL += 'client_id=' + process.env.PCID + '&';
@@ -439,10 +432,10 @@ let refreshPatreonToken = (req, refreshToken) => {
 
 	return new Promise((resolve, reject) => {
 		let rt = cryptr.decrypt(refreshToken);
-		console.log('calling to get a token refresh');
+
 		axios.post(`https://www.patreon.com/api/oauth2/token?grant_type=refresh_token&refresh_token=${rt}&client_id=${process.env.PCID}&client_secret=${process.env.PCS}`)
 			.then(response => {
-				console.log('token obtained');
+
 				let newAT = cryptr.encrypt(response.data.access_token);
 				let newRT = cryptr.encrypt(response.data.refresh_token);
 				let today = new Date();

@@ -18,11 +18,9 @@ let getRedirectLocation = (req, res) => {
 	if((headers.origin + '/') === process.env.WEB_DOMAIN) {
 
 		let endpoint = originalUrl.split('?')[0];
-		console.log(endpoint);
+		
 		if(endpoint) {
 			redirectURL += endpointMap[endpoint];
-
-			console.log(redirectURL);
 
 			if(query && query.channel) {
 				redirectURL = redirectURL.replace(new RegExp('{channel}', 'gi'), query.channel);
