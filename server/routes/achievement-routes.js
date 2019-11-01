@@ -1405,7 +1405,6 @@ let handleAchievement = (req, res, foundChannel, achievementCriteria, userCriter
 										'Client-ID': process.env.TCID
 									}
 								}).then(res => {
-									console.log(res.data);
 									if(res.data && res.data.data && res.data.data[0]) {
 										userObj.userID = res.data.data[0].id;
 										userObj.name = res.data.data[0].login
@@ -1501,7 +1500,7 @@ let handleSubBackfill = (req, foundUser, foundChannel, foundAchievement, tier) =
 	//First time user getting an achievement, lets backfill award
 	//Get all sub, resub, & gifted sub listeners for the channel
 	Listener.find({achType: { $in: ["0","1"]}, channel: foundChannel.owner}).then(listeners => {
-		console.log(foundAchievement.id);
+		
 		if(listeners) {
 			//Get current listener achieved to get the criteria
 			let entryIdx = listeners.findIndex(listener => {
@@ -1514,7 +1513,7 @@ let handleSubBackfill = (req, foundUser, foundChannel, foundAchievement, tier) =
 				let achType = currentListener.achType;
 				let condition = currentListener.condition;
 				let listenersToAward = [];
-				console.log(currentListener);
+				
 				if(achType === "1") {
 					//Total Achievement: Backfill only totals
 					listeners.forEach(listener => {

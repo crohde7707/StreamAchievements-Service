@@ -64,7 +64,6 @@ router.get("/user", isAuthorized, (req, res) => {
 
 	setTimeout(() => {
 		if(timeout) {
-			console.log('timeout');
 			res.status(500);
 			res.json({
 				message: 'Internal Server Issue'
