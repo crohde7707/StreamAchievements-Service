@@ -136,7 +136,7 @@ let getListeners = (offset, limit, total) => {
 				resolve({err: 'Issue retrieving from Listener sets'});
 			} else {
 				let listeners = doc.map(listener => {
-					
+
 					return {
 						channel: listener.channel,
 						achievement: listener.achievement,
@@ -175,11 +175,18 @@ let getChannels = (offset, limit, total) => {
 						full_access: false
 					};
 
-					let patreon = user.integration.patreon;
+					let {patreon, streamlabs} = user.integration;
 
 					if(patreon) {
 						if(patreon.forever || patreon.is_gold) {
 							channel['full-access'] = true;
+						}
+					}
+
+					if(streamlabs) {
+						channel.bot = {
+							bot: 'streamlabs',
+							st: streamlabs.st
 						}
 					}
 

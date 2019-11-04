@@ -69,6 +69,7 @@ WebSockets.on('connection', function (socket) {
     }
 
     socket.on('handshake', function(data) {
+
     	if(data.name = "SAIRC") {
     		
     		app.set('IRCSOCKET', socket.id);

@@ -8,7 +8,9 @@ const User = require('../models/user-model');
 const Channel = require('../models/channel-model');
 const {
 	emitBecomeGold,
-	emitRemoveGold
+	emitRemoveGold,
+	emitConnectBot,
+	emitDisconnectBot
 } = require('../utils/socket-utils');
 
 //patreon
@@ -225,12 +227,59 @@ router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) =>
 	
 });
 
+router.get('/streamlabs', isAuthorized, (req, res) => {
+	let streamlabsURL = 'https://www.streamlabs.com/api/v1.0/authorize?';
+	streamlabsURL += 'client_id=' + process.env.SLCID + '&'; //NJWtH8OFUvAqxZcpHgsltzpJa81sQRTYQrVqDpYQ
+	streamlabsURL += 'redirect_uri=' + process.env.SLCPR + '&';
+	streamlabsURL += 'response_type=code&scope=socket.token';
+
+	res.redirect(streamlabsURL);
+});
+
+router.get('/streamlabs/redirect', isAuthorized, (req, res) => {
+	let streamlabsTokenURL = 'https://streamlabs.com/api/v1.0/token';
+
+	axios.post(streamlabsTokenURL, {
+		'grant_type': 'authorization_code',
+		'client_id': process.env.SLCID,
+		'client_secret': process.env.SLCCS,
+		'code': req.query.code,
+		'redirect_uri': process.env.SLCPR
+	}).then(response => {
+
+		axios.get('https://streamlabs.com/api/v1.0/socket/token?access_token=' + response.data.access_token).then(socket => {
+
+			let st = cryptr.encrypt(socket.data.socket_token);
+
+			let integration = Object.assign({}, req.user.integration);
+
+			integration.streamlabs = {
+			 	st
+			};
+
+			req.user.integration = integration;
+
+			req.user.save().then(savedUser => {
+				
+				emitConnectBot(req, {
+					channel: savedUser.name,
+					st: savedUser.integration.streamlabs.st,
+					bot: 'streamlabs'
+				});
+			 	
+			 	res.redirect(process.env.WEB_DOMAIN + 'profile?tab=integration');
+			});
+		})
+	});
+
+})
+
 router.get('/patreon', isAuthorized, (req, res) => {
 	let patreonURL = 'https://www.patreon.com/oauth2/authorize?';
 	patreonURL += 'response_type=code&';
 	patreonURL += 'client_id=' + process.env.PCID + '&';
 	patreonURL += 'redirect_uri=' + process.env.PPR;
-	patreonURL += '&scope=campaigns%20identity%20identity%5Bemail%5D%20campaigns.members'
+	patreonURL += '&scope=campaigns%20identity%20identity%5Bemail%5D%20campaigns.members';
 
 	res.redirect(patreonURL);
 });
@@ -335,7 +384,7 @@ router.get('/patreon/redirect', isAuthorized, (req, res) => {
 				});
 			}
 			
-			res.redirect(process.env.WEB_DOMAIN + 'profile');
+			res.redirect(process.env.WEB_DOMAIN + 'profile?tab=integration');
 		});
 
 	});
@@ -353,6 +402,27 @@ router.post('/patreon/sync', isAuthorized, (req, res) => {
 		res.json(patreonData);
 	});
 });
+
+router.post('/streamlabs/unlink', isAuthorized, (req, res) => {
+	let integration = Object.assign({}, req.user.integration);
+
+	delete integration.streamlabs;
+
+	req.user.integration = integration;
+
+	req.user.save().then(savedUser => {
+
+		emitDisconnectBot(req, {
+			channel: savedUser.name,
+			bot: 'streamlabs'
+		});
+
+		res.json({
+			success: true,
+			service: 'streamlabs'
+		});
+	});
+})
 
 router.post('/patreon/unlink', isAuthorized, (req, res) => {
 	let integration = Object.assign({}, req.user.integration);

@@ -25,7 +25,8 @@ const userSchema = new Schema({
 	delegate: Array,
 	integration: {
 		twitch: Object,
-		patreon: Object
+		patreon: Object,
+		streamlabs: Object
 	},
 	preferences: {
 		autojoin: Boolean

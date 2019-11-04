@@ -312,64 +312,113 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 			created: false,
 			message: "This type of achievement is for Stream Achievements Gold! Sync your Patreon if your account is, or reach out on Discord!",
 		});
+
 	} else {
 
-		Achievement.findOne(query).then((existingAchievement) => {
-			if(existingAchievement) {
+		User.findOne({name: existingChannel.owner}).then(foundUser => {
+			let streamlabs = foundUser.integration.streamlabs;
+
+			if((req.body.achType === "5" || req.body.achType === "6") && !streamlabs) {
 				res.json({
 					created: false,
-					message: "An achievement with this name already exists!",
-					achievement: existingAchievement
+					message: "This type of achievement requires Streamlabs integration! Head over to your Profile and connect!",
 				});
 			} else {
+				Achievement.findOne(query).then((existingAchievement) => {
+					if(existingAchievement) {
+						res.json({
+							created: false,
+							message: "An achievement with this name already exists!",
+							achievement: existingAchievement
+						});
+					} else {
 
-				Achievement.countDocuments({channel: existingChannel.owner}).then(preCount => {
+						Achievement.countDocuments({channel: existingChannel.owner}).then(preCount => {
 
-					let achData = {
-						uid: existingChannel.nextUID,
-						channel: existingChannel.owner,
-						title: req.body.title,
-						description: req.body.description,
-						icon: req.body.icon,
-						earnable: req.body.earnable,
-						limited: req.body.limited,
-						secret: req.body.secret,
-						listener: req.body.listener,
-						alert: req.body.alert || true,
-						order: preCount
-					};
+							let achData = {
+								uid: existingChannel.nextUID,
+								channel: existingChannel.owner,
+								title: req.body.title,
+								description: req.body.description,
+								icon: req.body.icon,
+								earnable: req.body.earnable,
+								limited: req.body.limited,
+								secret: req.body.secret,
+								listener: req.body.listener,
+								alert: req.body.alert || true,
+								order: preCount
+							};
 
-					let listenerData = {
-						channel: existingChannel.owner,
-						achType: req.body.achType,
-						uid: uuid()
-					};
+							let listenerData = {
+								channel: existingChannel.owner,
+								achType: req.body.achType,
+								uid: uuid()
+							};
 
-					listenerData.condition = req.body.condition;
+							listenerData.condition = req.body.condition;
 
-					if(listenerData.achType === "4") {
-						listenerData.bot = req.body.bot;
-						listenerData.query = req.body.query;
-					}
+							if(listenerData.achType === "4") {
+								listenerData.bot = req.body.bot;
+								listenerData.query = req.body.query;
+							}
 
-					Listener.findOne(listenerData).then(foundListener => {
-						if(foundListener) {
-							Achievement.findOne({listener: foundListener._id}).then(foundAchievement => {
-								res.json({
-									created: false,
-									message: "The conditions you selected are already taken by the \"" + foundAchievement.title + "\" achievement!"
-								});
-							});
-						} else {
-							if(req.body.icon) {
-								uploadImage(req.body.icon, req.body.iconName, existingChannel.owner).then((result) => {
-									achData.icon = result.url;
-									new Achievement(achData).save().then((newAchievement) => {
-										listenerData.achievement = newAchievement.id;
-										listenerData.aid = newAchievement.uid;
-										
-										result.achievementID = newAchievement.id;
-										result.save().then(updatedImage => {
+							Listener.findOne(listenerData).then(foundListener => {
+								if(foundListener) {
+									Achievement.findOne({listener: foundListener._id}).then(foundAchievement => {
+										res.json({
+											created: false,
+											message: "The conditions you selected are already taken by the \"" + foundAchievement.title + "\" achievement!"
+										});
+									});
+								} else {
+									if(req.body.icon) {
+										uploadImage(req.body.icon, req.body.iconName, existingChannel.owner).then((result) => {
+											achData.icon = result.url;
+											new Achievement(achData).save().then((newAchievement) => {
+												listenerData.achievement = newAchievement.id;
+												listenerData.aid = newAchievement.uid;
+												
+												result.achievementID = newAchievement.id;
+												result.save().then(updatedImage => {
+													existingChannel.nextUID = newAchievement.uid + 1;
+													existingChannel.save().then(updatedChannel => {
+														//create listener for achievement
+														if(req.body.achType !== "3") {
+															new Listener(listenerData).save().then(newListener => {
+																
+																emitNewListener(req, {
+																	uid: listenerData.uid,
+																	channel: listenerData.channel,
+																	achievement: listenerData.achievement,
+																	achType: listenerData.achType,
+																	query: listenerData.query,
+																	bot: listenerData.bot,
+																	condition: listenerData.condition
+																});
+
+																newAchievement.listener = newListener.id;
+																newAchievement.save().then(updatedAchievement => {
+																	res.json({
+																		created: true,
+																		achievement: updatedAchievement
+																	});
+																});
+															});
+														} else {
+															res.json({
+																created: true,
+																achievement: newAchievement
+															});
+														}
+													});
+												});
+											});
+										});	
+									} else {
+										new Achievement(achData).save().then((newAchievement) => {
+											listenerData.achievement = newAchievement.id;
+											listenerData.aid = newAchievement.uid;
+											
 											existingChannel.nextUID = newAchievement.uid + 1;
 											existingChannel.save().then(updatedChannel => {
 												//create listener for achievement
@@ -402,54 +451,14 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 												}
 											});
 										});
-									});
-								});	
-							} else {
-								new Achievement(achData).save().then((newAchievement) => {
-									listenerData.achievement = newAchievement.id;
-									listenerData.aid = newAchievement.uid;
-									
-									existingChannel.nextUID = newAchievement.uid + 1;
-									existingChannel.save().then(updatedChannel => {
-										//create listener for achievement
-										if(req.body.achType !== "3") {
-											new Listener(listenerData).save().then(newListener => {
-												
-												emitNewListener(req, {
-													uid: listenerData.uid,
-													channel: listenerData.channel,
-													achievement: listenerData.achievement,
-													achType: listenerData.achType,
-													query: listenerData.query,
-													bot: listenerData.bot,
-													condition: listenerData.condition
-												});
-
-												newAchievement.listener = newListener.id;
-												newAchievement.save().then(updatedAchievement => {
-													res.json({
-														created: true,
-														achievement: updatedAchievement
-													});
-												});
-											});
-										} else {
-											res.json({
-												created: true,
-												achievement: newAchievement
-											});
-										}
-									});
-								});
-							}
-							
-						}
-					});	
-
-
-				});
+									}	
+								}
+							});	
+						});
+					}
+				});	
 			}
-		});	
+		})
 	}
 }
 

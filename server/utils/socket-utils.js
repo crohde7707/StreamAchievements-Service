@@ -1,68 +1,56 @@
-let emitNewChannel = (req, channel) => {
+let emit = (req, event, data) => {
 	let ws = req.app.get('ws');
 	let sid = req.app.get('IRCSOCKET');
 
-	ws.to(sid).emit('new-channel', {
-		name: channel.name,
-		'full-access': channel['full-access'],
-		connected: false
-	});
+	ws.to(sid).emit(event, data);
+}
+
+let emitNewChannel = (req, channel) => {
+	emit(req, 'new-channel', channel);
+}
+
+let emitChannelUpdate = (req, channelUpdates) => {
+	emit(req, 'channel-update', channelUpdates);
 }
 
 let emitNewListener = (req, listener) => {
-	let ws = req.app.get('ws');
-	let sid = req.app.get('IRCSOCKET');
-	
-	ws.to(sid).emit('new-listener', listener);
+	emit(req, 'new-listener', listener);
 }
 
 let emitUpdateListener = (req, listener) => {
-	let ws = req.app.get('ws');
-	let sid = req.app.get('IRCSOCKET');
-	
-	ws.to(sid).emit('update-listener', listener);
+	emit(req, 'update-listener', listener);
 }
 
 let emitRemoveListener = (req, listener) => {
-	let ws = req.app.get('ws');
-	let sid = req.app.get('IRCSOCKET');
-	
-	ws.to(sid).emit('remove-listener', listener);
+	emit(req, 'remove-listener', listener);
 }
 
 let emitBecomeGold = (req, channel) => {
-	console.log(channel + ' is becoming gold');
-	let ws = req.app.get('ws');
-	let sid = req.app.get('IRCSOCKET');
-	
-	ws.to(sid).emit('become-gold', channel);
+	emit(req, 'become-gold', channel);
 }
 
 let emitRemoveGold = (req, channel) => {
-	let ws = req.app.get('ws');
-	let sid = req.app.get('IRCSOCKET');
-	
-	ws.to(sid).emit('remove-gold', channel);
+	emit(req, 'remove-gold', channel);
+}
+
+let emitConnectBot = (req, channelData) => {
+	emit(req, 'connect-bot', channelData);
+}
+
+let emitDisconnectBot = (req, channelData) => {
+	emit(req, 'disconnect-bot', channelData);	
 }
 
 let emitAwardedAchievement = (req, achievement) => {
-	let ws = req.app.get('ws');
-	let sid = req.app.get('IRCSOCKET');
-	
-	ws.to(sid).emit('achievement-awarded', achievement);
+	emit(req, 'achievement-awarded', achievement);
 }
 
 let emitAwardedAchievementNonMember = (req, achievement) => {
-	let ws = req.app.get('ws');
-	let sid = req.app.get('IRCSOCKET');
-
-	ws.to(sid).emit('achievement-awarded-nonMember', achievement);
+	emit(req, 'achievement-awarded-nonMember', achievement);
 }
 
 let emitTestListener = (req, data) => {
-	let ws = req.app.get('ws');
-	let sid = req.app.get('IRCSOCKET');
-	ws.to(sid).emit('test', data);
+	emit(req, 'test', data);
 }
 
 let emitOverlayAlert = (req, data) => {
@@ -98,11 +86,14 @@ let emitNotificationsUpdate = (req, data) => {
 
 module.exports = {
 	emitNewChannel,
+	emitChannelUpdate,
 	emitNewListener,
 	emitUpdateListener,
 	emitRemoveListener,
 	emitBecomeGold,
 	emitRemoveGold,
+	emitConnectBot,
+	emitDisconnectBot,
 	emitAwardedAchievement,
 	emitAwardedAchievementNonMember,
 	emitTestListener,

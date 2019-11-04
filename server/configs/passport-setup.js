@@ -6,6 +6,7 @@ const Notice = require('../models/notice-model');
 const Earned = require('../models/earned-model');
 const Cryptr = require('cryptr');
 const cryptr = new Cryptr(process.env.SCK);
+const {	emitChannelUpdate } = require('../utils/socket-utils');
 
 passport.serializeUser((user, done) => {
 	done(null, user);
@@ -57,8 +58,11 @@ passport.use(
 					Channel.findOne({twitchID: savedUser.integration.twitch.etid}).then(foundChannel => {
 
 						if(foundChannel) {
+							let ownerUpdate = false;
+
 							if(foundChannel.owner !== savedUser.name) {
 								updated = true;
+								ownerUpdate = foundChannel.owner;
 								foundChannel.owner = savedUser.name;
 							}
 
@@ -77,6 +81,14 @@ passport.use(
 										type: 'profile',
 										status: 'new'
 									}).save();
+
+									if(ownerUpdate) {
+										//Name change occured, inform the IRC to connect
+										emitChannelUpdate(req, {
+											old: ownerUpdate,
+											new: savedChannel.owner
+										});
+									}
 								}
 
 								done(null, savedUser);

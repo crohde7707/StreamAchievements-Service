@@ -59,7 +59,7 @@ router.get('/users', isAdminAuthorized, (req, res) => {
 
 router.get("/user", isAuthorized, (req, res) => {
 	let uid = cryptr.encrypt(req.user._id);
-	let patreonInfo;
+	let patreonInfo, streamlabsInfo;
 	let isMod = false;
 
 	setTimeout(() => {
@@ -89,6 +89,12 @@ router.get("/user", isAuthorized, (req, res) => {
 		patreonInfo = false;
 	}
 
+	if(req.user.integration.streamlabs) {
+		streamlabsInfo = true;
+	} else {
+		streamlabsInfo = false;
+	}
+
 	Notice.countDocuments({user: req.user._id, status: 'new'}).exec().then(count => {
 		Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
 
@@ -106,6 +112,7 @@ router.get("/user", isAuthorized, (req, res) => {
 						username: req.user.name,
 						logo: req.user.logo,
 						patreon: patreonInfo,
+						streamlabs: streamlabsInfo,
 						status: 'verified',
 						type: req.user.type,
 						preferences: req.user.preferences,
@@ -131,6 +138,7 @@ router.get("/user", isAuthorized, (req, res) => {
 							username: req.user.name,
 							logo: req.user.logo,
 							patreon: patreonInfo,
+							streamlabs: streamlabsInfo,
 							status,
 							type: req.user.type,
 							preferences: req.user.preferences,
@@ -339,15 +347,20 @@ router.post("/profile/preferences", isAuthorized, (req, res) => {
 });
 
 router.post("/test", isAdminAuthorized, (req, res) => {
-	// emitTestListener(req, {
-	// 	channel: req.body.channel,
-	// 	message: req.body.message,
-	// 	username: req.body.username
-	// });
-	emitNewChannel(req, {
-		name: req.body.channel,
-		'full-access': false
+	emitTestListener(req, { 
+		type: 'follow',
+		for: 'twitch_account',
+		message:
+		[{ 
+			_id: 'cdf271793355b2c542b2bcbb32c35ba7',
+		   	id: '462302230',
+		  	name: 'arda_celikkanat',
+		   	priority: 10 
+		}],
+		event_id: 'evt_5ed407e33bf25ba5d4a1d96ffcd034de' 
 	});
+
+	res.json({});
 })
 
 module.exports = router;

@@ -60,7 +60,7 @@ router.get("/create", isAuthorized, (req, res) => {
 				emitNewChannel({
 					name: req.user.name,
 					'full-access': fullAccess,
-					online: false
+					connected: false
 				});
 				
 				req.user.channelID = newChannel.id;
