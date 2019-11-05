@@ -1352,7 +1352,7 @@ router.post('/verify', isAuthorized, (req, res) => {
 					req.user.save().then((savedUser) => {
 						Token.deleteOne({uid: req.user._id, token}).then(err => {
 
-							emitNewChannel({
+							emitNewChannel(req, {
 								name: savedUser.name,
 								'full-access': fullAccess,
 								online: false
