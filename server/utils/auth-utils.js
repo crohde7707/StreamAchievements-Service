@@ -43,8 +43,7 @@ const isAuthorized = async (req, res, next) => {
 	} else {
 		setRedirectCookie(req, res);
 		res.status(401);
-		res.json({foo: 'bar'});
-		//res.redirect(process.env.WEB_DOMAIN);
+		res.json({});
 	}
 	
 }
@@ -79,19 +78,29 @@ const isModAuthorized = async (req, res, next) => {
 }
 
 const isAdminAuthorized = async (req, res, next) => {
-	let etid = cryptr.decrypt(req.cookies.etid);
+	if(req.cookies.etid) {
 
-	let foundUser = await User.findOne({'integration.twitch.etid': etid})
-			
-	if(foundUser) {
-		if(foundUser.type = 'admin') {
-			req.user = foundUser;
-			if(process.env.NODE_ENV === 'production') {
-				res.cookie('etid', req.cookies.etid, { maxAge: 4 * 60 * 60 * 1000, secure: true, httpOnly: false, domain: 'streamachievements.com' });
+		let etid = cryptr.decrypt(req.cookies.etid);
+
+		let foundUser = await User.findOne({'integration.twitch.etid': etid})
+				
+		if(foundUser) {
+			if(foundUser.type = 'admin') {
+				req.user = foundUser;
+				if(process.env.NODE_ENV === 'production') {
+					res.cookie('etid', req.cookies.etid, { maxAge: 4 * 60 * 60 * 1000, secure: true, httpOnly: false, domain: 'streamachievements.com' });
+				} else {
+					res.cookie('etid', req.cookies.etid, { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
+				}
+				next();
 			} else {
-				res.cookie('etid', req.cookies.etid, { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
+				res.status(401);
+				res.json({
+					message: "You are not authorized to make this request."
+				});
+				next();
 			}
-			next();
+			
 		} else {
 			res.status(401);
 			res.json({
@@ -102,10 +111,7 @@ const isAdminAuthorized = async (req, res, next) => {
 		
 	} else {
 		res.status(401);
-		res.json({
-			message: "You are not authorized to make this request."
-		});
-		next();
+		res.redirect(process.env.WEB_DOMAIN);
 	}
 }
 
