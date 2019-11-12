@@ -987,16 +987,17 @@ router.post('/member/save', isAuthorized, (req, res) => {
 
 	User.findOne({name: req.body.id}).then(foundUser => {
 		if(foundUser) {
+			console.log('found ' + foundUser.name);
 			Channel.findOne({owner: req.user.name}).then(foundChannel => {
 				if(foundChannel) {
-
+					console.log('found channel: ' + foundChannel.owner);
 					let channelIdx = foundUser.channels.findIndex(channel => channel.channelID === foundChannel.id);
-
+					console.log(channelIdx);
 					if(channelIdx >= 0 && !foundUser.channels[channelIdx].banned) {
 
 						let achievements = req.body.achievements;
-
-						Earned.find({achievementID: { $in: achievements}}).then(earneds => {
+						console.log(achievements);
+						Earned.find({achievementID: { $in: achievements}, userID: foundUser.id, channelID: foundChannel.id}).then(earneds => {
 							let foundAchs = earneds.map(earned => earned.achievementID);
 
 							let newAchs = req.body.achievements.map(ach => {
@@ -1011,7 +1012,7 @@ router.post('/member/save', isAuthorized, (req, res) => {
 								}
 							});
 
-							Earned.deleteMany({achievementID: { $in: foundAchs}}).then(err => {
+							Earned.deleteMany({achievementID: { $in: foundAchs}, userID: foundUser.id, channelID: foundChannel.id}).then(err => {
 
 								new Notice({
 									user: foundUser._id,

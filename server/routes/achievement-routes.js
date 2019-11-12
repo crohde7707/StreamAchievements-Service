@@ -1138,7 +1138,8 @@ let alertAchievement = (req, foundChannel, savedUser, foundAchievement) => {
 	}
 	
 	
-	let shouldAlert = foundAchievement.alert || true;
+	let shouldAlert = ((typeof foundAchievement.alert !== 'undefined') ? foundAchievement.alert : true);
+	console.log(shouldAlert);
 	let unlocked = false;
 
 	if(foundChannel.gold) {
@@ -1420,6 +1421,9 @@ let handleAchievement = (req, res, foundChannel, achievementCriteria, userCriter
 									}
 
 									resolve();
+								}).catch(err => {
+									console.log(err);
+									reject();
 								});
 							})
 						} else {
@@ -1431,6 +1435,8 @@ let handleAchievement = (req, res, foundChannel, achievementCriteria, userCriter
 							if(userObj.userID && userObj.name) {
 								addToEarned(req, userObj, foundChannel, foundAchievement, tier);
 							}
+						}).catch(() => {
+							console.log("Error occured awarding " + foundAchievement.title + " to " + JSON.stringify(userCriteria));
 						});
 					}
 				});
