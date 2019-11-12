@@ -1344,7 +1344,8 @@ router.post('/verify', isAuthorized, (req, res) => {
 						logo: newChannel.logo,
 						message: `${newChannel.owner} just created their channel!`,
 						date: Date.now(),
-						type: 'confirmation',
+						type: 'achievement',
+						channel: newChannel.owner,
 						status: 'new'
 					}).save();
 
