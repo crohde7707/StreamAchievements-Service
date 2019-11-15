@@ -4,6 +4,7 @@ const Schema = mongoose.Schema;
 var tokenSchema = new Schema({
 	uid: String,
 	token: String,
+	referral: String,
 	created: Date
 });
 

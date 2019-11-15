@@ -307,7 +307,9 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 
 	query.channel = existingChannel.owner
 
-	if(req.body.achType === "4" && !existingChannel.gold) {
+	let customAllowed = isCustomAllowed(existingChannel);
+
+	if(req.body.achType === "4" && !existingChannel.gold && customAllowed === 0) {
 		res.json({
 			created: false,
 			message: "This type of achievement is for Stream Achievements Gold! Sync your Patreon if your account is, or reach out on Discord!",
@@ -618,7 +620,7 @@ let getAchievementData = (req, res, existingChannel, achievement) => {
 
 	let imagePromise = retrieveImages(existingChannel.owner);
 
-	let customAllowed = isCustomAllowed(existingChannel.owner, existingChannel.gold);
+	let customAllowed = isCustomAllowed(existingChannel);
 
 	Promise.all([achievementPromise, imagePromise, customAllowed]).then(responses => {
 		res.json({
@@ -1029,7 +1031,7 @@ let getIcons = (req, res, existingChannel, isMod) => {
 			resObj.isGoldChannel = existingChannel.gold;
 		}
 
-		isCustomAllowed(existingChannel.owner, existingChannel.gold).then(isAllowed => {
+		isCustomAllowed(existingChannel).then(isAllowed => {
 			resObj.customAllowed = isAllowed;
 
 			res.json(resObj);
@@ -1037,16 +1039,25 @@ let getIcons = (req, res, existingChannel, isMod) => {
 	});
 }
 
-let isCustomAllowed = (channel, isGold) => {
-	if(isGold) {
+let isCustomAllowed = (channel) => {
+	let {owner, gold, referral} = channel;
+
+	if(gold) {
 		return Promise.resolve(true);
 	} else {
+		//gather how many total
+		let totalAllowed = 0;
+
+		if(referral && referral.referred > 0) {
+			totalAllowed = totalAllowed + 1;
+		}
+
 		return new Promise((resolve, reject) => {
-			Listener.find({channel: channel, achType: "4"}).then(listeners => {
-				if(listeners && listeners.length > 0) {
-					resolve(false);
-				} else {
-					resolve(true);
+			Listener.find({channel: channel.owner, achType: "4"}).then(listeners => {
+				if(totalAllowed === 0) {
+					resolve(false)
+				} else if(listeners) {
+					resolve(totalAllowed - listeners.length);
 				}
 			});
 		});
@@ -1139,7 +1150,7 @@ let alertAchievement = (req, foundChannel, savedUser, foundAchievement) => {
 	
 	
 	let shouldAlert = ((typeof foundAchievement.alert !== 'undefined') ? foundAchievement.alert : true);
-	console.log(shouldAlert);
+	
 	let unlocked = false;
 
 	if(foundChannel.gold) {
@@ -1284,7 +1295,7 @@ let addToEarned = (req, foundUser, foundChannel, foundAchievement, tier, alert =
 						resolve(true);
 					});
 				} else {
-				
+					
 					if(tier) {
 						//User already has achievement, but reward those past
 						handleTieredBackfill(req, tier, foundChannel, foundUser, currentDate);
@@ -1298,6 +1309,139 @@ let addToEarned = (req, foundUser, foundChannel, foundAchievement, tier, alert =
 			});
 		});
 	});
+}
+
+let handleUserAchievements = (req, res, user, retry=2) => {
+
+	let {channel, identifier, achievements} = user;
+	let mapping = {};
+
+	let achievementIDs = achievements.map(achievement => {
+		mapping[achievement.achievementID] = achievement.tier;
+		return achievement.achievementID;
+	});
+
+	Achievement.find({'_id': { $in: achievementIDs}}).then(foundAchievements => {
+		User.findOne(identifier).then(foundUser => {
+			if(foundUser) {
+				let entryIdx = foundUser.channels.findIndex(savedChannel => {
+					return savedChannel.channelID === channel.id;
+				});
+
+				if(entryIdx >= 0 && !foundUser.channels[entryIdx].banned) {
+					try {
+						foundAchievements.forEach(foundAchievement => {
+							addToEarned(req, foundUser, channel, foundAchievement, mapping[foundAchievement.id]);
+						});
+					} catch (err) {
+						//Error saving achievement, retry
+						new Notice({
+							user: process.env.NOTICE_USER,
+							logo: DEFAULT_ICON,
+							message: `Issue awarding ${channel.owner}'s '${foundAchievement.title}' to ${foundUser.name}`,
+							date: currentDate,
+							type: 'admin',
+							status: 'new'
+						}).save();
+
+						User.findOne({name: channel.owner}).then(foundOwner => {
+							new Notice({
+								user: foundOwner._id,
+								logo: DEFAULT_ICON,
+								message: `Issue awarding '${foundAchievement.title}' to ${foundUser.name}! We are looking into the issue, feel free to manually award the achievement!`,
+								date: currentDate,
+								type: 'admin',
+								status: 'new'
+							}).save();
+						});
+					}
+				} else {
+
+					if(foundUser.preferences.autojoin) {
+						try {
+							foundUser.channels.push({
+								channelID: channel.id,
+								banned: false
+							});
+							foundUser.save().then(savedUser => {
+								channel.members.push(savedUser.id);
+								channel.save().then(savedChannel => {
+									foundAchievements.forEach(foundAchievement => {
+										addToEarned(req, savedUser, savedChannel, foundAchievement, mapping[foundAchievement.id]);
+									});
+								});
+							});
+						} catch(err) {
+							new Notice({
+								user: process.env.NOTICE_USER,
+								logo: DEFAULT_ICON,
+								message: `Issue awarding ${channel.owner}'s '${foundAchievement.title}' to ${foundUser.name}`,
+								date: currentDate,
+								type: 'admin',
+								status: 'new'
+							}).save();
+
+							User.findOne({name: channel.owner}).then(foundOwner => {
+								new Notice({
+									user: foundOwner._id,
+									logo: DEFAULT_ICON,
+									message: `Issue awarding '${foundAchievement.title}' to ${foundUser.name}! We are looking into the issue, feel free to manually award the achievement!`,
+									date: currentDate,
+									type: 'admin',
+									status: 'new'
+								}).save();
+							});
+						}
+					} else {
+						foundAchievements.forEach(foundAchievement => {
+							addToEarned(req, foundUser, channel, foundAchievement, mapping[foundAchievement.id]);
+						});
+					}
+				}
+			} else {
+				// User doesn't exist yet, so store the event off to award when signed up!
+				let apiURL;
+				let userPromise;
+				let userObj = {};
+
+				if(identifier.name) {
+					apiURL = `https://api.twitch.tv/helix/users/?login=${identifier.name}`;
+				} else if(identifier['integration.twitch.etid']) {
+					apiURL = `https://api.twitch.tv/helix/users/?id=${identifier['integration.twitch.etid']}`;
+				}
+
+				if(apiURL) {
+
+					userPromise = new Promise((resolve, reject) => {
+						axios.get(apiURL, {
+							headers: {
+								'Client-ID': process.env.TCID
+							}
+						}).then(res => {
+							if(res.data && res.data.data && res.data.data[0]) {
+								userObj.userID = res.data.data[0].id;
+								userObj.name = res.data.data[0].login
+							}
+
+							resolve();
+						});
+					})
+				} else {
+					userPromise = Promise.resolve();
+				}
+
+				userPromise.then(() => {
+
+					if(userObj.userID && userObj.name) {
+						foundAchievements.forEach(foundAchievement => {
+							addToEarned(req, userObj, channel, foundAchievement, mapping[foundAchievement.id]);
+						});
+					}
+				});
+			}
+		})
+	})
+
 }
 
 let handleAchievement = (req, res, foundChannel, achievementCriteria, userCriteria, tier, retry=2) => {
@@ -1451,65 +1595,105 @@ let handleAchievement = (req, res, foundChannel, achievementCriteria, userCriter
 	});
 }
 
-router.post('/listeners', (req, res) => {
+router.post('/listeners', async (req, res, next) => {
 	//Process achievements
-	console.log('achievements to process...');
-	
-	let achievements = req.body;
-	
-	let currentDate = new Date();
+	try {
+		console.log('achievements to process...');
+		
+		let achievements = req.body;
+		
+		let currentDate = new Date();
 
-	let sortedListeners = {};
+		let sortedListeners = {};
+		let etidMap = {};
 
-	achievements.forEach(listener => {
-		sortedListeners[listener.channel] = sortedListeners[listener.channel] || [];
-   		sortedListeners[listener.channel].push(listener)
-	});
+		await asyncForEach(achievements, async (listener) => {
+			sortedListeners[listener.channel] = sortedListeners[listener.channel] || [];
+	   		sortedListeners[listener.channel].push(listener)
+		});
 
-	let channels = Object.keys(sortedListeners);
-	
-	channels.forEach(achievementOwner => {
+		let channels = Object.keys(sortedListeners);
 
-		Channel.findOne({owner: achievementOwner}).then(foundChannel => {
+		await asyncForEach(channels, async (achievementOwner) => {
+
+			let foundChannel = await Channel.findOne({owner: achievementOwner})
 
 			if(foundChannel) {
-				console.log('Issuing achievements for ' + foundChannel.owner + ' channel:');
 				let channelListeners = sortedListeners[achievementOwner];
-				
-				channelListeners.forEach(achievement => {
+
+				//sort by user
+				let userListeners = {};
+
+				await asyncForEach(channelListeners, async (achievement) => {
 					let {channel, achievementID, tier, userID} = achievement;
 					let userCriteria = {};
-
-					let identifier = achievement.userID || achievement.user;
+					let identifier;
 
 					if(userID) {
-						userCriteria['integration.twitch.etid'] = userID
-					} else if(achievement.user) {
+						identifier = userID;
+
+						if(!userListeners[identifier]) {
+							userListeners[identifier] = {
+								channel: foundChannel,
+								identifier: {'integration.twitch.etid': userID},
+								achievements: []
+							}
+						}
+					} else {
 						let userName = achievement.user;
 
 						if(userName.indexOf('@') === 0) {
 							userName = userName.substr(1);
 						}
 
-						userCriteria.name = userName.toLowerCase();
-					} else {
-						console.log('<<<< No user came from IRC >>>>');
+						
+
+						if(!etidMap.hasOwnProperty(userName)) {
+							let foundUser = await User.findOne({name: userName});
+							
+							if(foundUser) {
+								etidMap[userName] = foundUser.integration.twitch.etid;
+							}
+						}
+
+						identifier = etidMap[userName]
+
+						if(!userListeners[identifier]) {
+							userListeners[identifier] = {
+								channel: foundChannel,
+								identifier: {'integration.twitch.etid': identifier},
+								achievements: []
+							}
+						}
 					}
 
-					let achievementCriteria = {
-						'_id': achievementID
-					};
+					userListeners[identifier].achievements.push(achievement);
+				})
 
-					handleAchievement(req, res, foundChannel, achievementCriteria, userCriteria, tier);
+				let userKeys = Object.keys(userListeners);
 
+				//TODO: If a user comes in as name and ID both, merge them together if they are already a member of the site. This is not a problem if they haven't joined yet
+				
+				await asyncForEach(userKeys, async (userKey) => {
+					let user = userListeners[userKey];
+
+					handleUserAchievements(req, res, user);
 				});
-			}	
+			}
 		});
-	});
+	} catch (e) {
+		next(e);
+	}
 
 	res.json({});
 
 });
+
+async function asyncForEach(array, callback) {
+  for (let index = 0; index < array.length; index++) {
+    await callback(array[index], index, array);
+  }
+}
 
 let handleSubBackfill = (req, foundUser, foundChannel, foundAchievement, tier) => {
 	//First time user getting an achievement, lets backfill award

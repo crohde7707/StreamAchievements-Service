@@ -140,27 +140,31 @@ let StoreSocket = (socket, app) => {
 		let uid = cryptr.decrypt(socket.handshake.query.nid);
 
 		User.findById(uid).then(foundUser => {
-			let sockets = app.get(foundUser.name + "-NOTIFICATIONS");
-			let socketLookup = app.get('SOCKET-LOOKUP');
+			if(foundUser) {
+				let sockets = app.get(foundUser.name + "-NOTIFICATIONS");
+				let socketLookup = app.get('SOCKET-LOOKUP');
 
-			if(!socketLookup) {
-				socketLookup = {};
-			}
+				if(!socketLookup) {
+					socketLookup = {};
+				}
 
-			if(sockets) {
-				sockets.push(socket.id);
+				if(sockets) {
+					sockets.push(socket.id);
+				} else {
+					sockets = [socket.id];
+				}
+				
+				app.set(foundUser.name + "-NOTIFICATIONS", sockets);
+				
+				socketLookup[socket.id] = {
+					name: foundUser.name,
+					type: 'NOTIFICATIONS'
+				};
+
+				app.set('SOCKET-LOOKUP', socketLookup);
 			} else {
-				sockets = [socket.id];
+				console.log('Error: Unknown handshake connection for overlay pannel: ' + socket.handshake.query.nid);
 			}
-			
-			app.set(foundUser.name + "-NOTIFICATIONS", sockets);
-			
-			socketLookup[socket.id] = {
-				name: foundUser.name,
-				type: 'NOTIFICATIONS'
-			};
-
-			app.set('SOCKET-LOOKUP', socketLookup);
 		})
 		
 	}

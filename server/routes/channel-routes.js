@@ -29,53 +29,6 @@ const DEFAULT_OVERLAY_CONFIG = require('../configs/default-overlay-configs');
 
 const RETRIEVE_LIMIT = 15;
 
-router.get("/create", isAuthorized, (req, res) => {
-	Channel.findOne({twitchID: req.user.twitchID}).then((existingChannel) => {
-		if(existingChannel) {
-			res.json({
-				error: 'Channel already exists!',
-				channel: existingChannel
-			});
-		} else {
-			new Channel({
-				owner: req.user.name,
-				twitchID: req.user.twitchID,
-				theme: '',
-				logo: req.user.logo,
-				achievements: [],
-				members: [],
-				icons: {
-					default: DEFAULT_ICON,
-					hidden: HIDDEN_ICON
-				},
-				oid: uuid(),
-				nextUID: 1
-			}).save().then((newChannel) => {
-				let fullAccess = false;
-
-				if(req.user.integration && req.user.integration.patreon && (req.user.integration.patreon.type === 'forever' || req.user.integration.patreon.is_gold)) {
-					fullAccess = true;
-				}
-
-				emitNewChannel({
-					name: req.user.name,
-					'full-access': fullAccess,
-					connected: false
-				});
-				
-				req.user.channelID = newChannel.id;
-				req.user.save().then((savedUser) => {
-					res.json({
-						channel: newChannel,
-						user: req.user
-					});
-				});
-				
-			});		
-		}
-	});
-});
-
 router.post('/leave', isAuthorized, (req, res) => {
 	Channel.findOne({owner: req.body.channel}).then((existingChannel) => {
 		if(existingChannel) {
@@ -116,6 +69,7 @@ router.post('/leave', isAuthorized, (req, res) => {
 	});
 });
 
+//Popup for new memebers
 router.post('/setup/join', isAuthorized, (req, res) => {
 	Channel.findOne({owner: req.body.channel}).then((existingChannel) => {
 		if(existingChannel) {
@@ -313,40 +267,48 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 
 					let achPromise;
 
-					if(joined) {
+					achPromise = new Promise((resolve, reject) => {
+						let channelIDX = req.user.channels.findIndex((channel) => {
+							return (channel.channelID === foundChannel.id)
+						});
 
-						achPromise = new Promise((resolve, reject) => {
-							let channelIDX = req.user.channels.findIndex((channel) => {
-								return (channel.channelID === foundChannel.id)
+						banned = (channelIDX >= 0) ? req.user.channels[channelIDX].banned : false;
+
+						let earnedQuery = {
+							userID: req.user.id,
+							channelID: foundChannel.id
+						};
+
+						if(req.user.new) {
+							earnedQuery.userID = { $in: [req.user.id, req.user.integration.twitch.etid]};
+						}
+
+						Earned.find(earnedQuery).then(foundEarneds => {
+							earned = foundEarneds.map(found => {
+								return {
+									aid: found.achievementID,
+									date: found.earned
+								}
 							});
 
-							banned = req.user.channels[channelIDX].banned || false;
+							retAchievements = foundAchievements.map(achievement => {
+								let ach = Object.assign({}, achievement._doc);
 
-							Earned.find({userID: req.user.id, channelID: foundChannel.id}).then(foundEarneds => {
-								earned = foundEarneds.map(found => found.achievementID);
+								let aIdx = earned.findIndex(a => a.aid === ach.uid);
 
-								retAchievements = foundAchievements.map(achievement => {
-									let ach = Object.assign({}, achievement._doc);
+								if(aIdx >= 0) {
+									ach.earned = true;
+									ach.earnedDate = earned[aIdx].date;
+								} else {
+									ach.earned = false;
+								}
 
-									let aIdx = earned.findIndex(aid => aid === ach.uid);
+								return ach
+							})
 
-									if(aIdx >= 0) {
-										ach.earned = true;
-									} else {
-										ach.earned = false;
-									}
-
-									return ach
-								})
-
-								resolve();
-							});
-						})
-
-					} else {
-						retAchievements = foundAchievements;
-						achPromise = Promise.resolve();
-					}
+							resolve();
+						});
+					})
 
 					achPromise.then(() => {
 						let strippedAchievements = retAchievements.map(ach => {
@@ -516,7 +478,6 @@ router.get('/dashboard', isAuthorized, (req, res) => {
 						});
 					});
 				} else if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
-					
 					existingChannel.overlay = DEFAULT_OVERLAY_CONFIG;
 					existingChannel.save().then(savedChannel => {
 						retChannel = {...savedChannel['_doc']};
@@ -530,6 +491,39 @@ router.get('/dashboard', isAuthorized, (req, res) => {
 							moderators: values[2]
 						});
 					})
+				} else if(!existingChannel.referral || !existingChannel.referral.code) {
+					let code = "";
+
+					code += existingChannel.owner.toUpperCase();
+
+					while (code.length < 6) {
+						code += "1";
+					}
+
+					Channel.find({'referral.code': {"$regex" : code, "$options": "i"}}).then(foundChannels => {
+						if(foundChannels.length > 0) {
+							code += foundChannels.length + 1;	
+						}
+
+						existingChannel.referral = {
+							referred: 0,
+							code
+						}
+						existingChannel.save().then(savedChannel => {
+							retChannel = {...savedChannel['_doc']};
+							delete retChannel['__v'];
+							delete retChannel['_id'];
+
+							res.json({
+								channel: retChannel,
+								achievements: values[0],
+								images: values[1],
+								moderators: values[2]
+							});
+						})
+					})
+					
+					
 				} else {
 					retChannel = {...existingChannel['_doc']};
 					delete retChannel['__v'];
@@ -1237,9 +1231,13 @@ router.get("/user/retrieve", isAuthorized, (req, res) => {
 
 router.post("/signup", isAuthorized, (req, res) => {
 	//generate code
-	let uid = req.body.uid;
+	let referral = req.body.referral;
 
-	let token = new Token({uid: req.user._id, token: 'not issued'});
+	let token = new Token({
+		uid: req.user._id,
+		token: 'not issued',
+		referral
+	});
 
 	let generatedToken = crypto.randomBytes(16).toString('hex');
 	
@@ -1310,12 +1308,40 @@ router.post('/verify', isAuthorized, (req, res) => {
 				});
 			} else {
 				let fullAccess = false;
+				let referral = foundToken.referral;
 
 				let type = req.user.broadcaster_type;
 				let patreon = req.user.integration.patreon;
 
 				if(patreon && (patreon.type === 'forever' || patreon.is_gold)) {
 					fullAccess = true;
+				}
+
+				if(referral) {
+					Channel.findOne({'referral.code': referral}).then(foundChannel => {
+						
+						
+						foundChannel.referral.referred += 1;
+
+						foundChannel.save().then(savedChannel => {
+
+							if(savedChannel.referral.referred === 1) {
+
+								User.findOne({'integration.twitch.etid': savedChannel.twitchID}).then(foundUser => {
+									new Notice({
+										user: foundUser.id,
+										logo: DEFAULT_ICON,
+										message: `Someone just created their channel using your referral code! You now have one extra custom achievement you can create! Go try it out!`,
+										date: Date.now(),
+										type: 'dashboard',
+										channel: foundChannel.owner,
+										status: 'new'
+									}).save();
+								})
+							}
+						})
+
+					});
 				}
 
 				new Channel({
@@ -1352,18 +1378,20 @@ router.post('/verify', isAuthorized, (req, res) => {
 
 					req.user.type = 'verified';
 					req.user.save().then((savedUser) => {
+						
 						Token.deleteOne({uid: req.user._id, token}).then(err => {
+							console.log(err);
+						});
 
-							emitNewChannel(req, {
-								name: savedUser.name,
-								'full-access': fullAccess,
-								online: false
-							});
+						emitNewChannel(req, {
+							name: savedUser.name,
+							'full-access': fullAccess,
+							online: false
+						});
 
-							res.json({
-								verified: true
-							});	
-						})
+						res.json({
+							verified: true
+						});	
 					});
 				});
 			}

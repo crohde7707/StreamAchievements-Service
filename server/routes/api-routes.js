@@ -61,7 +61,12 @@ router.get("/user", isAuthorized, (req, res) => {
 	let uid = cryptr.encrypt(req.user._id);
 	let patreonInfo, streamlabsInfo;
 	let isMod = false;
-
+	let terms = true;
+	
+	if(req.user.consent && req.user.consent.needed !== undefined) {
+		terms = req.user.consent.needed;
+	}
+	
 	setTimeout(() => {
 		if(timeout) {
 			res.status(500);
@@ -101,7 +106,8 @@ router.get("/user", isAuthorized, (req, res) => {
 			//Check if user moderates for anyone
 
 			Channel.find({'moderators.uid': req.user._id}).then(channels => {
-				if(channels) {
+
+				if(channels.length > 0) {
 					isMod = true;
 				}
 
@@ -119,7 +125,8 @@ router.get("/user", isAuthorized, (req, res) => {
 						notificationCount: count,
 						uid,
 						isMod,
-						new: req.user.new
+						new: req.user.new,
+						terms
 					});
 				} else {
 					let status = 'viewer';
@@ -145,7 +152,8 @@ router.get("/user", isAuthorized, (req, res) => {
 							notificationCount: count,
 							uid,
 							isMod,
-							new: req.user.new
+							new: req.user.new,
+							terms
 						});
 					});
 				}
@@ -159,6 +167,12 @@ router.get("/user", isAuthorized, (req, res) => {
 });
 
 router.get("/user/catch", isAuthorized, (req, res) => {
+	let termsNeeded = false;
+
+	if(req.user.consent === undefined || req.user.consent.needed === undefined || !req.user.consent.needed) {
+		termsNeeded = true;
+	}
+
 	Earned.find({userID: req.user.integration.twitch.etid}).then(foundEarned => {
 		if(foundEarned.length > 0) {
 
@@ -169,7 +183,8 @@ router.get("/user/catch", isAuthorized, (req, res) => {
 				let retChannels = foundChannels.map(channel => {
 					return {
 						name: channel.owner,
-						logo: channel.logo
+						logo: channel.logo,
+						termsNeeded
 					}
 				})
 
@@ -185,7 +200,8 @@ router.get("/user/catch", isAuthorized, (req, res) => {
 				Promise.all(promises).then(() => {
 					res.json({
 						catch: true,
-						channels: retChannels
+						channels: retChannels,
+						termsNeeded
 					});
 				})
 			});
@@ -194,7 +210,8 @@ router.get("/user/catch", isAuthorized, (req, res) => {
 			//No achievements earned
 			res.json({
 				catch: false,
-				channels: []
+				channels: [],
+				termsNeeded
 			});
 		}
 	});
@@ -203,6 +220,9 @@ router.get("/user/catch", isAuthorized, (req, res) => {
 router.post("/user/catch", isAuthorized, (req, res) => {
 	req.user.new = false;
 	req.user.preferences.autojoin = req.body.autojoin;
+	req.user.consent = req.user.consent || {};
+	req.user.consent.needed = false;
+	req.user.consent.date = Date.now();
 
 	req.user.save().then(savedUser => {
 		res.json({});

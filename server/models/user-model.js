@@ -32,7 +32,11 @@ const userSchema = new Schema({
 		autojoin: Boolean
 	},
 	lastLogin: Date,
-	new: Boolean
+	new: Boolean,
+	consent: {
+		date: Date,
+		needed: Boolean
+	}
 });
 
 const User = mongoose.model("user", userSchema);

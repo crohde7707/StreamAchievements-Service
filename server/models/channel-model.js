@@ -37,6 +37,10 @@ const channelSchema = new Schema({
 		twitch: String,
 		mixer: String,
 		youtube: String
+	},
+	referral: {
+		referred: Number,
+		code: String
 	}
 });
 
