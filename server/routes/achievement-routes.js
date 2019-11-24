@@ -27,25 +27,32 @@ const DEFAULT_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811
 const mongoose = require('mongoose');
 
 let combineAchievementAndListeners = (achievement, listener) => {
-	let merge = {
-		"_id": achievement['_id'],
-		channel: achievement.owner,
-		title: achievement.title,
-		description: achievement.description,
-		icon: achievement.icon,
-		earnable: achievement.earnable,
-		limited: achievement.limited,
-		secret: achievement.secret,
-		listener: achievement.listener,
-		achType: listener.achType,
-		condition: listener.condition
-	}
-	
-	if(listener.query) {
-		merge.query = listener.query;
-	}
+	if(achievement && listener) {
+		let merge = {
+			"_id": achievement['_id'],
+			channel: achievement.owner,
+			title: achievement.title,
+			description: achievement.description,
+			icon: achievement.icon,
+			earnable: achievement.earnable,
+			limited: achievement.limited,
+			secret: achievement.secret,
+			listener: achievement.listener,
+			achType: listener.achType,
+			condition: listener.condition
+		}
+		
+		if(listener.query) {
+			merge.query = listener.query;
+		}
 
-	return merge;
+		return merge;
+	} else {
+		console.log('Error combining achievement and listener');
+		console.log('achievementID: ' + (achievement) ? achievement['_id'] : '');
+		console.log('listenerID: ' + (listener) ? listener.id : '');
+		return false;
+	}
 }
 
 let updateAchievement = (req, channel, existingAchievement, updates, listenerUpdates, iconImg) => {
