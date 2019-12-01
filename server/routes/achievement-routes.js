@@ -1647,7 +1647,7 @@ router.post('/listeners', async (req, res, next) => {
 							}
 						}
 					} else {
-						let userName = achievement.user;
+						let userName = achievement.user.toLowerCase();
 
 						if(userName.indexOf('@') === 0) {
 							userName = userName.substr(1);
