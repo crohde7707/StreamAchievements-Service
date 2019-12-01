@@ -115,9 +115,51 @@ const isAdminAuthorized = async (req, res, next) => {
 	}
 }
 
+const isExtensionAuthorized = async (req, res, next) => {
+	//let userID = cryptr.decrypt(req.cookies.tuid);
+	let userID = req.query.user || req.body.user; //Update to cookie / header, encrypt it on extension side
+	let identifier = userID.substr(0,1);
+	
+	if(identifier === "A") {
+		req.user = {
+			exists: false,
+			loggedIn: false,
+			user: undefined
+		};
+		next();
+	} else if(identifier === "U") {
+		req.user = {
+			exists: false,
+			loggedIn: true,
+			user: undefined
+		}
+		next();
+	} else {
+		let foundUser = await User.findOne({'integration.twitch.etid': userID});
+	
+		if(foundUser) {
+			req.user = {
+				exists: true,
+				loggedIn: true,
+				user: foundUser
+			};
+			next();
+		} else {
+			req.user = {
+				exists: false,
+				loggedIn: true,
+				uid: userID
+			};
+			next();
+		}
+	}
+	
+}
+
 module.exports = {
 	authCheck: authCheck,
 	isAuthorized,
 	isModAuthorized,
-	isAdminAuthorized
+	isAdminAuthorized,
+	isExtensionAuthorized
 }

@@ -70,11 +70,23 @@ WebSockets.on('connection', function (socket) {
 
     socket.on('handshake', function(data) {
 
-    	if(data.name = "SAIRC") {
-    		
+    	if(data.name === "SAIRC") {
+    		console.log('wut')
     		app.set('IRCSOCKET', socket.id);
     		
-    	} else if(data.web) {
+    	} else if(data.extension) {
+            let extensionSockets = app.get('EXTENSIONSOCKETS');
+
+            if(!extensionSockets) {
+                extensionSockets = {};
+            }
+
+            extensionSockets[data.user] = socket.id;
+
+            console.log(extensionSockets);
+
+            app.set('EXTENSIONSOCKETS', extensionSockets);
+        } else if(data.web) {
     		let userSockets = app.get('USERSOCKETS');
 
     		if(userSockets) {

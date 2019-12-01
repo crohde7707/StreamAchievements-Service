@@ -2,9 +2,14 @@ const allowAccess = async (req, res, next) => {
 	var allowedOrigins;
 
 	if(process.env.NODE_ENV === 'production') {
-		allowedOrigins = ['http://www.streamachievements.com', 'http://streamachievements.com', 'https://www.streamachievements.com', 'https://streamachievements.com'];
+		allowedOrigins = [
+			'http://www.streamachievements.com',
+			'http://streamachievements.com',
+			'https://www.streamachievements.com',
+			'https://streamachievements.com'
+		];
 	} else {
-		allowedOrigins = ['http://localhost:3000'];
+		allowedOrigins = ['http://localhost:3000', 'http://localhost:62502', 'https://localhost:8080'];
 	}
 	var origin = req.headers.origin;
 

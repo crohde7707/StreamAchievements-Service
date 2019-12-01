@@ -280,7 +280,7 @@ router.post('/tier2', isAdminAuthorized, (req, res) => {
 			'channel': 'phirehero',
 			'achievementID': '5d7661fa447cce56ece85ef8',
 			'tier': '2000',
-			'userID': '70967393'
+			'userID': '448669568'
 		}]
 	});
 });

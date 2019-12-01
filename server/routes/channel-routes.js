@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const passport = require('passport');
 const uuid = require('uuid/v1');
-const {isAuthorized, isModAuthorized, isAdminAuthorized} = require('../utils/auth-utils');
+const {isAuthorized, isModAuthorized, isAdminAuthorized, isExtensionAuthorized} = require('../utils/auth-utils');
 const mongoose = require('mongoose');
 const Cryptr = require('cryptr');
 const cryptr = new Cryptr(process.env.SCK);
@@ -223,6 +223,12 @@ router.post('/join', isAuthorized, (req, res) => {
 
 router.get('/list', (req, res) => {
 	Channel.find({}, (err, channels) => {
+		res.json(channels);
+	});
+});
+
+router.get('/extension/list', isExtensionAuthorized, (req, res) => {
+	Channel.find({}).then(channels => {
 		res.json(channels);
 	});
 });

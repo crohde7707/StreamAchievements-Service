@@ -14,6 +14,7 @@ let channelRoutes = require('./channel-routes');
 let achievementRoutes = require('./achievement-routes');
 let ircRoutes = require('./irc-routes');
 let adminRoutes = require('./admin-routes');
+let extensionRoutes = require('./extension-routes');
 const {isAuthorized, isAdminAuthorized} = require('../utils/auth-utils');
 const {emitTestListener, emitNewChannel} = require('../utils/socket-utils');
 
@@ -23,6 +24,7 @@ router.use('/channel', channelRoutes);
 router.use('/achievement', achievementRoutes);
 router.use('/irc', ircRoutes);
 router.use('/admin', adminRoutes);
+router.use('/extension', extensionRoutes);
 
 router.get("/token", passport.authenticate('twitch'), (req, res) => {
     return res.json({ success: true, data: req.user.id });
