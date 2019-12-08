@@ -84,6 +84,17 @@ let emitNotificationsUpdate = (req, data) => {
 	}
 }
 
+let emitExtensionAchievementEarned = (req, data) => {
+	console.log(data);
+	let ws = req.app.get('ws');
+	let extensionSockets = req.app.get('EXTENSIONSOCKETS');
+	let sid = extensionSockets[data.user];
+	console.log(sid);
+	if(sid) {
+		ws.to(sid).emit('achievement-earned', data.aid);
+	}
+}
+
 module.exports = {
 	emitNewChannel,
 	emitChannelUpdate,
@@ -99,5 +110,6 @@ module.exports = {
 	emitTestListener,
 	emitOverlayAlert,
 	emitOverlaySettingsUpdate,
-	emitNotificationsUpdate
+	emitNotificationsUpdate,
+	emitExtensionAchievementEarned
 }

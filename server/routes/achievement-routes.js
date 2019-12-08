@@ -18,7 +18,8 @@ const {
 	emitAwardedAchievement,
 	emitAwardedAchievementNonMember,
 	emitOverlayAlert,
-	emitNotificationsUpdate
+	emitNotificationsUpdate,
+	emitExtensionAchievementEarned
 } = require('../utils/socket-utils');
 const { build } = require('../utils/regex-builder');
 
@@ -719,6 +720,10 @@ let manualAward = (req, res, existingChannel) => {
 										};
 
 										emitAwardedAchievement(req, buildAchievementMessage(existingChannel, alertData));
+										emitExtensionAchievementEarned(req, {
+											user: member.integration.twitch.etid,
+											aid: foundAchievement.uid
+										});
 									}
 
 									new Notice({
@@ -973,6 +978,10 @@ let handleNonMemberAward = (req, res, foundChannel, foundAchievement, nonMember)
 										};
 										
 										emitAwardedAchievementNonMember(req, buildAchievementMessage(foundChannel, alertData));
+										emitExtensionAchievementEarned(req, {
+											user: userObj.userID,
+											aid: foundAchievement.uid
+										});
 									}
 
 									let shouldAlert = foundAchievement.alert || true;
@@ -1152,7 +1161,11 @@ let alertAchievement = (req, foundChannel, savedUser, foundAchievement) => {
 			'achievement': foundAchievement.title
 		};
 		
-		emitAwardedAchievement(req, buildAchievementMessage(foundChannel, alertData));	
+		emitAwardedAchievement(req, buildAchievementMessage(foundChannel, alertData));
+		emitExtensionAchievementEarned(req, {
+			user: savedUser.integration.twitch.etid,
+			aid: foundAchievement.uid
+		});
 	}
 	
 	
@@ -1302,7 +1315,6 @@ let addToEarned = (req, foundUser, foundChannel, foundAchievement, tier, alert =
 						resolve(true);
 					});
 				} else {
-					
 					if(tier) {
 						//User already has achievement, but reward those past
 						handleTieredBackfill(req, tier, foundChannel, foundUser, currentDate);
@@ -1319,7 +1331,6 @@ let addToEarned = (req, foundUser, foundChannel, foundAchievement, tier, alert =
 }
 
 let handleUserAchievements = (req, res, user, retry=2) => {
-
 	let {channel, identifier, achievements} = user;
 	let mapping = {};
 
@@ -1329,6 +1340,7 @@ let handleUserAchievements = (req, res, user, retry=2) => {
 	});
 
 	Achievement.find({'_id': { $in: achievementIDs}}).then(foundAchievements => {
+
 		User.findOne(identifier).then(foundUser => {
 			if(foundUser) {
 				let entryIdx = foundUser.channels.findIndex(savedChannel => {
@@ -1632,6 +1644,7 @@ router.post('/listeners', async (req, res, next) => {
 				let userListeners = {};
 
 				await asyncForEach(channelListeners, async (achievement) => {
+					
 					let {channel, achievementID, tier, userID} = achievement;
 					let userCriteria = {};
 					let identifier;
@@ -1646,24 +1659,23 @@ router.post('/listeners', async (req, res, next) => {
 								achievements: []
 							}
 						}
+
 					} else {
 						let userName = achievement.user.toLowerCase();
 
 						if(userName.indexOf('@') === 0) {
 							userName = userName.substr(1);
-						}
-
-						
+						}						
 
 						if(!etidMap.hasOwnProperty(userName)) {
 							let foundUser = await User.findOne({name: userName});
-							
+
 							if(foundUser) {
 								etidMap[userName] = foundUser.integration.twitch.etid;
 							}
 						}
 
-						identifier = etidMap[userName]
+						identifier = etidMap[userName];
 
 						if(!userListeners[identifier]) {
 							userListeners[identifier] = {
