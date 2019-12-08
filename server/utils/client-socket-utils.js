@@ -225,6 +225,21 @@ let DeleteNotification = (socket, notification) => {
 	
 }
 
+let FetchListeners = (socket, app, data) => {
+	let channel = data.channel;
+
+	Channel.findOne({owner: channel}).then(foundChannel => {
+		if(foundChannel) {
+			app.set('ADMINSOCKET', socket.id);
+	        let sid = app.get('IRCSOCKET');
+	        
+	        socket.to(sid).emit('retrieve-listeners', channel);
+		} else {
+			socket.emit('listeners-fetched', false);
+		}
+	})
+}
+
 module.exports = {
 	searchChannels: SearchChannels,
 	searchMembers: SearchMembers,
@@ -233,5 +248,6 @@ module.exports = {
 	storeSocket: StoreSocket,
 	removeSocket: RemoveSocket,
 	markNotificationRead: MarkNotificationRead,
-	deleteNotification: DeleteNotification
+	deleteNotification: DeleteNotification,
+	fetchListeners: FetchListeners
 }

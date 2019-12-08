@@ -16,7 +16,8 @@ const {
     storeSocket,
     removeSocket,
     markNotificationRead,
-    deleteNotification
+    deleteNotification,
+    fetchListeners
 } = require('./utils/client-socket-utils');
 
 let io = require('socket.io');
@@ -71,7 +72,6 @@ WebSockets.on('connection', function (socket) {
     socket.on('handshake', function(data) {
 
     	if(data.name = "SAIRC") {
-    		
     		app.set('IRCSOCKET', socket.id);
     		
     	} else if(data.web) {
@@ -114,6 +114,16 @@ WebSockets.on('connection', function (socket) {
 
     socket.on('disconnect', () => {
         removeSocket(socket, app);
+    });
+
+    socket.on('fetch-listeners', (data) => {
+        fetchListeners(socket, app, data);
+    });
+
+    socket.on('listeners-retrieved', (listenerData) => {
+        let adminSocket = app.get('ADMINSOCKET');
+        
+        socket.to(adminSocket).emit('listeners-fetched', listenerData);
     });
 });
 

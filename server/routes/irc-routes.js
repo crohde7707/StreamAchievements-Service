@@ -93,13 +93,14 @@ router.get('/listeners', (req, res) => {
 	let offset = parseInt(req.query.offset) || 0;
 	let limit = parseInt(req.query.limit) || 50;
 	let total = parseInt(req.query.total) || undefined;
+	let channels = req.query.channels || undefined;
 
 	if(!total) {
 		//get total count
 		total = Listener.estimatedDocumentCount().exec().then(count => {
 			total = count;
 
-			getListeners(offset, limit, total).then(listeners => {
+			getListeners(offset, limit, total, channels).then(listeners => {
 
 				if(listeners.err) {
 					res.status(500);
@@ -113,7 +114,7 @@ router.get('/listeners', (req, res) => {
 			});
 		});
 	} else {
-		getListeners(offset, limit, total).then(listeners => {
+		getListeners(offset, limit, total, channels).then(listeners => {
 
 			if(listeners.err) {
 				res.status(500);
@@ -129,9 +130,15 @@ router.get('/listeners', (req, res) => {
 
 });
 
-let getListeners = (offset, limit, total) => {
+let getListeners = (offset, limit, total, channels) => {
 	return new Promise((resolve, reject) => {
-		Listener.find().sort({'_id': -1}).skip(offset).limit(limit).exec((err, doc) => {
+		let query = {};
+
+		if(channels) {
+			query.channel = { $in: channels}
+		}
+
+		Listener.find(query).sort({'_id': -1}).skip(offset).limit(limit).exec((err, doc) => {
 			if(err) {
 				resolve({err: 'Issue retrieving from Listener sets'});
 			} else {

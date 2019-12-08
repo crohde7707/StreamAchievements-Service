@@ -84,6 +84,10 @@ let emitNotificationsUpdate = (req, data) => {
 	}
 }
 
+let fetchListeners = (req, channel) => {
+	emit(req, 'retrieve-listeners', channel);
+}
+
 module.exports = {
 	emitNewChannel,
 	emitChannelUpdate,
@@ -99,5 +103,6 @@ module.exports = {
 	emitTestListener,
 	emitOverlayAlert,
 	emitOverlaySettingsUpdate,
-	emitNotificationsUpdate
+	emitNotificationsUpdate,
+	fetchListeners
 }

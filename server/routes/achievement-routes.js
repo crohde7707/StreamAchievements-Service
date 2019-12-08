@@ -1258,6 +1258,7 @@ let addToEarned = (req, foundUser, foundChannel, foundAchievement, tier, alert =
 
 			Earned.findOne(earnedObj).then(foundEarned => {
 				if(!foundEarned) {
+					if(foundAchievement)
 					new Earned({
 						...earnedObj,
 						earned: currentDate,
@@ -1458,7 +1459,6 @@ let handleAchievement = (req, res, foundChannel, achievementCriteria, userCriter
 	Achievement.findOne(achievementCriteria).then(foundAchievement => {
 		if(foundAchievement) {
 			if(foundAchievement.earnable) {
-
 				User.findOne(userCriteria).then((foundUser) => {
 					if(foundUser) {
 
@@ -1608,6 +1608,8 @@ router.post('/listeners', async (req, res, next) => {
 		console.log('achievements to process...');
 		
 		let achievements = req.body;
+
+		console.log(achievements);
 		
 		let currentDate = new Date();
 
