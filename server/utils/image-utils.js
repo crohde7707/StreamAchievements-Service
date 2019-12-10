@@ -31,7 +31,7 @@ let uploadImage = (blob, fileName, channelName, type) => {
 							name: fileName,
 							channel: channelName,
 							cloudID: result.public_id,
-							url: result.url,
+							url: result.secure_url,
 							type: type || 'achievement'
 						}).save().then((newImage) => {
 							console.log('new image in DB');
