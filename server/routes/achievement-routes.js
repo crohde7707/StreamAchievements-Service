@@ -34,6 +34,7 @@ let combineAchievementAndListeners = (achievement, listener) => {
 			channel: achievement.owner,
 			title: achievement.title,
 			description: achievement.description,
+			shortDescription: achievement.shortDescription,
 			icon: achievement.icon,
 			earnable: achievement.earnable,
 			limited: achievement.limited,
@@ -49,9 +50,6 @@ let combineAchievementAndListeners = (achievement, listener) => {
 
 		return merge;
 	} else {
-		console.log('Error combining achievement and listener');
-		console.log('achievementID: ' + (achievement) ? achievement['_id'] : '');
-		console.log('listenerID: ' + (listener) ? listener.id : '');
 		return false;
 	}
 }
@@ -148,7 +146,6 @@ let updateAchievement = (req, channel, existingAchievement, updates, listenerUpd
 								});
 							});
 						});
-
 					} else {
 
 						Listener.findOneAndUpdate({ _id: updatedAchievement.listener }, { $set: listenerUpdates }, { new: true }).then((updatedListener) => {
@@ -350,6 +347,7 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 								channel: existingChannel.owner,
 								title: req.body.title,
 								description: req.body.description,
+								shortDescription: req.body.shortDescription,
 								icon: req.body.icon,
 								earnable: req.body.earnable,
 								limited: req.body.limited,

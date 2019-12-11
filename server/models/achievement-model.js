@@ -6,6 +6,7 @@ const achievementSchema = new Schema({
 	channel: String,
 	title: String,
 	description: String,
+	shortDescription: String,
 	icon: String,
 	earnable: Boolean,
 	limited: Boolean,
