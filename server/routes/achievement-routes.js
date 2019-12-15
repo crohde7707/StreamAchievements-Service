@@ -1160,8 +1160,16 @@ let alertAchievement = (req, foundChannel, savedUser, foundAchievement) => {
 		};
 		
 		emitAwardedAchievement(req, buildAchievementMessage(foundChannel, alertData));
+
+		let etid = "";
+		if(savedUser.integration && savedUser.integration.twitch) {
+			etid = savedUser.integration.twitch.etid;
+		} else {
+			etid = savedUser.userID;
+		}
+
 		emitExtensionAchievementEarned(req, {
-			user: savedUser.integration.twitch.etid,
+			user: etid,
 			aid: foundAchievement.uid
 		});
 	}
