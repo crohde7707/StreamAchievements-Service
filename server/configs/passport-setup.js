@@ -4,9 +4,10 @@ const User = require('../models/user-model');
 const Channel = require('../models/channel-model');
 const Notice = require('../models/notice-model');
 const Earned = require('../models/earned-model');
+const Achievement = require('../models/achievement-model');
+const Listener = require('../models/listener-model');
 const Cryptr = require('cryptr');
 const cryptr = new Cryptr(process.env.SCK);
-const {	emitChannelUpdate } = require('../utils/socket-utils');
 
 passport.serializeUser((user, done) => {
 	done(null, user);
@@ -83,15 +84,37 @@ passport.use(
 									}).save();
 
 									if(ownerUpdate) {
+
+										Achievement.find({channel: ownerUpdate}).then(foundAchievements => {
+											if(foundAchievements.length > 0) {
+												foundAchievements.forEach(ach => {
+													ach.channel = savedChannel.owner;
+													ach.save();
+												});
+											}
+										});
+
+										Listener.find({channel: ownerUpdate}).then(foundListeners => {
+											if(foundListeners.length > 0) {
+												foundListeners.forEach(list => {
+													list.channel = savedChannel.owner;
+													list.save();
+												});
+											}
+										});
 										//Name change occured, inform the IRC to connect
-										emitChannelUpdate(req, {
+										
+										savedUser.update = {
 											old: ownerUpdate,
 											new: savedChannel.owner
-										});
+										}	
 									}
-								}
 
-								done(null, savedUser);
+									done(null, savedUser);
+
+								} else {
+									done(null, savedUser);
+								}
 							});
 						} else {
 							if(updated) {

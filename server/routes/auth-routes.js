@@ -6,11 +6,14 @@ const cryptr = new Cryptr(process.env.SCK);
 const isAuthorized = require('../utils/auth-utils').isAuthorized;
 const User = require('../models/user-model');
 const Channel = require('../models/channel-model');
+const Achievement = require('../models/achievement-model');
+const Listener = require('../models/listener-model');
 const {
 	emitBecomeGold,
 	emitRemoveGold,
 	emitConnectBot,
-	emitDisconnectBot
+	emitDisconnectBot,
+	emitChannelUpdate
 } = require('../utils/socket-utils');
 
 //patreon
@@ -49,6 +52,16 @@ router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) =>
 		if(req.user.type !== 'user') {
 			Channel.findOne({owner: req.user.name}).then(foundChannel => {
 				if(foundChannel) {
+
+					if(req.user.update) {
+						let update = {
+							...req.user.update,
+							fullAccess: foundChannel.gold || false
+						};
+
+						emitChannelUpdate(req, update);
+					}
+
 					if(foundChannel.broadcaster_type) {
 						if(foundChannel.broadcaster_type.twitch !== req.user.broadcaster_type) {
 							foundChannel.broadcaster_type.twitch = req.user.broadcaster_type;
@@ -391,7 +404,7 @@ router.get('/patreon/redirect', isAuthorized, (req, res) => {
 });
 
 router.post('/twitch/sync', isAuthorized, (req, res) => {
-	twitchSync(req.user, req.cookies.etid).then(twitchData => {
+	twitchSync(req, req.user, req.cookies.etid).then(twitchData => {
 		res.json(twitchData);
 	});
 })
@@ -534,7 +547,7 @@ let refreshPatreonToken = (req, refreshToken) => {
 	});
 }
 
-let twitchSync = (user, etid) => {
+let twitchSync = (req, user, etid) => {
 	if(user.integration.twitch) {
 		return new Promise((resolve, reject) => {
 			axios.get(`https://api.twitch.tv/helix/users/?id=${user.integration.twitch.etid}`, {
@@ -550,14 +563,42 @@ let twitchSync = (user, etid) => {
 
 						Channel.findOne({twitchID: savedUser.integration.twitch.etid}).then(foundChannel => {
 							if(foundChannel) {
+								let update = false;
+
 								if(foundChannel.owner !== savedUser.name) {
-									updated = true;
+									update = foundChannel.owner;
 									foundChannel.owner = savedUser.name;
 								}
 
 								if(foundChannel.logo !== savedUser.logo) {
-									updated = true;
 									foundChannel.logo = savedUser.logo;
+								}
+
+								if(update) {
+									
+									Achievement.find({channel: update}).then(foundAchievements => {
+										if(foundAchievements.length > 0) {
+											foundAchievements.forEach(ach => {
+												ach.channel = savedUser.name;
+												ach.save();
+											});
+										}
+									});
+
+									Listener.find({channel: update}).then(foundListeners => {
+										if(foundListeners.length > 0) {
+											foundListeners.forEach(list => {
+												list.channel = savedUser.name;
+												list.save();
+											});
+										}
+									})
+									
+									emitChannelUpdate(req, {
+										old: update,
+										new: savedUser.name,
+										fullAccess: foundChannel.gold || false
+									});
 								}
 
 								foundChannel.save().then(savedChannel => {

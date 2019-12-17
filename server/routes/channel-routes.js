@@ -8,6 +8,7 @@ const cryptr = new Cryptr(process.env.SCK);
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const validDataUrl = require('valid-data-url');
+const axios = require('axios');
 
 const User = require('../models/user-model');
 const Channel = require('../models/channel-model');
@@ -365,6 +366,74 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 		});
 	}
 });
+
+router.post('/update', async (req, res) => {
+	let channels = req.body;
+	let updatedChannels = [];
+
+	await asyncForEach(channels, async (channel) => {
+		let updatedChannel = false;
+		let foundUser = await User.findOne({name: channel});
+		
+		if(foundUser) {
+			let response = await axios.get(`https://api.twitch.tv/helix/users/?id=${foundUser.integration.twitch.etid}`, {
+				headers: {
+					'Client-ID': process.env.TCID
+				}
+			});
+
+			foundUser.name = response.data.data[0].login;
+			foundUser.logo = response.data.data[0].profile_image_url;
+
+			let savedUser = await foundUser.save();
+
+			let foundChannel = await Channel.findOne({twitchID: savedUser.integration.twitch.etid});
+				
+			if(foundChannel) {
+				if(foundChannel.owner !== savedUser.name) {
+					updatedChannel = true;
+					foundChannel.owner = savedUser.name;
+				}
+
+				if(foundChannel.logo !== savedUser.logo) {
+					updatedChannel = true;
+					foundChannel.logo = savedUser.logo;
+				}
+
+				if(updatedChannel) {
+					let savedChannel = await foundChannel.save();
+				}
+
+				let foundAchievements = await Achievement.find({channel: channel});
+
+				if(foundAchievements.length > 0) {
+					asyncForEach(foundAchievements, ach => {
+						ach.channel = savedUser.name;
+						ach.save();
+					});
+				}
+
+				let foundListeners = await Listener.find({channel: channel});
+					
+				if(foundListeners.length > 0) {
+					asyncForEach(foundListeners, list => {
+						list.channel = savedUser.name;
+						list.save();
+					});
+				}
+
+				updatedChannels.push({
+					old: channel,
+					new: savedUser.name
+				});
+			}
+		}
+	});
+
+	res.json({
+		updatedChannels
+	})
+})
 
 router.get('/dashboard', isAuthorized, (req, res) => {
 
@@ -987,16 +1056,14 @@ router.post('/member/save', isAuthorized, (req, res) => {
 
 	User.findOne({name: req.body.id}).then(foundUser => {
 		if(foundUser) {
-			console.log('found ' + foundUser.name);
 			Channel.findOne({owner: req.user.name}).then(foundChannel => {
 				if(foundChannel) {
-					console.log('found channel: ' + foundChannel.owner);
 					let channelIdx = foundUser.channels.findIndex(channel => channel.channelID === foundChannel.id);
-					console.log(channelIdx);
+					
 					if(channelIdx >= 0 && !foundUser.channels[channelIdx].banned) {
 
 						let achievements = req.body.achievements;
-						console.log(achievements);
+						
 						Earned.find({achievementID: { $in: achievements}, userID: foundUser.id, channelID: foundChannel.id}).then(earneds => {
 							let foundAchs = earneds.map(earned => earned.achievementID);
 
@@ -1632,6 +1699,12 @@ let retrieveChannel = (req, res, existingChannel) => {
 			});
 		}
 	});
+}
+
+async function asyncForEach(array, callback) {
+  for (let index = 0; index < array.length; index++) {
+    await callback(array[index], index, array);
+  }
 }
 
 module.exports = router;
