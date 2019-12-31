@@ -459,25 +459,17 @@ router.get('/dashboard', isAuthorized, (req, res) => {
 								if(listenerData) {
 
 									let merge = {
-										"_id": achievement['_id'],
 										uid: achievement.uid,
-										channel: achievement.owner,
 										title: achievement.title,
 										description: achievement.description,
+										shortDescription: achievement.shortDescription,
 										icon: achievement.icon,
 										earnable: achievement.earnable,
 										limited: achievement.limited,
 										secret: achievement.secret,
-										listener: achievement.listener,
-										code: listenerData.code,
-										order: achievement.order
-									}
-									
-									if(listenerData.resubType) {
-										merge.resubType = listenerData.resubType;
-									}
-									if(listenerData.query) {
-										merge.query = listenerData.query;
+										order: achievement.order,
+										unlocked: listenerData.unlocked || false,
+										achType: listenerData.achType
 									}
 									
 									return merge;

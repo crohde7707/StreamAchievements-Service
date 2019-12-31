@@ -152,7 +152,8 @@ let getListeners = (offset, limit, total, channels) => {
 						resubType: listener.resubType,
 						query: listener.query,
 						bot: listener.bot,
-						condition: listener.condition
+						condition: listener.condition,
+						unlocked: listener.unlocked || false
 					}
 				});
 

@@ -10,7 +10,8 @@ const listenerSchema = new Schema({
 	query: Schema.Types.Mixed,
 	condition: String,
 	achievement: String,
-	aid: Number
+	aid: Number,
+	unlocked: Boolean
 });
 
 const Listener = mongoose.model("listener", listenerSchema);

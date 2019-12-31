@@ -365,7 +365,7 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 
 							listenerData.condition = req.body.condition;
 
-							if(listenerData.achType === "4") {
+							if(listenerData.achType === "4" || listenerData.achType === "5") {
 								listenerData.bot = req.body.bot;
 								listenerData.query = req.body.query;
 							}
@@ -543,6 +543,26 @@ router.post("/delete", isAuthorized, (req, res) => {
 	});
 });
 
+router.post("/enable", isAuthorized, (req, res) => {
+	let achievement = req.body.aid;
+
+	Listener.findOne({channel: req.user.name, unlocked: true}).then(enabledListener => {
+		if(enabledListener) {
+			enabledListener.unlocked = false;
+			enabledListener.save();
+		}
+
+		Listener.findOne({channel: req.user.name, aid: achievement}).then(disabledListener => {
+			disabledListener.unlocked = true;
+			disabledListener.save().then(savedListener => {
+				res.json({
+					unlocked: savedListener.unlocked
+				});
+			})
+		})
+	})
+})
+
 router.get("/mod/retrieve", isModAuthorized, (req, res) => {
 	let achievement = req.query.aid;
 
@@ -613,6 +633,10 @@ let getAchievementData = (req, res, existingChannel, achievement) => {
 
 						let mergedAchievement = Object.assign(achievementData, listenerData);
 
+						if(!mergedAchievement.unlocked) {
+							mergedAchievement.unlocked = false;
+						}
+
 						resolve(mergedAchievement);
 					} else {
 						resolve(existingAchievement);
@@ -634,7 +658,8 @@ let getAchievementData = (req, res, existingChannel, achievement) => {
 			images: responses[1],
 			defaultIcons: existingChannel.icons,
 			isGoldChannel: ((req.channel && req.channel.gold)),
-			customAllowed: responses[2]
+			customAllowed: responses[2],
+			referred: existingChannel.referral.referred > 0
 		});
 	});
 }
@@ -1071,7 +1096,11 @@ let isCustomAllowed = (channel) => {
 				if(totalAllowed === 0) {
 					resolve(false)
 				} else if(listeners) {
-					resolve(totalAllowed - listeners.length);
+					if(totalAllowed < listeners.length) {
+						resolve(0);
+					} else {
+						resolve(totalAllowed - listeners.length);
+					}
 				}
 			});
 		});
