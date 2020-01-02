@@ -219,10 +219,15 @@ let MarkNotificationRead = (socket, data) => {
 }
 
 let DeleteNotification = (socket, notification) => {
-	Notice.findByIdAndRemove(notification.id).then(notification => {
-		socket.emit('notification-removed', notification.id);
-	});
-	
+	Notice.findOne({_id: notification.id}).then(foundNotification => {
+		if(foundNotification) {
+			Notice.findByIdAndRemove(notification.id).then(notification => {
+				socket.emit('notification-removed', notification.id);
+			});
+		} else {
+			socket.emit('notification-removed', notification.id);
+		}
+	})
 }
 
 module.exports = {

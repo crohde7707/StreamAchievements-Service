@@ -151,15 +151,19 @@ let updateAchievement = (req, channel, existingAchievement, updates, listenerUpd
 						Listener.findOneAndUpdate({ _id: updatedAchievement.listener }, { $set: listenerUpdates }, { new: true }).then((updatedListener) => {
 
 							if(updatedListener) {
-								emitUpdateListener(req, {
+
+								let listenerData = {
 									uid: updatedListener.uid,
 									channel: channel,
 									achievement: updatedListener.achievement,
 									achType: updatedListener.achType,
 									query: updatedListener.query,
 									bot: updatedListener.bot,
-									condition: updatedListener.condition
-								});
+									condition: updatedListener.condition,
+									unlocked: updatedListener.unlocked
+								};
+
+								emitUpdateListener(req, listenerData);
 
 								let merge = combineAchievementAndListeners(updatedAchievement, updatedListener);
 
@@ -549,14 +553,33 @@ router.post("/enable", isAuthorized, (req, res) => {
 	Listener.findOne({channel: req.user.name, unlocked: true}).then(enabledListener => {
 		if(enabledListener) {
 			enabledListener.unlocked = false;
-			enabledListener.save();
+			enabledListener.save().then(nowDisabledListener => {
+				emitUpdateListener(req, {
+					channel: nowDisabledListener.channel,
+					achievement: nowDisabledListener.achievement,
+					achType: nowDisabledListener.achType,
+					query: nowDisabledListener.query,
+					bot: nowDisabledListener.bot,
+					condition: nowDisabledListener.condition,
+					unlocked: false
+				});
+			});
 		}
 
 		Listener.findOne({channel: req.user.name, aid: achievement}).then(disabledListener => {
 			disabledListener.unlocked = true;
-			disabledListener.save().then(savedListener => {
+			disabledListener.save().then(nowEnabledListener => {
+				emitUpdateListener(req, {
+					channel: nowEnabledListener.channel,
+					achievement: nowEnabledListener.achievement,
+					achType: nowEnabledListener.achType,
+					query: nowEnabledListener.query,
+					bot: nowEnabledListener.bot,
+					condition: nowEnabledListener.condition,
+					unlocked: true
+				});
 				res.json({
-					unlocked: savedListener.unlocked
+					unlocked: nowEnabledListener.unlocked
 				});
 			})
 		})
@@ -1367,6 +1390,8 @@ let addToEarned = (req, foundUser, foundChannel, foundAchievement, tier, alert =
 
 let handleUserAchievements = (req, res, user, retry=2) => {
 	let {channel, identifier, achievements} = user;
+	console.log(identifier);
+	console.log(achievements);
 	let mapping = {};
 
 	let achievementIDs = achievements.map(achievement => {
@@ -1453,45 +1478,58 @@ let handleUserAchievements = (req, res, user, retry=2) => {
 					}
 				}
 			} else {
+				console.log('user not found, call to twitch');
 				// User doesn't exist yet, so store the event off to award when signed up!
 				let apiURL;
 				let userPromise;
 				let userObj = {};
+				let etid = identifier['integration.twitch.etid'];
 
-				if(identifier.name) {
-					apiURL = `https://api.twitch.tv/helix/users/?login=${identifier.name}`;
-				} else if(identifier['integration.twitch.etid']) {
-					apiURL = `https://api.twitch.tv/helix/users/?id=${identifier['integration.twitch.etid']}`;
-				}
+				if(etid && etid !== 'undefined' && user.name) {
+					console.log('Call not needed');
+					//we grabbed the info when sorting achievements, no need to call to twitch again
+					userObj.userID = identifier['integration.twitch.etid'];
+					userObj.name = user.name;
 
-				if(apiURL) {
-
-					userPromise = new Promise((resolve, reject) => {
-						axios.get(apiURL, {
-							headers: {
-								'Client-ID': process.env.TCID
-							}
-						}).then(res => {
-							if(res.data && res.data.data && res.data.data[0]) {
-								userObj.userID = res.data.data[0].id;
-								userObj.name = res.data.data[0].login
-							}
-
-							resolve();
-						});
-					})
+					foundAchievements.forEach(foundAchievement => {
+						addToEarned(req, userObj, channel, foundAchievement, mapping[foundAchievement.id]);
+					});					
 				} else {
-					userPromise = Promise.resolve();
-				}
-
-				userPromise.then(() => {
-
-					if(userObj.userID && userObj.name) {
-						foundAchievements.forEach(foundAchievement => {
-							addToEarned(req, userObj, channel, foundAchievement, mapping[foundAchievement.id]);
-						});
+					if(identifier.name) {
+						apiURL = `https://api.twitch.tv/helix/users/?login=${identifier.name}`;
+					} else if(etid && etid !== 'undefined') {
+						apiURL = `https://api.twitch.tv/helix/users/?id=${etid}`;
 					}
-				});
+
+					if(apiURL) {
+
+						userPromise = new Promise((resolve, reject) => {
+							axios.get(apiURL, {
+								headers: {
+									'Client-ID': process.env.TCID
+								}
+							}).then(res => {
+								if(res.data && res.data.data && res.data.data[0]) {
+									userObj.userID = res.data.data[0].id;
+									userObj.name = res.data.data[0].login
+								}
+
+								resolve();
+							});
+						})
+					} else {
+						userPromise = Promise.resolve();
+					}
+
+					userPromise.then(() => {
+
+						if(userObj.userID && userObj.name) {
+							foundAchievements.forEach(foundAchievement => {
+								addToEarned(req, userObj, channel, foundAchievement, mapping[foundAchievement.id]);
+							});
+						}
+					});
+				}
 			}
 		})
 	})
@@ -1707,6 +1745,20 @@ router.post('/listeners', async (req, res, next) => {
 
 							if(foundUser) {
 								etidMap[userName] = foundUser.integration.twitch.etid;
+							} else {
+								let apiURL = `https://api.twitch.tv/helix/users/?login=${userName}`;
+
+								if(apiURL) {
+
+									let res = await axios.get(apiURL, {headers: {'Client-ID': process.env.TCID}});
+
+									if(res.data && res.data.data && res.data.data[0]) {
+										etidMap[userName] = res.data.data[0].id;
+									} else {
+										console.log('error retrieveing data for ' + userName);
+										etidMap[userName] = 'undefined'
+									}
+								}
 							}
 						}
 
@@ -1716,6 +1768,7 @@ router.post('/listeners', async (req, res, next) => {
 							userListeners[identifier] = {
 								channel: foundChannel,
 								identifier: {'integration.twitch.etid': identifier},
+								name: userName,
 								achievements: []
 							}
 						}

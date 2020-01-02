@@ -19,6 +19,7 @@ const {isAuthorized, isAdminAuthorized} = require('../utils/auth-utils');
 const {emitTestListener, emitNewChannel} = require('../utils/socket-utils');
 
 const notificationLimit = 15;
+const DEFAULT_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png";
 
 router.use('/channel', channelRoutes);
 router.use('/achievement', achievementRoutes);
@@ -134,16 +135,8 @@ router.get("/user", isAuthorized, (req, res) => {
 					let status = 'viewer';
 					
 					Token.findOne({uid: req.user._id}).then(foundToken => {
-						
-						if(foundToken) {
-							if(foundToken.token === 'not issued') {
-								status = 'review'
-							} else {
-								status = 'pending'
-							}
-						}
 
-						res.json({
+						let responseObj = {
 							username: req.user.name,
 							logo: req.user.logo,
 							patreon: patreonInfo,
@@ -156,7 +149,31 @@ router.get("/user", isAuthorized, (req, res) => {
 							isMod,
 							new: req.user.new,
 							terms
-						});
+						};
+						
+						if(foundToken) {
+							if(foundToken.token === 'not issued') {
+								status = 'review'
+							} else {
+								status = 'pending'
+							}
+
+							if(foundToken.hasExpired() && !foundToken.notified) {
+								new Notice({
+									user: req.user._id,
+									logo: DEFAULT_ICON,
+									message: "It has been 48 hours since your confirmation email was sent, and your confirmation token has expired! Click here to generate a new one, so you can get started with your channel today!",
+									date: Date.now(),
+									type: 'token',
+									status: 'new'
+								}).save().then(savedNotice => {
+									foundToken.notified = true;
+									foundToken.save();
+								});
+							}
+						}
+
+						res.json(responseObj);
 					});
 				}
 

@@ -5,12 +5,13 @@ var tokenSchema = new Schema({
 	uid: String,
 	token: String,
 	referral: String,
-	created: Date
+	created: Date,
+	notified: Boolean
 });
 
 tokenSchema.methods.hasExpired = function() {
     var now = Date.now();
-    return (now - Date.parse(this.created)) > 259200000;
+    return (now - Date.parse(this.created)) > 172800000;
 };
 
 const Token = mongoose.model("token", tokenSchema);
