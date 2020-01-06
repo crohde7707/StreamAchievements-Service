@@ -285,6 +285,61 @@ router.post('/tier2', isAdminAuthorized, (req, res) => {
 	});
 });
 
+router.get('/rank', isAdminAuthorized, (req, res) => {
+	handleRank(req, res);
+});
+
+async function handleRank(req, res) {
+	let foundChannel = await Channel.findOne({owner: req.query.channel}).lean();
+		
+	let foundAchievements = await Achievement.find({channel: req.query.channel}, 'uid rank').lean();
+
+	let rankMap = {};
+
+	await asyncForEach(foundAchievements, async (ach) => {
+		rankMap[ach.uid + ""] = ach.rank;
+	});
+
+	//console.log(Object.keys(rankMap).sort((a1, a2) => a1 < a2));
+
+	let foundEarned = await Earned.find({channelID: foundChannel['_id']}, 'id userID achievementID').lean();
+
+	let userMap = {};
+
+	await asyncForEach(foundEarned, async (earned) => {
+		if(!userMap[earned.userID]) {
+			userMap[earned.userID] = {
+				"0": 0,
+				"1": 0,
+				"2": 0,
+				"3": 0,
+				"4": 0
+			};
+		}
+		
+		if(rankMap[earned.achievementID + ""] !== undefined) {
+			userMap[earned.userID][rankMap[earned.achievementID + ""] + ""]++	
+		}
+	});
+
+	//all users found with all their achievements
+
+	let rankedUsers = Object.keys(userMap).sort((user1, user2) => {
+		let u1 = userMap[user1];
+		let u2 = userMap[user2];
+		
+		let u1Count = u1["0"] * 1 + u1["1"] * 2 + u1["2"] * 3 + u1["3"] * 4;
+		let u2Count = u2["0"] * 1 + u2["1"] * 2 + u2["2"] * 3 + u2["3"] * 4;
+
+		console.log(u1Count, u2Count);
+
+		return u2Count - u1Count
+	});
+
+	console.log(rankedUsers);
+
+	//User.find({})
+}
 
 router.post('/migrate', isAdminAuthorized, (req, res) => {
 	handleMigrate();
