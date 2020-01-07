@@ -19,7 +19,7 @@ const Token = require('../models/token-model');
 const Notice = require('../models/notice-model');
 const Earned = require('../models/earned-model');
 const {uploadImage, destroyImage} = require('../utils/image-utils');
-const {emitNewChannel, emitOverlaySettingsUpdate, emitOverlayAlert, emitNotificationsUpdate} = require('../utils/socket-utils');
+const {emitNewChannel, emitOverlaySettingsUpdate, emitOverlayAlert, emitNotificationsUpdate, emitDeleteChannel} = require('../utils/socket-utils');
 
 const DEFAULT_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png";
 const HIDDEN_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811887/hidden-icon.png";
@@ -29,6 +29,44 @@ const imgURLRegex = /^https:\/\/res\.cloudinary\.com\/phirehero\/.*\.(png|jpg|jp
 const DEFAULT_OVERLAY_CONFIG = require('../configs/default-overlay-configs');
 
 const RETRIEVE_LIMIT = 15;
+
+router.post('/delete', isAuthorized, (req, res) => {
+	handleDeleteChannel(req, res);
+});
+
+async function handleDeleteChannel(req, res) {
+	let foundChannel = await Channel.findOne({owner: req.user.name});
+
+	if(foundChannel) {
+		//delete all earned
+		let earnedErr = await Earned.deleteMany({channelID: foundChannel.id});
+		//delete all listeners
+		let listenerErr = await Listener.deleteMany({channel: foundChannel.owner});
+		//delete all achievements
+		let achErr = await Achievement.deleteMany({channel: foundChannel.owner});
+		//delete all uploaded images
+		let imgErr = await Image.deleteMany({channel: foundChannel.owner});
+		//delete the channel
+		let channelErr = await Channel.deleteOne({owner: req.user.name});
+		//update user to be 'user'
+		req.user.type = "user";
+		req.user.delegate = [];
+
+		let savedUser = await req.user.save();
+
+		emitDeleteChannel(req, req.user.name);
+
+		res.json({
+			delete: true
+		});
+		//TODO: update channel retrieve to remove channel from user when it doesn't exist
+	} else {
+		res.json({
+			delete: false,
+			err: "Channel not found"
+		});
+	}
+}
 
 router.post('/leave', isAuthorized, (req, res) => {
 	Channel.findOne({owner: req.body.channel}).then((existingChannel) => {

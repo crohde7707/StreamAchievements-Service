@@ -41,7 +41,8 @@ let combineAchievementAndListeners = (achievement, listener) => {
 			secret: achievement.secret,
 			listener: achievement.listener,
 			achType: listener.achType,
-			condition: listener.condition
+			condition: listener.condition,
+			rank: achievement.rank
 		}
 		
 		if(listener.query) {
@@ -358,6 +359,7 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 								secret: req.body.secret,
 								listener: req.body.listener,
 								alert: req.body.alert || true,
+								rank: req.body.rank || 0,
 								order: preCount
 							};
 

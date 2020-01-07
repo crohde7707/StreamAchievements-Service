@@ -9,6 +9,10 @@ let emitNewChannel = (req, channel) => {
 	emit(req, 'new-channel', channel);
 }
 
+let emitDeleteChannel = (req, channel) => {
+	emit(req, 'delete-channel', channel);
+}
+
 let emitChannelUpdate = (req, channelUpdates) => {
 	emit(req, 'channel-update', channelUpdates);
 }
@@ -99,6 +103,7 @@ let emitExtensionAchievementEarned = (req, data) => {
 
 module.exports = {
 	emitNewChannel,
+	emitDeleteChannel,
 	emitChannelUpdate,
 	emitNewListener,
 	emitUpdateListener,
