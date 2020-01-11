@@ -6,7 +6,8 @@ const Cryptr = require('cryptr');
 const cryptr = new Cryptr(process.env.SCK);
 
 let SearchChannels = (socket, value) => {
-	let regex = new RegExp(value, 'gi');
+	let strippedValue = value.replace(/[^\w\s]/gi, '');
+	let regex = new RegExp(strippedValue, 'gi');
 	
 	Channel.find({ owner: regex }).sort({'_id': -1}).limit(25).exec((err, docs) => {
 
@@ -22,7 +23,8 @@ let SearchChannels = (socket, value) => {
 }
 
 let SearchMembers = (socket, data) => {
-	let regex = new RegExp(data.value, 'gi');
+	let strippedValue = data.value.replace(/[^\w\s]/gi, '');
+	let regex = new RegExp(strippedValue, 'gi');
 
 	Channel.findOne({owner: data.owner}).then(foundChannel => {
 		if(foundChannel) {
@@ -56,7 +58,8 @@ let SearchMembers = (socket, data) => {
 }
 
 let SearchMembersDetailed = (socket, data) => {
-	let regex = new RegExp(data.value, 'gi');
+	let strippedValue = data.value.replace(/[^\w\s]/gi, '');
+	let regex = new RegExp(strippedValue, 'gi');
 
 	Channel.findOne({owner: data.owner}).then(foundChannel => {
 		if(foundChannel) {
@@ -81,7 +84,8 @@ let SearchMembersDetailed = (socket, data) => {
 }
 
 let SearchMod = (socket, data) => {
-	let regex = new RegExp(data.value, 'gi');
+	let strippedValue = data.value.replace(/[^\w\s]/gi, '');
+	let regex = new RegExp(strippedValue, 'gi');
 	
 	Channel.findOne({owner: data.owner}).then(foundChannel => {
 		if(foundChannel) {
