@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const validDataUrl = require('valid-data-url');
 const axios = require('axios');
+const { build } = require('../utils/regex-builder');
 
 const User = require('../models/user-model');
 const Channel = require('../models/channel-model');
@@ -19,7 +20,7 @@ const Token = require('../models/token-model');
 const Notice = require('../models/notice-model');
 const Earned = require('../models/earned-model');
 const {uploadImage, destroyImage} = require('../utils/image-utils');
-const {emitNewChannel, emitOverlaySettingsUpdate, emitOverlayAlert, emitNotificationsUpdate, emitDeleteChannel} = require('../utils/socket-utils');
+const {emitNewChannel, emitOverlaySettingsUpdate, emitOverlayAlert, emitNotificationsUpdate, emitDeleteChannel, emitAwardedAchievement} = require('../utils/socket-utils');
 
 const DEFAULT_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png";
 const HIDDEN_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811887/hidden-icon.png";
@@ -1622,13 +1623,37 @@ router.get('/overlay', (req, res) => {
 })
 
 router.get('/testOverlay', isAuthorized, (req, res) => {
-	emitOverlayAlert(req, {
-		user: req.user.name,
-		channel: req.user.name,
-		title: 'Test Achievement',
-		icon: 'https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png',
-		unlocked: true
-	});
+	Channel.findOne({owner: req.user.name}).then(foundChannel => {
+		if(foundChannel) {
+
+			emitOverlayAlert(req, {
+				user: 'testUser',
+				channel: foundChannel.owner,
+				title: 'Test Achievement',
+				icon: 'https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png',
+				unlocked: true
+			});
+
+			let overlaySettings = foundChannel.overlay;
+			let chatMessage;
+
+			if(overlaySettings.chatMessage && overlaySettings.chatMessage !== '') {
+				chatMessage = build({
+					chatMessage: overlaySettings.chatMessage,
+					member: 'testUser',
+					achievement: 'Test Achievement'
+				});
+			} else {
+				chatMessage = `${achievementData.member} just earned the "${achievementData.achievement}" achievement! PogChamp`;
+			}
+
+			emitAwardedAchievement(req, {
+				channel: foundChannel.owner,
+				message: chatMessage
+			});
+
+		}
+	})
 
 	res.json({});
 })
