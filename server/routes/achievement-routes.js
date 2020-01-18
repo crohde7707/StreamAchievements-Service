@@ -1402,7 +1402,7 @@ let handleUserAchievements = (req, res, user, retry=2) => {
 	});
 
 	Achievement.find({'_id': { $in: achievementIDs}, earnable: true}).then(foundAchievements => {
-		if(foundAchievement.length > 0) {
+		if(foundAchievements.length > 0) {
 			User.findOne(identifier).then(foundUser => {
 				if(foundUser) {
 					let entryIdx = foundUser.channels.findIndex(savedChannel => {
