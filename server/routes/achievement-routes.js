@@ -1401,58 +1401,21 @@ let handleUserAchievements = (req, res, user, retry=2) => {
 		return achievement.achievementID;
 	});
 
-	Achievement.find({'_id': { $in: achievementIDs}}).then(foundAchievements => {
+	Achievement.find({'_id': { $in: achievementIDs}, earnable: true}).then(foundAchievements => {
+		if(foundAchievement.length > 0) {
+			User.findOne(identifier).then(foundUser => {
+				if(foundUser) {
+					let entryIdx = foundUser.channels.findIndex(savedChannel => {
+						return savedChannel.channelID === channel.id;
+					});
 
-		User.findOne(identifier).then(foundUser => {
-			if(foundUser) {
-				let entryIdx = foundUser.channels.findIndex(savedChannel => {
-					return savedChannel.channelID === channel.id;
-				});
-
-				if(entryIdx >= 0 && !foundUser.channels[entryIdx].banned) {
-					try {
-						foundAchievements.forEach(foundAchievement => {
-							addToEarned(req, foundUser, channel, foundAchievement, mapping[foundAchievement.id]);
-						});
-					} catch (err) {
-						//Error saving achievement, retry
-						new Notice({
-							user: process.env.NOTICE_USER,
-							logo: DEFAULT_ICON,
-							message: `Issue awarding ${channel.owner}'s '${foundAchievement.title}' to ${foundUser.name}`,
-							date: currentDate,
-							type: 'admin',
-							status: 'new'
-						}).save();
-
-						User.findOne({name: channel.owner}).then(foundOwner => {
-							new Notice({
-								user: foundOwner._id,
-								logo: DEFAULT_ICON,
-								message: `Issue awarding '${foundAchievement.title}' to ${foundUser.name}! We are looking into the issue, feel free to manually award the achievement!`,
-								date: currentDate,
-								type: 'admin',
-								status: 'new'
-							}).save();
-						});
-					}
-				} else {
-
-					if(foundUser.preferences.autojoin) {
+					if(entryIdx >= 0 && !foundUser.channels[entryIdx].banned) {
 						try {
-							foundUser.channels.push({
-								channelID: channel.id,
-								banned: false
+							foundAchievements.forEach(foundAchievement => {
+								addToEarned(req, foundUser, channel, foundAchievement, mapping[foundAchievement.id]);
 							});
-							foundUser.save().then(savedUser => {
-								channel.members.push(savedUser.id);
-								channel.save().then(savedChannel => {
-									foundAchievements.forEach(foundAchievement => {
-										addToEarned(req, savedUser, savedChannel, foundAchievement, mapping[foundAchievement.id]);
-									});
-								});
-							});
-						} catch(err) {
+						} catch (err) {
+							//Error saving achievement, retry
 							new Notice({
 								user: process.env.NOTICE_USER,
 								logo: DEFAULT_ICON,
@@ -1474,66 +1437,104 @@ let handleUserAchievements = (req, res, user, retry=2) => {
 							});
 						}
 					} else {
+
+						if(foundUser.preferences.autojoin) {
+							try {
+								foundUser.channels.push({
+									channelID: channel.id,
+									banned: false
+								});
+								foundUser.save().then(savedUser => {
+									channel.members.push(savedUser.id);
+									channel.save().then(savedChannel => {
+										foundAchievements.forEach(foundAchievement => {
+											addToEarned(req, savedUser, savedChannel, foundAchievement, mapping[foundAchievement.id]);
+										});
+									});
+								});
+							} catch(err) {
+								new Notice({
+									user: process.env.NOTICE_USER,
+									logo: DEFAULT_ICON,
+									message: `Issue awarding ${channel.owner}'s '${foundAchievement.title}' to ${foundUser.name}`,
+									date: currentDate,
+									type: 'admin',
+									status: 'new'
+								}).save();
+
+								User.findOne({name: channel.owner}).then(foundOwner => {
+									new Notice({
+										user: foundOwner._id,
+										logo: DEFAULT_ICON,
+										message: `Issue awarding '${foundAchievement.title}' to ${foundUser.name}! We are looking into the issue, feel free to manually award the achievement!`,
+										date: currentDate,
+										type: 'admin',
+										status: 'new'
+									}).save();
+								});
+							}
+						} else {
+							foundAchievements.forEach(foundAchievement => {
+								addToEarned(req, foundUser, channel, foundAchievement, mapping[foundAchievement.id]);
+							});
+						}
+					}
+				} else {
+					console.log('user not found, call to twitch');
+					// User doesn't exist yet, so store the event off to award when signed up!
+					let apiURL;
+					let userPromise;
+					let userObj = {};
+					let etid = identifier['integration.twitch.etid'];
+
+					if(etid && etid !== 'undefined' && user.name) {
+						console.log('Call not needed');
+						//we grabbed the info when sorting achievements, no need to call to twitch again
+						userObj.userID = identifier['integration.twitch.etid'];
+						userObj.name = user.name;
+
 						foundAchievements.forEach(foundAchievement => {
-							addToEarned(req, foundUser, channel, foundAchievement, mapping[foundAchievement.id]);
+							addToEarned(req, userObj, channel, foundAchievement, mapping[foundAchievement.id]);
+						});					
+					} else {
+						if(identifier.name) {
+							apiURL = `https://api.twitch.tv/helix/users/?login=${identifier.name}`;
+						} else if(etid && etid !== 'undefined') {
+							apiURL = `https://api.twitch.tv/helix/users/?id=${etid}`;
+						}
+
+						if(apiURL) {
+
+							userPromise = new Promise((resolve, reject) => {
+								axios.get(apiURL, {
+									headers: {
+										'Client-ID': process.env.TCID
+									}
+								}).then(res => {
+									if(res.data && res.data.data && res.data.data[0]) {
+										userObj.userID = res.data.data[0].id;
+										userObj.name = res.data.data[0].login
+									}
+
+									resolve();
+								});
+							})
+						} else {
+							userPromise = Promise.resolve();
+						}
+
+						userPromise.then(() => {
+
+							if(userObj.userID && userObj.name) {
+								foundAchievements.forEach(foundAchievement => {
+									addToEarned(req, userObj, channel, foundAchievement, mapping[foundAchievement.id]);
+								});
+							}
 						});
 					}
 				}
-			} else {
-				console.log('user not found, call to twitch');
-				// User doesn't exist yet, so store the event off to award when signed up!
-				let apiURL;
-				let userPromise;
-				let userObj = {};
-				let etid = identifier['integration.twitch.etid'];
-
-				if(etid && etid !== 'undefined' && user.name) {
-					console.log('Call not needed');
-					//we grabbed the info when sorting achievements, no need to call to twitch again
-					userObj.userID = identifier['integration.twitch.etid'];
-					userObj.name = user.name;
-
-					foundAchievements.forEach(foundAchievement => {
-						addToEarned(req, userObj, channel, foundAchievement, mapping[foundAchievement.id]);
-					});					
-				} else {
-					if(identifier.name) {
-						apiURL = `https://api.twitch.tv/helix/users/?login=${identifier.name}`;
-					} else if(etid && etid !== 'undefined') {
-						apiURL = `https://api.twitch.tv/helix/users/?id=${etid}`;
-					}
-
-					if(apiURL) {
-
-						userPromise = new Promise((resolve, reject) => {
-							axios.get(apiURL, {
-								headers: {
-									'Client-ID': process.env.TCID
-								}
-							}).then(res => {
-								if(res.data && res.data.data && res.data.data[0]) {
-									userObj.userID = res.data.data[0].id;
-									userObj.name = res.data.data[0].login
-								}
-
-								resolve();
-							});
-						})
-					} else {
-						userPromise = Promise.resolve();
-					}
-
-					userPromise.then(() => {
-
-						if(userObj.userID && userObj.name) {
-							foundAchievements.forEach(foundAchievement => {
-								addToEarned(req, userObj, channel, foundAchievement, mapping[foundAchievement.id]);
-							});
-						}
-					});
-				}
-			}
-		})
+			})
+		}
 	})
 
 }

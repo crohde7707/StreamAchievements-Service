@@ -14,6 +14,8 @@ let emitDeleteChannel = (req, channel) => {
 }
 
 let emitChannelUpdate = (req, channelUpdates) => {
+	console.log('channel update');
+	console.log(channelUpdates);
 	emit(req, 'channel-update', channelUpdates);
 }
 
