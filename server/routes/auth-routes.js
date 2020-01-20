@@ -53,9 +53,10 @@ router.get('/twitch/redirect', passport.authenticate('twitch.js'), (req, res) =>
 			Channel.findOne({owner: req.user.name}).then(foundChannel => {
 				if(foundChannel) {
 
-					if(req.user.update) {
+					if(req.user.update && req.user.update.old && req.user.update.new) {
 						let update = {
-							...req.user.update,
+							old: req.user.update.old,
+							new: req.user.update.new,
 							fullAccess: foundChannel.gold || false
 						};
 

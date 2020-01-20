@@ -103,7 +103,6 @@ passport.use(
 											}
 										});
 										//Name change occured, inform the IRC to connect
-										
 										savedUser.update = {
 											old: ownerUpdate,
 											new: savedChannel.owner

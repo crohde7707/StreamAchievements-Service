@@ -71,7 +71,6 @@ WebSockets.on('connection', function (socket) {
     socket.on('handshake', function(data) {
 
     	if(data.name === "SAIRC") {
-    		console.log('wut')
     		app.set('IRCSOCKET', socket.id);
     		
     	} else if(data.extension) {
@@ -82,8 +81,6 @@ WebSockets.on('connection', function (socket) {
             }
 
             extensionSockets[data.user] = socket.id;
-
-            console.log(extensionSockets);
 
             app.set('EXTENSIONSOCKETS', extensionSockets);
         } else if(data.web) {

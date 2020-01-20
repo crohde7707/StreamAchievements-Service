@@ -14,8 +14,6 @@ let emitDeleteChannel = (req, channel) => {
 }
 
 let emitChannelUpdate = (req, channelUpdates) => {
-	console.log('channel update');
-	console.log(channelUpdates);
 	emit(req, 'channel-update', channelUpdates);
 }
 
@@ -91,12 +89,10 @@ let emitNotificationsUpdate = (req, data) => {
 }
 
 let emitExtensionAchievementEarned = (req, data) => {
-	console.log(data);
 	let ws = req.app.get('ws');
 	let extensionSockets = req.app.get('EXTENSIONSOCKETS');
 	if(extensionSockets) {
 		let sid = extensionSockets[data.user];
-		console.log(sid);
 		if(sid) {
 			ws.to(sid).emit('achievement-earned', data.aid);
 		}
