@@ -19,6 +19,7 @@ const Image = require('../models/image-model');
 const Token = require('../models/token-model');
 const Notice = require('../models/notice-model');
 const Earned = require('../models/earned-model');
+const Event = require('../models/event-model');
 const {uploadImage, destroyImage} = require('../utils/image-utils');
 const {emitNewChannel, emitOverlaySettingsUpdate, emitOverlayAlert, emitNotificationsUpdate, emitDeleteChannel, emitAwardedAchievement} = require('../utils/socket-utils');
 
@@ -561,9 +562,23 @@ router.get('/dashboard', isAuthorized, (req, res) => {
 
 					resolve(resModerators);
 				})
+			});
+
+			let eventsPromise = new Promise((resolve, reject) => {
+				Event.find({channelID: existingChannel.id}).sort({'_id': -1}).limit(30).exec((err, events) => {
+					let resEvents = events.map(ev => {
+						return {
+							member: ev.member,
+							achievement: ev.achievement,
+							date: ev.date
+						}
+					});
+
+					resolve(resEvents);
+				});
 			})
 
-			Promise.all([achievementsPromise, imagesPromise, moderatorsPromise]).then(values => {
+			Promise.all([achievementsPromise, imagesPromise, moderatorsPromise, eventsPromise]).then(values => {
 				let retChannel;
 
 				if(!existingChannel.oid) {
@@ -580,7 +595,8 @@ router.get('/dashboard', isAuthorized, (req, res) => {
 							channel: retChannel,
 							achievements: values[0],
 							images: values[1],
-							moderators: values[2]
+							moderators: values[2],
+							events: values[3]
 						});
 					});
 				} else if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
@@ -594,7 +610,8 @@ router.get('/dashboard', isAuthorized, (req, res) => {
 							channel: retChannel,
 							achievements: values[0],
 							images: values[1],
-							moderators: values[2]
+							moderators: values[2],
+							events: values[3]
 						});
 					})
 				} else if(!existingChannel.referral || !existingChannel.referral.code) {
@@ -624,7 +641,8 @@ router.get('/dashboard', isAuthorized, (req, res) => {
 								channel: retChannel,
 								achievements: values[0],
 								images: values[1],
-								moderators: values[2]
+								moderators: values[2],
+								events: values[3]
 							});
 						})
 					})
@@ -639,7 +657,8 @@ router.get('/dashboard', isAuthorized, (req, res) => {
 						channel: retChannel,
 						achievements: values[0],
 						images: values[1],
-						moderators: values[2]
+						moderators: values[2],
+						events: values[3]
 					});
 				}
 			});

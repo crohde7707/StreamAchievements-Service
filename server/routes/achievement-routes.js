@@ -10,6 +10,7 @@ const Listener = require('../models/listener-model');
 const Notice = require('../models/notice-model');
 const Image = require('../models/image-model');
 const Earned = require('../models/earned-model');
+const Event = require('../models/event-model');
 const {isAuthorized, isModAuthorized} = require('../utils/auth-utils');
 const {
 	emitNewListener,
@@ -768,10 +769,13 @@ let manualAward = (req, res, existingChannel) => {
 										};
 
 										emitAwardedAchievement(req, buildAchievementMessage(existingChannel, alertData));
+
 										emitExtensionAchievementEarned(req, {
 											user: member.integration.twitch.etid,
 											aid: foundAchievement.uid
 										});
+
+										logChannelEvent(existingChannel, member, foundAchievement);
 									}
 
 									new Notice({
@@ -1026,10 +1030,13 @@ let handleNonMemberAward = (req, res, foundChannel, foundAchievement, nonMember)
 										};
 										
 										emitAwardedAchievementNonMember(req, buildAchievementMessage(foundChannel, alertData));
+
 										emitExtensionAchievementEarned(req, {
 											user: userObj.userID,
 											aid: foundAchievement.uid
 										});
+
+										logChannelEvent(foundChannel, userObj, foundAchievement);
 									}
 
 									let shouldAlert = foundAchievement.alert || true;
@@ -1205,6 +1212,19 @@ router.post('/award/chat', (req, res) => {
 	}
 });
 
+let logChannelEvent = (channel, user, achievement) => {
+	let event = "";
+
+	event = `${user.name} earned "${achievement.title}"`;
+
+	new Event({
+		channelID: channel.id,
+		member: user.name,
+		achievement: achievement.title,
+		date: Date.now()
+	}).save();
+}
+
 let alertAchievement = (req, foundChannel, savedUser, foundAchievement) => {
 	if(foundChannel.overlay.chat) {
 		let alertData = {
@@ -1226,6 +1246,8 @@ let alertAchievement = (req, foundChannel, savedUser, foundAchievement) => {
 			user: etid,
 			aid: foundAchievement.uid
 		});
+
+		logChannelEvent(foundChannel, savedUser, foundAchievement);
 	}
 	
 	
