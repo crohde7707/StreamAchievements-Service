@@ -6,5 +6,12 @@ module.exports = {
 	exitEffect: "zoomOut",
 	duration: 6,
 	volume: 100,
-	delay: 2
+	delay: 2,
+	custom: false,
+	graphic: "",
+	layout: 1,
+	textColor: "#000000",
+	titleFontSize: 64,
+	showDescription: true,
+	descFontSize: 40
 }

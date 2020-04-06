@@ -11,7 +11,11 @@ const Notice = require('../models/notice-model');
 const Image = require('../models/image-model');
 const Earned = require('../models/earned-model');
 const Event = require('../models/event-model');
-const {isAuthorized, isModAuthorized} = require('../utils/auth-utils');
+const {
+	isAuthorized,
+	isModAuthorized,
+	getTwitchAxiosInstance
+} = require('../utils/auth-utils');
 const {
 	emitNewListener,
 	emitUpdateListener,
@@ -979,25 +983,20 @@ let handleNonMemberAward = (req, res, foundChannel, foundAchievement, nonMember)
 			}
 		} else {
 			// User doesn't exist yet, so store the event off to award when signed up!
-			let apiURL;
 			let userPromise;
 			let userObj = {};
 
-			apiURL = `https://api.twitch.tv/helix/users/?login=${nonMember.name}`;
-
 			userPromise = new Promise((resolve, reject) => {
-				axios.get(apiURL, {
-					headers: {
-						'Client-ID': process.env.TCID
-					}
-				}).then(res => {
+				getTwitchAxiosInstance().then(instance => {
+					instance.get(`https://api.twitch.tv/helix/users/?login=${nonMember.name}`).then(res => {
 
-					if(res.data && res.data.data && res.data.data[0]) {
-						userObj.userID = res.data.data[0].id;
-						userObj.name = res.data.data[0].login
-					}
+						if(res.data && res.data.data && res.data.data[0]) {
+							userObj.userID = res.data.data[0].id;
+							userObj.name = res.data.data[0].login
+						}
 
-					resolve();
+						resolve();
+					});
 				});
 			})
 
@@ -1528,17 +1527,15 @@ let handleUserAchievements = (req, res, user, retry=2) => {
 						if(apiURL) {
 
 							userPromise = new Promise((resolve, reject) => {
-								axios.get(apiURL, {
-									headers: {
-										'Client-ID': process.env.TCID
-									}
-								}).then(res => {
-									if(res.data && res.data.data && res.data.data[0]) {
-										userObj.userID = res.data.data[0].id;
-										userObj.name = res.data.data[0].login
-									}
+								getTwitchAxiosInstance().then(instance => {
+									instance.get(apiURL).then(res => {
+										if(res.data && res.data.data && res.data.data[0]) {
+											userObj.userID = res.data.data[0].id;
+											userObj.name = res.data.data[0].login
+										}
 
-									resolve();
+										resolve();
+									});
 								});
 							})
 						} else {
@@ -1671,20 +1668,18 @@ let handleAchievement = (req, res, foundChannel, achievementCriteria, userCriter
 						if(apiURL) {
 
 							userPromise = new Promise((resolve, reject) => {
-								axios.get(apiURL, {
-									headers: {
-										'Client-ID': process.env.TCID
-									}
-								}).then(res => {
-									if(res.data && res.data.data && res.data.data[0]) {
-										userObj.userID = res.data.data[0].id;
-										userObj.name = res.data.data[0].login
-									}
+								getTwitchAxiosInstance().then(instance => {
+									instance.get(apiURL).then(res => {
+										if(res.data && res.data.data && res.data.data[0]) {
+											userObj.userID = res.data.data[0].id;
+											userObj.name = res.data.data[0].login
+										}
 
-									resolve();
-								}).catch(err => {
-									console.log(err);
-									reject();
+										resolve();
+									}).catch(err => {
+										console.log(err);
+										reject();
+									});
 								});
 							})
 						} else {
@@ -1775,7 +1770,9 @@ router.post('/listeners', async (req, res, next) => {
 
 								if(apiURL) {
 
-									let res = await axios.get(apiURL, {headers: {'Client-ID': process.env.TCID}});
+									let instance = await getTwitchAxiosInstance();
+
+									let res = await instance.get(apiURL);
 
 									if(res.data && res.data.data && res.data.data[0]) {
 										etidMap[userName] = res.data.data[0].id;

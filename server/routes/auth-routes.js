@@ -3,7 +3,10 @@ const passport = require('passport');
 const Cryptr = require('cryptr');
 const axios = require('axios');
 const cryptr = new Cryptr(process.env.SCK);
-const isAuthorized = require('../utils/auth-utils').isAuthorized;
+const {
+	isAuthorized,
+	getTwitchAxiosInstance
+} = require('../utils/auth-utils');
 const User = require('../models/user-model');
 const Channel = require('../models/channel-model');
 const Achievement = require('../models/achievement-model');
@@ -549,71 +552,73 @@ let refreshPatreonToken = (req, refreshToken) => {
 }
 
 let twitchSync = (req, user, etid) => {
+
 	if(user.integration.twitch) {
 		return new Promise((resolve, reject) => {
-			axios.get(`https://api.twitch.tv/helix/users/?id=${user.integration.twitch.etid}`, {
-				headers: {
-					'Client-ID': process.env.TCID
-				}
-			})
-				.then(response => {
-					user.name = response.data.data[0].login;
-					user.logo = response.data.data[0].profile_image_url;
 
-					user.save().then(savedUser => {
+			getTwitchAxiosInstance().then(instance => {
 
-						Channel.findOne({twitchID: savedUser.integration.twitch.etid}).then(foundChannel => {
-							if(foundChannel) {
-								let update = false;
+				instance.get(`https://api.twitch.tv/helix/users/?id=${user.integration.twitch.etid}`)
+					.then(response => {
+						console.log(response.data)
+						user.name = response.data.data[0].login;
+						user.logo = response.data.data[0].profile_image_url;
 
-								if(foundChannel.owner !== savedUser.name) {
-									update = foundChannel.owner;
-									foundChannel.owner = savedUser.name;
-								}
+						user.save().then(savedUser => {
 
-								if(foundChannel.logo !== savedUser.logo) {
-									foundChannel.logo = savedUser.logo;
-								}
+							Channel.findOne({twitchID: savedUser.integration.twitch.etid}).then(foundChannel => {
+								if(foundChannel) {
+									let update = false;
 
-								if(update) {
-									
-									Achievement.find({channel: update}).then(foundAchievements => {
-										if(foundAchievements.length > 0) {
-											foundAchievements.forEach(ach => {
-												ach.channel = savedUser.name;
-												ach.save();
-											});
-										}
+									if(foundChannel.owner !== savedUser.name) {
+										update = foundChannel.owner;
+										foundChannel.owner = savedUser.name;
+									}
+
+									if(foundChannel.logo !== savedUser.logo) {
+										foundChannel.logo = savedUser.logo;
+									}
+
+									if(update) {
+										
+										Achievement.find({channel: update}).then(foundAchievements => {
+											if(foundAchievements.length > 0) {
+												foundAchievements.forEach(ach => {
+													ach.channel = savedUser.name;
+													ach.save();
+												});
+											}
+										});
+
+										Listener.find({channel: update}).then(foundListeners => {
+											if(foundListeners.length > 0) {
+												foundListeners.forEach(list => {
+													list.channel = savedUser.name;
+													list.save();
+												});
+											}
+										})
+										
+										emitChannelUpdate(req, {
+											old: update,
+											new: savedUser.name,
+											fullAccess: foundChannel.gold || false
+										});
+									}
+
+									foundChannel.save().then(savedChannel => {
+										resolve({
+											username: savedUser.name,
+											logo: savedUser.logo
+										});		
 									});
-
-									Listener.find({channel: update}).then(foundListeners => {
-										if(foundListeners.length > 0) {
-											foundListeners.forEach(list => {
-												list.channel = savedUser.name;
-												list.save();
-											});
-										}
-									})
-									
-									emitChannelUpdate(req, {
-										old: update,
-										new: savedUser.name,
-										fullAccess: foundChannel.gold || false
-									});
-								}
-
-								foundChannel.save().then(savedChannel => {
+								} else {
 									resolve({
 										username: savedUser.name,
 										logo: savedUser.logo
-									});		
-								});
-							} else {
-								resolve({
-									username: savedUser.name,
-									logo: savedUser.logo
-								});
-							}
+									});
+								}
+							});
 						});
 					});
 				});

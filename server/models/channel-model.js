@@ -29,7 +29,14 @@ const channelSchema = new Schema({
 		exitEffect: String,
 		duration: Number,
 		volume: Number,
-		delay: Number
+		delay: Number,
+		custom: Boolean,
+		graphic: String,
+		layout: Number,
+		textColor: String,
+		titleFontSize: Number,
+		showDescription: Boolean,
+		descFontSize: Number
 	},
 	gold: Boolean,
 	nextUID: Number,

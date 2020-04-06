@@ -6,6 +6,7 @@ let emit = (req, event, data) => {
 }
 
 let emitNewChannel = (req, channel) => {
+	console.log('emitting new channel to IRC bot');
 	emit(req, 'new-channel', channel);
 }
 

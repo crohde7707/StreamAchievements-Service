@@ -1,7 +1,13 @@
 const router = require('express').Router();
 const passport = require('passport');
 const uuid = require('uuid/v1');
-const {isAuthorized, isModAuthorized, isAdminAuthorized, isExtensionAuthorized} = require('../utils/auth-utils');
+const {
+	isAuthorized,
+	isModAuthorized,
+	isAdminAuthorized,
+	isExtensionAuthorized,
+	getTwitchAxiosInstance
+} = require('../utils/auth-utils');
 const mongoose = require('mongoose');
 const Cryptr = require('cryptr');
 const cryptr = new Cryptr(process.env.SCK);
@@ -313,36 +319,34 @@ router.post("/user/create", isExtensionAuthorized, (req, res) => {
 		let apiURL = `https://api.twitch.tv/helix/users/?id=${req.user.uid}`;
 
 		userPromise = new Promise((resolve, reject) => {
-			axios.get(apiURL, {
-				headers: {
-					'Client-ID': process.env.TCID
-				}
-			}).then(res => {
+			getTwitchAxiosInstance().then(instance => {
+				instance.get(apiURL).then(res => {
 
-				if(res.data && res.data.data && res.data.data[0]) {
-					let userID = res.data.data[0].id;
-					let name = res.data.data[0].login;
-					let logo = res.data.data[0]['profile_image_url'];
-					let broadcaster_type = res.data.data[0]['broadcaster_type'];
+					if(res.data && res.data.data && res.data.data[0]) {
+						let userID = res.data.data[0].id;
+						let name = res.data.data[0].login;
+						let logo = res.data.data[0]['profile_image_url'];
+						let broadcaster_type = res.data.data[0]['broadcaster_type'];
 
-					new User({
-						name: name,
-						logo: logo,
-						type: 'user',
-						channels: [],
-						integration: {
-							twitch: {
-								etid: userID
-							}
-						},
-						preferences: {
-							autojoin: true
-						},
-						new: false
-					}).save().then((newUser) => {
-						resolve(newUser);
-					});		
-				}
+						new User({
+							name: name,
+							logo: logo,
+							type: 'user',
+							channels: [],
+							integration: {
+								twitch: {
+									etid: userID
+								}
+							},
+							preferences: {
+								autojoin: true
+							},
+							new: false
+						}).save().then((newUser) => {
+							resolve(newUser);
+						});		
+					}
+				});
 			});
 		});
 

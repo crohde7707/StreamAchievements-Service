@@ -1,7 +1,13 @@
 const router = require('express').Router();
 const passport = require('passport');
 const uuid = require('uuid/v1');
-const {isAuthorized, isModAuthorized, isAdminAuthorized, isExtensionAuthorized} = require('../utils/auth-utils');
+const {
+	isAuthorized,
+	isModAuthorized,
+	isAdminAuthorized,
+	isExtensionAuthorized,
+	getTwitchAxiosInstance
+} = require('../utils/auth-utils');
 const mongoose = require('mongoose');
 const Cryptr = require('cryptr');
 const cryptr = new Cryptr(process.env.SCK);
@@ -416,11 +422,9 @@ router.post('/update', async (req, res) => {
 		let foundUser = await User.findOne({name: channel});
 		
 		if(foundUser) {
-			let response = await axios.get(`https://api.twitch.tv/helix/users/?id=${foundUser.integration.twitch.etid}`, {
-				headers: {
-					'Client-ID': process.env.TCID
-				}
-			});
+			let instance = await getTwitchAxiosInstance();
+
+			let response = await instance.get(`https://api.twitch.tv/helix/users/?id=${foundUser.integration.twitch.etid}`);
 
 			foundUser.name = response.data.data[0].login;
 			foundUser.logo = response.data.data[0].profile_image_url;
@@ -759,129 +763,157 @@ router.post('/preferences', isAuthorized, (req, res) => {
 	});
 });
 
-let updateChannelPreferences = (req, res, existingChannel) => {
-	let defaultPromise, hiddenPromise, overlayPromise;
-		//upload images if needed
-	defaultPromise = new Promise((resolve, reject) => {
-		if(req.body.defaultIcon && validDataUrl(req.body.defaultIcon)) {
+let updateChannelPreferences = async (req, res, existingChannel) => {
+
+	let defaultIcon, hiddenIcon, overlay;
+
+	if(req.body.defaultIcon && validDataUrl(req.body.defaultIcon)) {
 			//got an image to upload
-			uploadImage(req.body.defaultIcon, req.body.defaultIconName, existingChannel.owner, 'default').then(iconImg => {
-				resolve(iconImg.url);
-			});
-		} else if(req.body.defaultImage && imgURLRegex.test(req.body.defaultImage)) {
-			resolve(req.body.defaultImage);
-		} else {
-			resolve();
-		}
-	});
+		defaultIcon = await	uploadImage(req.body.defaultIcon, req.body.defaultIconName, existingChannel.owner, 'default');
+	} else if(req.body.defaultImage && imgURLRegex.test(req.body.defaultImage)) {
+		defaultIcon = req.body.defaultImage;
+	}
 
-	hiddenPromise = new Promise((resolve, reject) => {
-		if(req.body.hiddenIcon && validDataUrl(req.body.hiddenIcon)) {
-			//got an image to upload
-			uploadImage(req.body.hiddenIcon, req.body.hiddenIconName, existingChannel.owner, 'hidden').then(iconImg => {
-				resolve(iconImg.url);
-			});
-		} else if(req.body.hiddenImage && imgURLRegex.test(req.body.hiddenImage)) {
-			resolve(req.body.hiddenImage);
-		} else {
-			resolve();
-		}
-	});
+	
+	if(req.body.hiddenIcon && validDataUrl(req.body.hiddenIcon)) {
+		//got an image to upload
+		hiddenIcon = uploadImage(req.body.hiddenIcon, req.body.hiddenIconName, existingChannel.owner, 'hidden');
+	} else if(req.body.hiddenImage && imgURLRegex.test(req.body.hiddenImage)) {
+		hiddenIcon = req.body.hiddenImage;
+	}
 
-	overlayPromise = new Promise((resolve, reject) => {
-		if(req.body.overlay) {
-			let {chat, chatMessage, sfx, enterEffect, exitEffect, duration, volume, delay} = req.body.overlay;
-			let overlay = existingChannel.overlay || {};
+	
+	if(req.body.overlay) {
+		let {
+			chat,
+			chatMessage,
+			sfx,
+			enterEffect,
+			exitEffect,
+			duration,
+			volume,
+			delay,
+			custom,
+			graphic,
+			graphicName,
+			layout,
+			textColor,
+			titleFontSize,
+			showDescription,
+			descFontSize
+		} = req.body.overlay;
 
-			if(chat) {
-				overlay.chat = chat;
-			}
+		overlay = existingChannel.overlay || {};
 
-			if(chatMessage !== undefined) {
-				overlay.chatMessage = chatMessage;
-			}
-
-			if(sfx) {
-				overlay.sfx = process.env.WEB_DOMAIN + 'sounds/achievement.' + sfx + '.mp3';
-			}
-
-			if(enterEffect) {
-				overlay.enterEffect = enterEffect;
-			}
-
-			if(exitEffect) {
-				overlay.exitEffect = exitEffect;
-			}
-
-			if(duration) {
-				overlay.duration = duration
-			}
-
-			if(volume) {
-				overlay.volume = volume
-			}
-
-			if(delay) {
-				overlay.delay = delay;
-			}
-
-			resolve(overlay);
-		} else {
-			resolve();
-		}
-	});
-
-	Promise.all([defaultPromise, hiddenPromise, overlayPromise]).then((results) => {
-
-		let iconsUpdate = {
-			default: existingChannel.icons.default,
-			hidden: existingChannel.icons.hidden
-		};
-
-		if(results[0]) {
-			iconsUpdate.default = results[0];
+		if(chat) {
+			overlay.chat = chat;
 		}
 
-		if(results[1]) {
-			iconsUpdate.hidden = results[1];
+		if(chatMessage !== undefined) {
+			overlay.chatMessage = chatMessage;
 		}
 
-		if(results[2]) {
-			existingChannel.overlay = results[2];
-			updateSettings = true;
+		if(sfx) {
+			overlay.sfx = process.env.WEB_DOMAIN + 'sounds/achievement.' + sfx + '.mp3';
 		}
 
-		existingChannel.icons = iconsUpdate;
+		if(enterEffect) {
+			overlay.enterEffect = enterEffect;
+		}
 
-		existingChannel.save().then(savedChannel => {
+		if(exitEffect) {
+			overlay.exitEffect = exitEffect;
+		}
 
-			if(results[0] !== savedChannel.icons.default) {
-				console.log('uh oh');
+		if(duration) {
+			overlay.duration = duration
+		}
+
+		if(volume) {
+			overlay.volume = volume
+		}
+
+		if(delay) {
+			overlay.delay = delay;
+		}
+
+		if(existingChannel.gold) {
+			if(custom !== undefined) {
+				overlay.custom = custom;
 			}
 
-			if(updateSettings) {
-				emitOverlaySettingsUpdate(req, {
-					channel: savedChannel.owner,
-					overlay: savedChannel.overlay
-				});
+			if(graphic && validDataUrl(graphic)) {
+				//got an image to upload
+				overlay.graphic = await uploadImage(graphic, graphicName, existingChannel.owner, 'graphic');
+			} else if(graphic && imgURLRegex.test(graphic)) {
+				overlay.graphic = graphic;
 			}
 
-			Image.find({channel: existingChannel.owner}).then(foundImages => {
-				if(foundImages) {
-					res.json({
-						channel: savedChannel,
-						images: {
-							gallery: foundImages
-						}
-					});
-				} else {
-					res.json({
-						channel: savedChannel
-					});
-				}
-			});
+			if(layout) {
+				overlay.layout = layout;
+			}
+
+			if(textColor) {
+				overlay.textColor = textColor;
+			}
+
+			if(titleFontSize) {
+				overlay.titleFontSize = titleFontSize;
+			}
+
+			if(showDescription !== undefined) {
+				overlay.showDescription = showDescription;
+			}
+
+			if(descFontSize) {
+				overlay.descFontSize = descFontSize;
+			}
+		}
+	}
+
+	let iconsUpdate = {
+		default: existingChannel.icons.default,
+		hidden: existingChannel.icons.hidden
+	};
+
+	if(defaultIcon) {
+		iconsUpdate.default = defaultIcon;
+	}
+
+	if(hiddenIcon) {
+		iconsUpdate.hidden = hiddenIcon;
+	}
+
+	if(overlay) {
+		existingChannel.overlay = overlay;
+		updateSettings = true;
+	}
+
+	existingChannel.icons = iconsUpdate;
+
+	let savedChannel = await existingChannel.save();
+
+	if(updateSettings) {
+		emitOverlaySettingsUpdate(req, {
+			channel: savedChannel.owner,
+			overlay: savedChannel.overlay
 		});
-	});
+	}
+
+	let foundImages = await Image.find({channel: existingChannel.owner});
+
+	if(foundImages) {
+		res.json({
+			channel: savedChannel,
+			images: {
+				gallery: foundImages
+			}
+		});
+	} else {
+		res.json({
+			channel: savedChannel
+		});
+	}
 }
 
 router.post('/image', isAuthorized, (req, res) => {
@@ -1512,6 +1544,10 @@ router.post('/verify', isAuthorized, (req, res) => {
 
 					//TODO: Send email detailing info from confirmation page
 
+					console.log('--------------------');
+					console.log(`${newChannel.owner} just created their channel!`);
+					console.log('--------------------');
+
 					new Notice({
 						user: process.env.NOTICE_USER,
 						logo: newChannel.logo,
@@ -1522,17 +1558,17 @@ router.post('/verify', isAuthorized, (req, res) => {
 						status: 'new'
 					}).save();
 
+					emitNewChannel(req, {
+						name: newChannel.owner,
+						'full-access': fullAccess,
+						online: false
+					});
+
 					req.user.type = 'verified';
 					req.user.save().then((savedUser) => {
 						
 						Token.deleteOne({uid: req.user._id, token}).then(err => {
 							console.log(err);
-						});
-
-						emitNewChannel(req, {
-							name: savedUser.name,
-							'full-access': fullAccess,
-							online: false
 						});
 
 						res.json({
@@ -1632,11 +1668,33 @@ router.get('/overlay', (req, res) => {
 
 	Channel.findOne({oid: oid}).then(foundChannel => {
 		if(foundChannel) {
-			
-			res.json({
-				overlay: foundChannel.overlay,
-				icons: foundChannel.icons
-			});
+
+			let keyLength = Object.keys(foundChannel.overlay);
+			let defaultKeys = Object.keys(DEFAULT_OVERLAY_CONFIG);
+
+			//One less due to mongodb $init prop
+			if((keyLength.length - 1) !== defaultKeys.length) {
+				let overlay = foundChannel.overlay;
+				//Fill in the blanks
+				defaultKeys.forEach(config => {
+					if(overlay[config] === undefined) {
+						overlay[config] = DEFAULT_OVERLAY_CONFIG[config];
+					}
+				});
+
+				foundChannel.overlay = overlay;
+				foundChannel.save().then(savedChannel => {
+					res.json({
+						overlay: savedChannel.overlay,
+						icons: savedChannel.icons
+					});
+				});
+			} else {
+				res.json({
+					overlay: foundChannel.overlay,
+					icons: foundChannel.icons
+				});	
+			}
 		}
 	});
 })

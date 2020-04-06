@@ -1,8 +1,10 @@
 const User = require('../models/user-model');
+const Ttkn = require('../models/ttkn-model');
 const Channel = require('../models/channel-model');
 const Cryptr = require('cryptr');
 const cryptr = new Cryptr(process.env.SCK);
 const setRedirectCookie = require('../utils/redirect-mapper');
+const axios = require('axios');
 
 const authCheck = (req, res, next) => {
 	if(!req.user) {
@@ -156,10 +158,87 @@ const isExtensionAuthorized = async (req, res, next) => {
 	
 }
 
+const getTwitchAxiosInstance = () => {
+	return new Promise((resolve, reject) => {
+
+		let instance = axios.create();
+
+		instance.defaults.headers.common = {
+			'Client-ID': process.env.TCID
+		}
+
+		Ttkn.findOne({}).then(foundTtkn => {
+			if(foundTtkn) {
+				//check if valid
+
+				let at = cryptr.decrypt(foundTtkn.at);
+
+				try {
+					instance.get(`https://id.twitch.tv/oauth2/validate`, {
+						headers: {
+							Authorization: `OAuth ${at}`
+						}
+					}).then(response => {
+						console.log('token valid');
+
+						instance.defaults.headers.common['Authorization'] = `Bearer ${at}`
+
+						resolve(instance)
+					}).catch(err => {
+						console.log('token invalid');
+						instance.post(`https://id.twitch.tv/oauth2/token?client_id=${process.env.TCID}&client_secret=${process.env.TCS}&grant_type=client_credentials`).then(response => {
+							
+							new Ttkn({
+								at: cryptr.encrypt(response.data.access_token),
+								expires_in: response.data.expires_in
+							}).save().then(savedTtkn => {
+								console.log('new token retrieved');
+								instance.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`
+
+								resolve(instance);
+							});
+						});
+					});
+				} catch (e) {
+					console.log(e);
+				}
+			} else {
+				instance.post(`https://id.twitch.tv/oauth2/token?client_id=${process.env.TCID}&client_secret=${process.env.TCS}&grant_type=client_credentials`).then(response => {
+					new Ttkn({
+						at: cryptr.encrypt(response.data.access_token),
+						expires_in: response.data.expires_in
+					}).save().then(savedTtkn => {
+						instance.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`
+
+						resolve(instance);
+					});
+				});
+			}
+		});
+	});
+}
+
+// const retrieveAccessToken = (req, res) => {
+// 	return new Promise((resolve, reject) => {
+// 		try {
+// 			let response = await axios.post(`https://id.twitch.tv/oauth2/token?client_id=${process.env.TCID}&client_secret=${process.env.TCS}&grant_type=client_credentials`, {}, {
+// 				headers: {
+// 					'Client-ID': process.env.TCID
+// 				}
+// 			}).then(response => {
+
+// 			})
+// 		} catch (e) {
+
+// 		}
+// 	})
+// }
+
 module.exports = {
 	authCheck: authCheck,
 	isAuthorized,
 	isModAuthorized,
 	isAdminAuthorized,
-	isExtensionAuthorized
+	isExtensionAuthorized,
+	getTwitchAxiosInstance
 }
