@@ -847,6 +847,8 @@ let updateChannelPreferences = async (req, res, existingChannel) => {
 				overlay.graphic = await uploadImage(graphic, graphicName, existingChannel.owner, 'graphic');
 			} else if(graphic && imgURLRegex.test(graphic)) {
 				overlay.graphic = graphic;
+			} else {
+				overlay.graphic = undefined
 			}
 
 			if(layout) {
