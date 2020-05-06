@@ -777,7 +777,7 @@ let updateChannelPreferences = async (req, res, existingChannel) => {
 	
 	if(req.body.hiddenIcon && validDataUrl(req.body.hiddenIcon)) {
 		//got an image to upload
-		hiddenIcon = uploadImage(req.body.hiddenIcon, req.body.hiddenIconName, existingChannel.owner, 'hidden');
+		hiddenIcon = await uploadImage(req.body.hiddenIcon, req.body.hiddenIconName, existingChannel.owner, 'hidden');
 	} else if(req.body.hiddenImage && imgURLRegex.test(req.body.hiddenImage)) {
 		hiddenIcon = req.body.hiddenImage;
 	}
