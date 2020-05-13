@@ -1528,13 +1528,20 @@ let handleUserAchievements = (req, res, user, retry=2) => {
 
 							userPromise = new Promise((resolve, reject) => {
 								getTwitchAxiosInstance().then(instance => {
+
 									instance.get(apiURL).then(res => {
 										if(res.data && res.data.data && res.data.data[0]) {
+											console.log(res.data.data[0].login)
 											userObj.userID = res.data.data[0].id;
 											userObj.name = res.data.data[0].login
 										}
 
 										resolve();
+									}).catch(error => {
+										if(error.response) {
+											console.log(error.response);
+											resolve();
+										}
 									});
 								});
 							})
