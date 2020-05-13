@@ -162,12 +162,13 @@ const getTwitchAxiosInstance = () => {
 	return new Promise((resolve, reject) => {
 
 		let instance = axios.create();
+		let env = (process.env.NODE_ENV === 'production') ? 'p' : 't'
 
 		instance.defaults.headers.common = {
 			'Client-ID': process.env.TCID
 		}
 
-		Ttkn.findOne({}).then(foundTtkn => {
+		Ttkn.findOne({env}).then(foundTtkn => {
 			if(foundTtkn) {
 				//check if valid
 
@@ -190,7 +191,8 @@ const getTwitchAxiosInstance = () => {
 							
 							new Ttkn({
 								at: cryptr.encrypt(response.data.access_token),
-								expires_in: response.data.expires_in
+								expires_in: response.data.expires_in,
+								env: env
 							}).save().then(savedTtkn => {
 								console.log('new token retrieved');
 								instance.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`
@@ -206,7 +208,8 @@ const getTwitchAxiosInstance = () => {
 				instance.post(`https://id.twitch.tv/oauth2/token?client_id=${process.env.TCID}&client_secret=${process.env.TCS}&grant_type=client_credentials`).then(response => {
 					new Ttkn({
 						at: cryptr.encrypt(response.data.access_token),
-						expires_in: response.data.expires_in
+						expires_in: response.data.expires_in,
+						env: env
 					}).save().then(savedTtkn => {
 						instance.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`
 

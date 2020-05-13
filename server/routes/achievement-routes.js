@@ -1413,8 +1413,7 @@ let addToEarned = (req, foundUser, foundChannel, foundAchievement, tier, alert =
 
 let handleUserAchievements = (req, res, user, retry=2) => {
 	let {channel, identifier, achievements} = user;
-	console.log(identifier);
-	console.log(achievements);
+
 	let mapping = {};
 
 	let achievementIDs = achievements.map(achievement => {
@@ -1531,7 +1530,6 @@ let handleUserAchievements = (req, res, user, retry=2) => {
 
 									instance.get(apiURL).then(res => {
 										if(res.data && res.data.data && res.data.data[0]) {
-											console.log(res.data.data[0].login)
 											userObj.userID = res.data.data[0].id;
 											userObj.name = res.data.data[0].login
 										}
@@ -1539,7 +1537,7 @@ let handleUserAchievements = (req, res, user, retry=2) => {
 										resolve();
 									}).catch(error => {
 										if(error.response) {
-											console.log(error.response);
+											console.log(error.response.data);
 											resolve();
 										}
 									});
