@@ -4,6 +4,7 @@ const Schema = mongoose.Schema;
 const eventSchema = new Schema({
 	channelID: String,
 	member: String,
+	platform: String,
 	achievement: String,
 	date: Date
 });

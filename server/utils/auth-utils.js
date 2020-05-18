@@ -18,9 +18,16 @@ const isAuthorized = async (req, res, next) => {
 	if(req.cookies.etid) {
 		try {
 			let etid = cryptr.decrypt(req.cookies.etid);
+			let platform = req.cookies._ap;
 
-			let foundUser = await User.findOne({'integration.twitch.etid': etid})
-					
+			let foundUser;
+
+			if(platform === 'twitch') {
+				foundUser = await User.findOne({'integration.twitch.etid': etid});
+			} else if(platform === 'mixer') {
+				foundUser = await User.findOne({'integration.mixer.etid': etid});
+			}
+
 			if(foundUser) {
 				req.user = foundUser;
 				

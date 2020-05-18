@@ -2,8 +2,15 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 const channelSchema = new Schema({
-	owner: String,
-	twitchID: String,
+	ownerID: String,
+	platforms: {
+		twitch: Object,
+		mixer: Object
+	},
+	integrations: {
+		streamlabs: Object,
+		streamelements: Object
+	},
 	theme: String,
 	logo: String,
 	members: Array,

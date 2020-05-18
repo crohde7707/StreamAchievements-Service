@@ -43,26 +43,32 @@ router.post('/delete', isAuthorized, (req, res) => {
 });
 
 async function handleDeleteChannel(req, res) {
-	let foundChannel = await Channel.findOne({owner: req.user.name});
+	let foundChannel = await Channel.findOne({ownerID: req.user.id});
+	let platforms = [];
 
 	if(foundChannel) {
+		Object.keys(foundChannel.platforms).forEach(platform => {
+			if(foundChannel.platforms[platform]) {
+				platforms.push(platform);
+			}
+		})
 		//delete all earned
 		let earnedErr = await Earned.deleteMany({channelID: foundChannel.id});
 		//delete all listeners
-		let listenerErr = await Listener.deleteMany({channel: foundChannel.owner});
+		let listenerErr = await Listener.deleteMany({channel: foundChannel.ownerID});
 		//delete all achievements
-		let achErr = await Achievement.deleteMany({channel: foundChannel.owner});
+		let achErr = await Achievement.deleteMany({channel: foundChannel.ownerID});
 		//delete all uploaded images
-		let imgErr = await Image.deleteMany({channel: foundChannel.owner});
+		let imgErr = await Image.deleteMany({channel: foundChannel.ownerID});
 		//delete the channel
-		let channelErr = await Channel.deleteOne({owner: req.user.name});
+		let channelErr = await Channel.deleteOne({ownerID: req.user.id});
 		//update user to be 'user'
 		req.user.type = "user";
 		req.user.delegate = [];
 
 		let savedUser = await req.user.save();
 
-		emitDeleteChannel(req, req.user.name);
+		emitDeleteChannel(req, req.user, platforms);
 
 		res.json({
 			delete: true
@@ -479,181 +485,121 @@ router.post('/update', async (req, res) => {
 	})
 })
 
-router.get('/dashboard', isAuthorized, (req, res) => {
+router.get('/dashboard', isAuthorized, async (req, res) => {
 
-	Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
-		if(existingChannel) {
+	let existingChannel = await Channel.findOne({ownerID: req.user.id});
 
-			let achievementsPromise = new Promise((resolve, reject) => {
-				Achievement.find({channel: existingChannel.owner}).then((achievements) => { 
+	if(existingChannel) {
 
-					if(achievements) {
-						let listenerIds = achievements.map(achievement => {
-							return achievement.listener
-						});
+		let achievementsPromise = new Promise((resolve, reject) => {
+			Achievement.find({channel: existingChannel.ownerID}).then((achievements) => { 
 
-						Listener.find({'_id': { $in: listenerIds}}).then((listeners) => {
+				if(achievements) {
+					let listenerIds = achievements.map(achievement => {
+						return achievement.listener
+					});
 
-							let mergedAchievements = achievements.map(achievement => {
-								
-								let listenerData = listeners.find(listener => {
-									return listener.id === achievement.listener;
-								});
-								
-								if(listenerData) {
+					Listener.find({'_id': { $in: listenerIds}}).then((listeners) => {
 
-									let merge = {
-										uid: achievement.uid,
-										title: achievement.title,
-										description: achievement.description,
-										shortDescription: achievement.shortDescription,
-										icon: achievement.icon,
-										earnable: achievement.earnable,
-										limited: achievement.limited,
-										secret: achievement.secret,
-										order: achievement.order,
-										unlocked: listenerData.unlocked || false,
-										achType: listenerData.achType
-									}
-									
-									return merge;
-								} else {
-									return achievement;
+						let mergedAchievements = achievements.map(achievement => {
+							
+							let listenerData = listeners.find(listener => {
+								return listener.id === achievement.listener;
+							});
+							
+							if(listenerData) {
+
+								let merge = {
+									uid: achievement.uid,
+									title: achievement.title,
+									description: achievement.description,
+									shortDescription: achievement.shortDescription,
+									icon: achievement.icon,
+									earnable: achievement.earnable,
+									limited: achievement.limited,
+									secret: achievement.secret,
+									order: achievement.order,
+									unlocked: listenerData.unlocked || false,
+									achType: listenerData.achType
 								}
-							});
-
-							mergedAchievements.sort((a, b) => (a.order > b.order) ? 1 : -1);
-
-							resolve(mergedAchievements);
+								
+								return merge;
+							} else {
+								return achievement;
+							}
 						});
-					} else {
-						resolve(achievements);
-					}
-				});	
-			});
 
-			let imagesPromise = new Promise((resolve, reject) => {
-				//Get Images
-				Image.find({channel: existingChannel.owner}).then(foundImages => {
-					if(foundImages) {
-						resolve({
-							gallery: foundImages
-						})
-					} else {
-						resolve({
-							gallery: []
-						});
-					}
-				});
-			});
+						mergedAchievements.sort((a, b) => (a.order > b.order) ? 1 : -1);
 
-			let moderatorsPromise = new Promise((resolve, reject) => {
-
-				let moderatorIds = existingChannel.moderators.map(moderator => moderator.uid);
-
-				User.find({'_id': { $in: moderatorIds}}).then(moderators => {
-					let resModerators = moderators.map(moderator => {
-
-						let mod = existingChannel.moderators.find(channelMod => channelMod.uid === moderator.id);
-
-						return {
-							id: moderator.id,
-							name: moderator.name,
-							logo: moderator.logo,
-							permissions: mod.permissions
-						}
+						resolve(mergedAchievements);
 					});
-
-					resolve(resModerators);
-				})
-			});
-
-			let eventsPromise = new Promise((resolve, reject) => {
-				Event.find({channelID: existingChannel.id}).sort({'_id': -1}).limit(30).exec((err, events) => {
-					let resEvents = events.map(ev => {
-						return {
-							member: ev.member,
-							achievement: ev.achievement,
-							date: ev.date
-						}
-					});
-
-					resolve(resEvents);
-				});
-			})
-
-			Promise.all([achievementsPromise, imagesPromise, moderatorsPromise, eventsPromise]).then(values => {
-				let retChannel;
-
-				if(!existingChannel.oid) {
-					existingChannel.oid = uuid();
-					if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
-						existingChannel.overlay = DEFAULT_OVERLAY_CONFIG;
-					}
-					existingChannel.save().then(savedChannel => {
-						retChannel = {...savedChannel['_doc']};
-						delete retChannel['__v'];
-						delete retChannel['_id'];
-
-						res.json({
-							channel: retChannel,
-							achievements: values[0],
-							images: values[1],
-							moderators: values[2],
-							events: values[3]
-						});
-					});
-				} else if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
-					existingChannel.overlay = DEFAULT_OVERLAY_CONFIG;
-					existingChannel.save().then(savedChannel => {
-						retChannel = {...savedChannel['_doc']};
-						delete retChannel['__v'];
-						delete retChannel['_id'];
-
-						res.json({
-							channel: retChannel,
-							achievements: values[0],
-							images: values[1],
-							moderators: values[2],
-							events: values[3]
-						});
-					})
-				} else if(!existingChannel.referral || !existingChannel.referral.code) {
-					let code = "";
-
-					code += existingChannel.owner.toUpperCase();
-
-					while (code.length < 6) {
-						code += "1";
-					}
-
-					Channel.find({'referral.code': {"$regex" : code, "$options": "i"}}).then(foundChannels => {
-						if(foundChannels.length > 0) {
-							code += foundChannels.length + 1;	
-						}
-
-						existingChannel.referral = {
-							referred: 0,
-							code
-						}
-						existingChannel.save().then(savedChannel => {
-							retChannel = {...savedChannel['_doc']};
-							delete retChannel['__v'];
-							delete retChannel['_id'];
-
-							res.json({
-								channel: retChannel,
-								achievements: values[0],
-								images: values[1],
-								moderators: values[2],
-								events: values[3]
-							});
-						})
-					})
-					
-					
 				} else {
-					retChannel = {...existingChannel['_doc']};
+					resolve(achievements);
+				}
+			});	
+		});
+
+		let imagesPromise = new Promise((resolve, reject) => {
+			//Get Images
+			Image.find({channel: existingChannel.ownerID}).then(foundImages => {
+				if(foundImages) {
+					resolve({
+						gallery: foundImages
+					})
+				} else {
+					resolve({
+						gallery: []
+					});
+				}
+			});
+		});
+
+		let moderatorsPromise = new Promise((resolve, reject) => {
+
+			let moderatorIds = existingChannel.moderators.map(moderator => moderator.uid);
+
+			User.find({'_id': { $in: moderatorIds}}).then(moderators => {
+				let resModerators = moderators.map(moderator => {
+
+					let mod = existingChannel.moderators.find(channelMod => channelMod.uid === moderator.id);
+
+					return {
+						id: moderator.id,
+						name: moderator.name,
+						logo: moderator.logo,
+						permissions: mod.permissions
+					}
+				});
+
+				resolve(resModerators);
+			})
+		});
+
+		let eventsPromise = new Promise((resolve, reject) => {
+			Event.find({channelID: existingChannel.id}).sort({'_id': -1}).limit(30).exec((err, events) => {
+				let resEvents = events.map(ev => {
+					return {
+						member: ev.member,
+						platform: ev.platform,
+						achievement: ev.achievement,
+						date: ev.date
+					}
+				});
+
+				resolve(resEvents);
+			});
+		})
+
+		Promise.all([achievementsPromise, imagesPromise, moderatorsPromise, eventsPromise]).then(values => {
+			let retChannel;
+
+			if(!existingChannel.oid) {
+				existingChannel.oid = uuid();
+				if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
+					existingChannel.overlay = DEFAULT_OVERLAY_CONFIG;
+				}
+				existingChannel.save().then(savedChannel => {
+					retChannel = {...savedChannel['_doc']};
 					delete retChannel['__v'];
 					delete retChannel['_id'];
 
@@ -664,15 +610,76 @@ router.get('/dashboard', isAuthorized, (req, res) => {
 						moderators: values[2],
 						events: values[3]
 					});
+				});
+			} else if(!existingChannel.overlay || Object.keys(existingChannel.overlay).length === 0) {
+				existingChannel.overlay = DEFAULT_OVERLAY_CONFIG;
+				existingChannel.save().then(savedChannel => {
+					retChannel = {...savedChannel['_doc']};
+					delete retChannel['__v'];
+					delete retChannel['_id'];
+
+					res.json({
+						channel: retChannel,
+						achievements: values[0],
+						images: values[1],
+						moderators: values[2],
+						events: values[3]
+					});
+				})
+			} else if(!existingChannel.referral || !existingChannel.referral.code) {
+				let code = "";
+
+				code += req.user.name.toUpperCase();
+
+				while (code.length < 6) {
+					code += "1";
 				}
-			});
-			
-		} else {
-			res.json({
-				error: 'User doesn\'t manage a channel'
-			});
-		}	
-	});
+
+				Channel.find({'referral.code': {"$regex" : code, "$options": "i"}}).then(foundChannels => {
+					if(foundChannels.length > 0) {
+						code += foundChannels.length + 1;	
+					}
+
+					existingChannel.referral = {
+						referred: 0,
+						code
+					}
+					existingChannel.save().then(savedChannel => {
+						retChannel = {...savedChannel['_doc']};
+						delete retChannel['__v'];
+						delete retChannel['_id'];
+
+						res.json({
+							channel: retChannel,
+							achievements: values[0],
+							images: values[1],
+							moderators: values[2],
+							events: values[3]
+						});
+					})
+				})
+				
+				
+			} else {
+				retChannel = {...existingChannel['_doc']};
+				delete retChannel['__v'];
+				delete retChannel['_id'];
+
+				res.json({
+					channel: retChannel,
+					achievements: values[0],
+					images: values[1],
+					moderators: values[2],
+					events: values[3]
+				});
+			}
+		});
+		
+	} else {
+		res.json({
+			error: 'User doesn\'t manage a channel'
+		});
+	}	
 })
 
 router.post('/mod', isAuthorized, (req, res) => {
@@ -752,7 +759,7 @@ router.post('/mod/preferences', isModAuthorized, (req, res) => {
 });
 
 router.post('/preferences', isAuthorized, (req, res) => {
-	Channel.findOne({twitchID: req.user.integration.twitch.etid}).then(existingChannel => {
+	Channel.findOne({ownerID: req.user.id}).then(existingChannel => {
 		if(existingChannel) {
 			updateChannelPreferences(req, res, existingChannel);
 		} else {
@@ -996,7 +1003,7 @@ router.post('/image', isAuthorized, (req, res) => {
 
 			channelUpdatePromise = new Promise((resolve, reject) => {
 				//delete image from channel
-				Channel.findOne({twitchID: req.user.integration.twitch.etid}).then(existingChannel => {
+				Channel.findOne({ownerID: req.user.id}).then(existingChannel => {
 					
 					let icons = {...existingChannel.icons};
 					if(image.type === 'default') {
@@ -1068,7 +1075,7 @@ router.get("/user", isAuthorized, (req, res) => {
 
 							resolve2({
 					     		logo: channel.logo,
-					     		owner: channel.owner,
+					     		owner: channel.platform.twitch.alias,
 					     		percentage: percentage,
 					     		favorite: true
 					     	});
@@ -1484,132 +1491,120 @@ router.post("/signup", isAuthorized, (req, res) => {
 	});
 });
 
-router.post('/verify', isAuthorized, (req, res) => {
+router.post('/verify', isAuthorized, async (req, res) => {
 	let token = req.body.id;
 
-	Token.findOne({uid: req.user._id, token}).then(foundToken => {
-		if(foundToken) {
-			if(foundToken.hasExpired()) {
-				Token.deleteOne({uid: req.user._id, token}).then(err => {
-					res.json({
-						expired: true
-					});	
-				});
-				
-				res.json({
-					expired: true
-				});
-			} else {
-				let fullAccess = false;
-				let referral = foundToken.referral;
+	let foundToken = await Token.findOne({uid: req.user._id, token});
 
-				let type = req.user.broadcaster_type;
-				let patreon = req.user.integration.patreon;
+	if(foundToken) {
+		if(foundToken.hasExpired()) {
+			let tokenDeleteError = await Token.deleteOne({uid: req.user._id, token});
 
-				if(patreon && (patreon.type === 'forever' || patreon.is_gold)) {
-					fullAccess = true;
-				}
-
-				if(referral) {
-					Channel.findOne({'referral.code': referral}).then(foundChannel => {
-						
-						
-						foundChannel.referral.referred += 1;
-
-						foundChannel.save().then(savedChannel => {
-
-							if(savedChannel.referral.referred === 1) {
-
-								User.findOne({'integration.twitch.etid': savedChannel.twitchID}).then(foundUser => {
-									new Notice({
-										user: foundUser.id,
-										logo: DEFAULT_ICON,
-										message: `Someone just created their channel using your referral code! You now have one extra custom achievement you can create! Go try it out!`,
-										date: Date.now(),
-										type: 'dashboard',
-										channel: foundChannel.owner,
-										status: 'new'
-									}).save().then(savedNotice => {
-										emitNotificationsUpdate(req, {
-											notification: {
-												id: savedNotice._id,
-												logo: savedNotice.logo,
-												message: savedNotice.message,
-												date: savedNotice.date,
-												type: savedNotice.type,
-												status: savedNotice.status
-											},
-											user: foundUser.name
-										});
-									});
-								})
-							}
-						})
-
-					});
-				}
-
-				new Channel({
-					owner: req.user.name,
-					twitchID: req.user.integration.twitch.etid,
-					theme: '',
-					logo: req.user.logo,
-					members: [],
-					moderators: [],
-					icons: {
-						default: DEFAULT_ICON,
-						hidden: HIDDEN_ICON
-					},
-					oid: uuid(),
-					overlay: DEFAULT_OVERLAY_CONFIG,
-					nextUID: 1,
-					gold: fullAccess,
-					broadcaster_type: {
-						twitch: type
-					}
-				}).save().then((newChannel) => {
-
-					//TODO: Send email detailing info from confirmation page
-
-					console.log('--------------------');
-					console.log(`${newChannel.owner} just created their channel!`);
-					console.log('--------------------');
-
-					new Notice({
-						user: process.env.NOTICE_USER,
-						logo: newChannel.logo,
-						message: `${newChannel.owner} just created their channel!`,
-						date: Date.now(),
-						type: 'achievement',
-						channel: newChannel.owner,
-						status: 'new'
-					}).save();
-
-					emitNewChannel(req, {
-						name: newChannel.owner,
-						'full-access': fullAccess,
-						online: false
-					});
-
-					req.user.type = 'verified';
-					req.user.save().then((savedUser) => {
-						
-						Token.deleteOne({uid: req.user._id, token}).then(err => {
-							console.log(err);
-						});
-
-						res.json({
-							verified: true
-						});	
-					});
-				});
-			}
-		} else {
 			res.json({
-				error: 'Unauthorized'
+				expired: true
 			});
+		} else {
+			let fullAccess = false;
+			let referral = foundToken.referral;
+
+			let type = req.user.broadcaster_type;
+			let patreon = req.user.integration.patreon;
+
+			if(patreon && (patreon.type === 'forever' || patreon.is_gold)) {
+				fullAccess = true;
+			}
+
+			if(referral) {
+				let foundChannel = await Channel.findOne({'referral.code': referral})
+					
+				foundChannel.referral.referred += 1;
+
+				let savedChannel = await foundChannel.save();
+
+				if(savedChannel.referral.referred === 1) {
+
+					let foundUser = await User.findOne({'_id': savedChannel.ownerID})
+					new Notice({
+						user: foundUser.id,
+						logo: DEFAULT_ICON,
+						message: `Someone just created their channel using your referral code! You now have one extra custom achievement you can create! Go try it out!`,
+						date: Date.now(),
+						type: 'dashboard',
+						channel: foundChannel.owner,
+						status: 'new'
+					}).save().then(savedNotice => {
+						emitNotificationsUpdate(req, {
+							notification: {
+								id: savedNotice._id,
+								logo: savedNotice.logo,
+								message: savedNotice.message,
+								date: savedNotice.date,
+								type: savedNotice.type,
+								status: savedNotice.status
+							},
+							user: foundUser.name
+						});
+					});
+				}
+
+			}
+
+			let newChannel = await new Channel({
+				ownerID: req.user.id,
+				platforms: req.user.integration,
+				theme: '',
+				logo: req.user.logo,
+				members: [],
+				moderators: [],
+				icons: {
+					default: DEFAULT_ICON,
+					hidden: HIDDEN_ICON
+				},
+				oid: uuid(),
+				overlay: DEFAULT_OVERLAY_CONFIG,
+				nextUID: 1,
+				gold: fullAccess,
+				broadcaster_type: req.user.broadcaster_type || {}
+			}).save();
+
+			//TODO: Send email detailing info from confirmation page
+
+			console.log('--------------------');
+			console.log(`${newChannel.platforms[req.cookies._ap].name} just created their channel!`);
+			console.log('--------------------');
+
+			new Notice({
+				user: process.env.NOTICE_USER,
+				logo: newChannel.logo,
+				message: `${newChannel.platforms[req.cookies._ap].name} just created their channel!`,
+				date: Date.now(),
+				type: 'achievement',
+				channel: newChannel.owner,
+				status: 'new'
+			}).save();
+
+			emitNewChannel(req, {
+				name: newChannel.platforms[req.cookies._ap].name,
+				'full-access': fullAccess,
+				online: false
+			});
+
+			req.user.type = 'verified';
+			let savedUser = await req.user.save();
+				
+			Token.deleteOne({uid: req.user._id, token}).then(err => {
+				console.log(err);
+			});
+
+			res.json({
+				verified: true
+			});	
 		}
-	})
+	} else {
+		res.json({
+			error: 'Unauthorized'
+		});
+	}
 });
 
 router.post('/token/generate', isAuthorized, (req, res) => {

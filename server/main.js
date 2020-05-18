@@ -4,7 +4,6 @@ const mongoose = require('mongoose');
 const cookieSession = require('cookie-session');
 const passport = require('passport');
 const Socket = require('./models/socket-model');
-const passportSetup = require('./configs/passport-setup');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 const allowAccess = require('./utils/access-utils').allowAccess;

@@ -3,7 +3,6 @@ const Schema = mongoose.Schema;
 
 const userSchema = new Schema({
 	name: String,
-	twitchID: String,
 	logo: String,
 	email: String,
 	type: String,
@@ -25,6 +24,7 @@ const userSchema = new Schema({
 	delegate: Array,
 	integration: {
 		twitch: Object,
+		mixer: Object,
 		patreon: Object,
 		streamlabs: Object
 	},

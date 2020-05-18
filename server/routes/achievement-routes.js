@@ -714,7 +714,7 @@ router.post('/mod/award', isModAuthorized, (req, res) => {
 
 router.post('/award', isAuthorized, (req, res) => {	
 
-	Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
+	Channel.findOne({ownerID: req.user.id}).then((existingChannel) => {
 		manualAward(req, res, existingChannel);
 	});
 });
@@ -793,7 +793,7 @@ let manualAward = (req, res, existingChannel) => {
 											aid: foundAchievement.uid
 										});
 
-										logChannelEvent(existingChannel, member, foundAchievement);
+										logChannelEvent(req, existingChannel, member, foundAchievement);
 									}
 
 									new Notice({
@@ -1049,7 +1049,7 @@ let handleNonMemberAward = (req, res, foundChannel, foundAchievement, nonMember)
 											aid: foundAchievement.uid
 										});
 
-										logChannelEvent(foundChannel, userObj, foundAchievement);
+										logChannelEvent(req, foundChannel, userObj, foundAchievement);
 									}
 
 									let shouldAlert = foundAchievement.alert || true;
@@ -1225,14 +1225,16 @@ router.post('/award/chat', (req, res) => {
 	}
 });
 
-let logChannelEvent = (channel, user, achievement) => {
+let logChannelEvent = (req, channel, user, achievement) => {
 	let event = "";
+	let platform = req.body.platform;
 
 	event = `${user.name} earned "${achievement.title}"`;
 
 	new Event({
 		channelID: channel.id,
 		member: user.name,
+		platform: platform,
 		achievement: achievement.title,
 		date: Date.now()
 	}).save();
@@ -1260,7 +1262,7 @@ let alertAchievement = (req, foundChannel, savedUser, foundAchievement) => {
 			aid: foundAchievement.uid
 		});
 
-		logChannelEvent(foundChannel, savedUser, foundAchievement);
+		logChannelEvent(req, foundChannel, savedUser, foundAchievement);
 	}
 	
 	

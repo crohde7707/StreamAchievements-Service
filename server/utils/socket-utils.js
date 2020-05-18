@@ -1,8 +1,24 @@
 let emit = (req, event, data) => {
-	let ws = req.app.get('ws');
-	let sid = req.app.get('IRCSOCKET');
+	let platform = req.cookies._ap;
+	let ws, sid;
 
-	ws.to(sid).emit(event, data);
+	switch(platform) {
+		case 'twitch':
+			console.log('get twitch irc socket');
+			ws = req.app.get('ws');
+			sid = req.app.get('IRCSOCKET');
+			break;
+		case 'mixer':
+			ws = req.app.get('mws');
+			sid = req.app.get('MIXER-IRCSOCKET');
+			break;
+		default:
+			break;
+	}
+	
+	if(ws && sid) {
+		ws.to(sid).emit(event, data);
+	}
 }
 
 let emitNewChannel = (req, channel) => {
@@ -10,8 +26,29 @@ let emitNewChannel = (req, channel) => {
 	emit(req, 'new-channel', channel);
 }
 
-let emitDeleteChannel = (req, channel) => {
-	emit(req, 'delete-channel', channel);
+let emitDeleteChannel = (req, user, platforms) => {
+	let ws, sid;
+
+	platforms.forEach(platform => {
+		switch(platform) {
+			case 'twitch':
+				ws = req.app.get('ws');
+				sid = req.app.get('IRCSOCKET');
+				data = user.integration.twitch.name;
+				break;
+			case 'mixer':
+				ws = req.app.get('mws');
+				sid = req.app.get('MIXER-IRCSOCKET');
+				data = user.integration.mixer.etid;
+				break;
+			default:
+				break;
+		}
+
+		if(ws && sid && data) {
+			ws.to(sid).emit('delete-channel', data);
+		}
+	});
 }
 
 let emitChannelUpdate = (req, channelUpdates) => {

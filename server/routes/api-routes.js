@@ -60,6 +60,36 @@ router.get('/users', isAdminAuthorized, (req, res) => {
 	});
 });
 
+router.get('/user/link', async (req, res) => {
+
+	let {_un, _logo} = req.cookies;
+
+	if(_un && _logo) {
+		let un = cryptr.decrypt(_un);
+		let logo = cryptr.decrypt(_logo);
+
+		let user = await User.findOne({name: un, logo});
+
+		if(user) {
+			let platform;
+
+			if(user.integration.twitch) {
+				platform = "Twitch"
+			}
+
+			if(user.integration.mixer) {
+				platform = "Mixer"
+			}
+
+			res.json({
+				un,
+				logo,
+				platform
+			});
+		}
+	}
+});
+
 router.get("/user", isAuthorized, (req, res) => {
 	let uid = cryptr.encrypt(req.user._id);
 	let patreonInfo, streamlabsInfo;
@@ -104,7 +134,8 @@ router.get("/user", isAuthorized, (req, res) => {
 	}
 
 	Notice.countDocuments({user: req.user._id, status: 'new'}).exec().then(count => {
-		Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
+		Channel.findOne({ownerID: req.user._id}).then(existingChannel => {
+		//Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
 
 			//Check if user moderates for anyone
 
@@ -117,9 +148,12 @@ router.get("/user", isAuthorized, (req, res) => {
 				timeout = false;
 				
 				if(existingChannel) {
-					res.json({
+
+					let responseObj = {
 						username: req.user.name,
 						logo: req.user.logo,
+						platforms: {},
+						currentPlatform: req.cookies._ap,
 						patreon: patreonInfo,
 						streamlabs: streamlabsInfo,
 						status: 'verified',
@@ -130,7 +164,23 @@ router.get("/user", isAuthorized, (req, res) => {
 						isMod,
 						new: req.user.new,
 						terms
-					});
+					};
+
+					if(req.user.integration.twitch) {
+						responseObj.platforms.twitch = {
+							name: req.user.integration.twitch.name,
+							logo: req.user.integration.twitch.logo
+						}
+					}
+
+					if(req.user.integration.mixer) {
+						responseObj.platforms.mixer = {
+							name: req.user.integration.mixer.name,
+							logo: req.user.integration.mixer.logo
+						}
+					}
+
+					res.json(responseObj);
 				} else {
 					let status = 'viewer';
 					
@@ -139,6 +189,8 @@ router.get("/user", isAuthorized, (req, res) => {
 						let responseObj = {
 							username: req.user.name,
 							logo: req.user.logo,
+							platforms: {},
+							currentPlatform: req.cookies._ap,
 							patreon: patreonInfo,
 							streamlabs: streamlabsInfo,
 							status,
@@ -150,6 +202,20 @@ router.get("/user", isAuthorized, (req, res) => {
 							new: req.user.new,
 							terms
 						};
+
+						if(req.user.integration.twitch) {
+							responseObj.platforms.twitch = {
+								name: req.user.integration.twitch.name,
+								logo: req.user.integration.twitch.logo
+							}
+						}
+
+						if(req.user.integration.mixer) {
+							responseObj.platforms.mixer = {
+								name: req.user.integration.mixer.name,
+								logo: req.user.integration.mixer.logo
+							}
+						}
 						
 						if(foundToken) {
 							if(foundToken.token === 'not issued') {
@@ -192,7 +258,18 @@ router.get("/user/catch", isAuthorized, (req, res) => {
 		termsNeeded = true;
 	}
 
-	Earned.find({userID: req.user.integration.twitch.etid}).then(foundEarned => {
+	let queryArray = [];
+
+	if(req.user.integration.twitch) {
+		queryArray.push({userID: req.user.integration.twitch.etid});
+	}
+
+	if(req.user.integration.mixer) {
+		queryArray.push({userID: req.user.integration.mixer.etid});
+	}
+
+	Earned.find({$or: queryArray}).then(foundEarned => {
+	//Earned.find({userID: req.user.integration.twitch.etid}).then(foundEarned => {
 		if(foundEarned.length > 0) {
 
 			let channels = foundEarned.map(found => found.channelID);

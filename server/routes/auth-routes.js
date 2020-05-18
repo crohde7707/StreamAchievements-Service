@@ -38,9 +38,323 @@ router.get('/twitch', async (req, res) => {
 	res.redirect(`https://id.twitch.tv/oauth2/authorize?response_type=code&client_id=${process.env.TCID}&redirect_uri=${process.env.TPR}&scope=user_read%20user:read:email`);
 });
 
-router.get('/twitch/redirect', async (req, res) => {
-		
+router.get('/twitch/link', async (req, res) => {
+	if(process.env.NODE_ENV === 'production') {
+		res.cookie('_link', "true", { maxAge: 4 * 60 * 60 * 1000, secure: true, httpOnly: false, domain: 'streamachievements.com' });
+	} else {
+		res.cookie('_link', "true", { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
+	}
+	res.redirect(`https://id.twitch.tv/oauth2/authorize?response_type=code&client_id=${process.env.TCID}&redirect_uri=${process.env.TPR}&scope=user_read%20user:read:email&force_verify=true`);
+});
+
+router.get('/mixer/link', async (req, res) => {
+	if(process.env.NODE_ENV === 'production') {
+		res.cookie('_link', "true", { maxAge: 4 * 60 * 60 * 1000, secure: true, httpOnly: false, domain: 'streamachievements.com' });
+	} else {
+		res.cookie('_link', "true", { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
+	}
+	res.redirect(`https://mixer.com/oauth/authorize?response_type=code&client_id=${process.env.MCID}&redirect_uri=${process.env.MPR}&scope=user:details:self&force_verify=true`);
+})
+
+router.get('/mixer', async (req, res) => {
+	res.redirect(`https://mixer.com/oauth/authorize?response_type=code&client_id=${process.env.MCID}&redirect_uri=${process.env.MPR}&scope=user:details:self`);
+});
+
+router.get('/mixer/redirect', async (req, res) => {
+	let { _link, _ap } = req.cookies;
+
+	if(req.query.error && req.query.error === 'access_denied') {
+		//User said cancel or deny for oauth
+		if(_link) {
+			rejectPlatformAuth(req, res, _ap, true);
+		} else {
+			res.redirect(process.env.WEB_DOMAIN);
+		}
+	}
+
 	if(req.query.code) {
+		
+		let tokenRes = await axios.post(`https://mixer.com/api/v1/oauth/token`, {
+			client_id: process.env.MCID,
+			client_secret: process.env.MCS,
+			code: req.query.code,
+			grant_type: 'authorization_code',
+			redirect_uri: process.env.MPR
+		});
+
+		let {access_token, refresh_token} = tokenRes.data;
+
+		let user;
+
+		if(access_token && refresh_token) {
+			let userRes = await axios.get('https://mixer.com/api/v1/users/current', {
+				headers: {
+					'client-id': process.env.MCID,
+					Authorization: `Bearer ${access_token}`
+				}
+			});
+
+			let profile = userRes.data;
+
+			let e_token = cryptr.encrypt(access_token);
+			let e_refresh = cryptr.encrypt(refresh_token);
+			
+			let mixerIntegration = {
+				etid: profile.id.toString(),
+				token: e_token,
+				refresh: e_refresh
+			};
+
+			let etid;
+
+			if(req.cookies.etid) {
+				etid = req.cookies.etid
+			} else {
+				etid = cryptr.encrypt(mixerIntegration.etid);
+
+				if(process.env.NODE_ENV === 'production') {
+					res.cookie('etid', etid, { maxAge: 4 * 60 * 60 * 1000, httpOnly: false, secure: true, domain: 'streamachievements.com' });
+				} else {
+					res.cookie('etid', etid, { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
+				}
+			}
+
+			let existingUser = await User.findOne({'integration.mixer.etid': mixerIntegration.etid});
+
+			let updated = false;
+
+			if(existingUser) {
+
+				//sync with latest data
+				existingUser.integration.mixer = {...existingUser.integration.mixer, ...mixerIntegration};
+
+				if(existingUser.name !== profile.username) {
+					existingUser.name = profile.username;
+					existingUser.integration.mixer.name = profile.username;
+					updated = true;
+				}
+
+				if(existingUser.logo !== profile.avatarUrl) {
+					existingUser.logo = profile.avatarUrl;
+					existingUser.integration.mixer.logo = profile.avatarUrl;
+					updated = true;
+				}
+
+				if(existingUser.email !== profile.email) {
+					existingUser.email = profile.email;
+					updated = true;
+				}
+
+				let broadcaster_type = (profile.channel.partnered) ? "partner" : "affiliate";
+
+				if(existingUser.broadcaster_type !== broadcaster_type) {
+					existingUser.broadcaster_type = broadcaster_type;
+					updated = true;
+				}
+
+				user = await existingUser.save();
+
+				let foundChannel = await Channel.findOne({mixerID: user.integration.mixer.etid});
+
+				if(foundChannel) {
+					let ownerUpdate = false;
+
+					if(foundChannel.owner !== user.name) {
+						updated = true;
+						ownerUpdate = foundChannel.owner;
+						foundChannel.owner = user.name;
+					}
+
+					if(foundChannel.logo !== user.logo) {
+						updated = true;
+						foundChannel.logo = user.logo;
+					}
+
+					let savedChannel = await foundChannel.save();
+										
+					if(updated) {
+						new Notice({
+							user: user._id,
+							logo: "https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png",
+							message: "We noticed some information has been updated on Mixer, so we went ahead and updated your profile with those changes!",
+							date: Date.now(),
+							type: 'profile',
+							status: 'new'
+						}).save();
+
+						if(ownerUpdate) {
+
+							Achievement.find({channel: ownerUpdate}).then(foundAchievements => {
+								if(foundAchievements.length > 0) {
+									foundAchievements.forEach(ach => {
+										ach.channel = savedChannel.owner;
+										ach.save();
+									});
+								}
+							});
+
+							Listener.find({channel: ownerUpdate}).then(foundListeners => {
+								if(foundListeners.length > 0) {
+									foundListeners.forEach(list => {
+										list.channel = savedChannel.owner;
+										list.save();
+									});
+								}
+							});
+							//Name change occured, inform the IRC to connect
+							user.update = {
+								old: ownerUpdate,
+								new: savedChannel.owner
+							}	
+						}
+					}
+				} else {
+					if(updated) {
+						new Notice({
+							user: user._id,
+							logo: "https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png",
+							message: "We noticed some information has been updated on Mixer, so we went ahead and updated your profile with those changes!",
+							date: Date.now(),
+							type: 'profile',
+							status: 'new'
+						}).save();
+					}
+				}
+
+			} else {
+
+				mixerIntegration.name = profile.username;
+				mixerIntegration.logo = profile.avatarUrl;
+
+				if(_link) {
+					confirmPlatformAuth(req, res, mixerIntegration, true, 'mixer');
+				} else {
+
+					existingUser = await User.findOne({email: profile.email});
+
+					if(existingUser) {
+						//User exists, check if that is the person (splash page?)
+						if(process.env.NODE_ENV === 'production') {
+							res.cookie('_un', cryptr.encrypt(existingUser.name), { maxAge: 4 * 60 * 60 * 1000, secure: true, httpOnly: false, domain: 'streamachievements.com' });
+							res.cookie('_mun', cryptr.encrypt(profile.username), { maxAge: 4 * 60 * 60 * 1000, secure: true, httpOnly: false, domain: 'streamachievements.com' });
+							res.cookie('_logo', cryptr.encrypt(existingUser.logo), { maxAge: 4 * 60 * 60 * 1000, secure: true, httpOnly: false, domain: 'streamachievements.com' });
+							res.cookie('_ap', 'mixer', { httpOnly: false, secure: true, domain: 'streamachievements.com' });
+						} else {
+							res.cookie('_un', cryptr.encrypt(existingUser.name), { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
+							res.cookie('_mun', cryptr.encrypt(profile.username), { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
+							res.cookie('_logo', cryptr.encrypt(existingUser.logo), { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
+							res.cookie('_ap', 'mixer', { httpOnly: false});
+						}
+
+						await new User({
+							name: 'TEMP_' + profile.username,
+							logo: profile.avatarUrl,
+							email: profile.email,
+							type: 'user',
+							channels: [],
+							integration: {
+								mixer: mixerIntegration
+							},
+							preferences: {
+								autojoin: true
+							},
+							new: true
+						}).save()
+
+						res.redirect(process.env.WEB_DOMAIN + 'link');
+
+					} else {
+
+						user = await new User({
+							name: profile.username,
+							logo: profile.avatarUrl,
+							email: profile.email,
+							type: 'user',
+							channels: [],
+							integration: {
+								mixer: mixerIntegration
+							},
+							preferences: {
+								autojoin: true
+							},
+							new: true
+						}).save()
+					}
+				}
+			}
+
+			if(user) {
+
+				//let broadcasterTypePromise = new Promise((resolve, reject) => {
+				if(user.type !== 'user') {
+					let foundChannel = await Channel.findOne({owner: user.name});
+							
+					if(foundChannel) {
+						if(user.update && user.update.old && user.update.new) {
+							let update = {
+								old: user.update.old,
+								new: user.update.new,
+								fullAccess: foundChannel.gold || false
+							};
+
+							emitChannelUpdate(req, update);
+						}
+
+						if(foundChannel.broadcaster_type) {
+							if(foundChannel.broadcaster_type.twitch !== user.broadcaster_type) {
+								foundChannel.broadcaster_type.twitch = user.broadcaster_type;
+								let savedChannel = await foundChannel.save();
+							}
+						} else {
+							foundChannel.broadcaster_type = {
+								mixer: user.broadcaster_type
+							};
+
+							let savedChannel = await foundChannel.save();
+						}
+					}
+				}
+
+				if(_link) {
+					confirmPlatformAuth(req, res, user, true);
+				} else {
+
+					if(process.env.NODE_ENV === 'production') {
+						res.cookie('_ap', 'mixer', { httpOnly: false, secure: true, domain: 'streamachievements.com' });
+					} else {
+						res.cookie('_ap', 'mixer', { httpOnly: false });
+					}
+					checkPatreonStatus(req, res, user);
+				}
+			}
+		}
+	}
+});
+
+router.post('/twitch/redirect', async (req, res) => {
+	rejectPlatformAuth(req, res, 'mixer', false);
+});
+
+router.post('/mixer/redirect', async (req, res) => {
+	rejectPlatformAuth(req, res, 'twitch', false);
+});
+
+router.get('/twitch/redirect', async (req, res) => {
+	let {_link, _ap} = req.cookies;
+
+	if(req.query.error) {
+		if(req.query.error_description && req.query.error_description == 'The user denied you access') {
+			//User said cancel or deny for oauth
+			if(_link) {
+				rejectPlatformAuth(req, res, _ap, true);
+			} else {
+				res.redirect(process.env.WEB_DOMAIN);
+			}
+		}
+	}
+
+	if(req.query.code) {
+		
 		let tokenRes = await axios.post(`https://id.twitch.tv/oauth2/token?client_id=${process.env.TCID}&client_secret=${process.env.TCS}&code=${req.query.code}&grant_type=authorization_code&redirect_uri=${process.env.TPR}`);
 
 		let {access_token, refresh_token} = tokenRes.data;
@@ -66,21 +380,37 @@ router.get('/twitch/redirect', async (req, res) => {
 				token: e_token,
 				refresh: e_refresh
 			};
+
+			let etid;
+
+			if(req.cookies.etid) {
+				etid = req.cookies.etid
+			} else {
+				etid = cryptr.encrypt(twitchIntegration.etid);
+
+				if(process.env.NODE_ENV === 'production') {
+					res.cookie('etid', etid, { maxAge: 4 * 60 * 60 * 1000, httpOnly: false, secure: true, domain: 'streamachievements.com' });
+				} else {
+					res.cookie('etid', etid, { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
+				}
+			}
 				
 			let existingUser = await User.findOne({'integration.twitch.etid': twitchIntegration.etid});
 
 			let updated = false;
 
 			if(existingUser) {
-				existingUser.integration.twitch = twitchIntegration;
+				existingUser.integration.twitch = {...existingUser.integration.twitch, ...twitchIntegration};
 
 				if(existingUser.name !== profile.login) {
 					existingUser.name = profile.login;
+					existingUser.integration.twitch.name = profile.login;
 					updated = true;
 				}
 
 				if(existingUser.logo !== profile.profile_image_url) {
 					existingUser.logo = profile.profile_image_url;
+					existingUser.integration.twitch.logo = profile.profile_image_url;
 					updated = true;
 				}
 
@@ -163,241 +493,433 @@ router.get('/twitch/redirect', async (req, res) => {
 					}
 				}
 			} else {
-				user = await new User({
-					name: profile.login,
-					logo: profile.profile_image_url,
-					email: profile.email,
-					type: 'user',
-					channels: [],
-					integration: {
-						twitch: twitchIntegration
-					},
-					preferences: {
-						autojoin: true
-					},
-					new: true
-				}).save()
+				twitchIntegration.name = profile.login;
+				twitchIntegration.logo = profile.profile_image_url;
+				
+				if(_link) {
+					confirmPlatformAuth(req, res, twitchIntegration, true, 'twitch');
+				} else {
+
+					existingUser = await User.findOne({email: profile.email});
+
+					if(existingUser) {
+						//User exists, check if that is the person (splash page?)
+						if(process.env.NODE_ENV === 'production') {
+							res.cookie('_un', cryptr.encrypt(existingUser.name), { maxAge: 4 * 60 * 60 * 1000, secure: true, httpOnly: false, domain: 'streamachievements.com' });
+							res.cookie('_mun', cryptr.encrypt(profile.login), { maxAge: 4 * 60 * 60 * 1000, secure: true, httpOnly: false, domain: 'streamachievements.com' });
+							res.cookie('_logo', cryptr.encrypt(existingUser.logo), { maxAge: 4 * 60 * 60 * 1000, secure: true, httpOnly: false, domain: 'streamachievements.com' });
+							res.cookie('_ap', 'twitch', { httpOnly: false, secure: true, domain: 'streamachievements.com' });
+						} else {
+							res.cookie('_un', cryptr.encrypt(existingUser.name), { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
+							res.cookie('_mun', cryptr.encrypt(profile.login), { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
+							res.cookie('_logo', cryptr.encrypt(existingUser.logo), { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
+							res.cookie('_ap', 'twitch', { httpOnly: false });
+						}
+
+						await new User({
+							name: 'TEMP_' + profile.login,
+							logo: profile.profile_image_url,
+							email: profile.email,
+							type: 'user',
+							channels: [],
+							integration: {
+								twitch: twitchIntegration
+							},
+							preferences: {
+								autojoin: true
+							},
+							new: true
+						}).save()
+
+						res.redirect(process.env.WEB_DOMAIN + 'link');
+
+					} else {
+
+						user = await new User({
+							name: profile.login,
+							logo: profile.profile_image_url,
+							email: profile.email,
+							type: 'user',
+							channels: [],
+							integration: {
+								twitch: twitchIntegration
+							},
+							preferences: {
+								autojoin: true
+							},
+							new: true
+						}).save()
+					}
+				}
 			}
 		}
 
+		if(user) {
+
+			//let broadcasterTypePromise = new Promise((resolve, reject) => {
+			if(user.type !== 'user') {
+				let foundChannel = await Channel.findOne({owner: user.name});
+						
+				if(foundChannel) {
+					if(user.update && user.update.old && user.update.new) {
+						let update = {
+							old: user.update.old,
+							new: user.update.new,
+							fullAccess: foundChannel.gold || false
+						};
+
+						emitChannelUpdate(req, update);
+					}
+
+					if(foundChannel.broadcaster_type) {
+						if(foundChannel.broadcaster_type.twitch !== user.broadcaster_type) {
+							foundChannel.broadcaster_type.twitch = user.broadcaster_type;
+							let savedChannel = await foundChannel.save();
+						}
+					} else {
+						foundChannel.broadcaster_type = {
+							twitch: user.broadcaster_type
+						};
+
+						let savedChannel = await foundChannel.save();
+					}
+				}
+			}
+
+			if(_link) {
+				confirmPlatformAuth(req, res, user, true)
+			} else {
+				if(process.env.NODE_ENV === 'production') {
+					res.cookie('_ap', 'twitch', { httpOnly: false, secure: true, domain: 'streamachievements.com' });
+				} else {
+					res.cookie('_ap', 'twitch', { httpOnly: false });
+				}
+				checkPatreonStatus(req, res, user);
+			}
+		}
+	}
+})
+
+let confirmPlatformAuth = async (req, res, existingUser, redirect, platform) => {
+	let {_un, _mun, _logo, _ap} = req.cookies;
+
+	if(_un && _mun && _logo) { //consume temp user into existing user
+		let mun = cryptr.decrypt(_mun);
+
+		let user = await User.findOne({name: 'TEMP_' + mun});
+
+		existingUser.integration[_ap] = user.integration[_ap];
+
+		let savedUser = await existingUser.save();
+
+		let delError = await User.deleteOne({name: 'TEMP_' + mun});
+
+		//Remove Cookies
+		if(process.env.NODE_ENV === 'production') {
+			res.clearCookie('_un', { domain: 'streamachievements.com' });
+			res.clearCookie('_mun', { domain: 'streamachievements.com' });
+			res.clearCookie('_logo', { domain: 'streamachievements.com' });
+			res.clearCookie('_link', { domain: 'streamachievements.com' });
+		} else {
+			res.clearCookie('_un');
+			res.clearCookie('_mun');
+			res.clearCookie('_logo');
+			res.clearCookie('_link');
+		}
+
+		if(redirect) {
+			checkPatreonStatus(req, res, savedUser);
+		} else {
+			res.json({
+				link: false
+			});
+		}
+	} else if(req.cookies._link) { //consume existing
+		let etid = cryptr.decrypt(req.cookies.etid);
+
+		let query = {[`integration.${_ap}.etid`]: etid};
+		let currentUser = await User.findOne(query);
+
+		if(existingUser instanceof User) {
+			// linking from profile to existing user account
+			// merge into one profile
+			//mergeProfiles(req, res, existingUser, currentUser);
+		} else {
+
+			currentUser.integration[platform] = existingUser;
+
+			currentUser.save();
+
+			if(process.env.NODE_ENV === 'production') {
+				res.clearCookie('_link', { domain: 'streamachievements.com' });
+			} else {
+				res.clearCookie('_link');
+			}
+
+			res.redirect(process.env.WEB_DOMAIN + 'profile?tab=integration');
+		}
+	} else {
+		res.json({
+			error: true,
+			message: 'Error occured'
+		});
+	}
+}
+
+let rejectPlatformAuth = async (req, res, platform, redirect) => {
+	let {_un, _mun, _logo} = req.cookies;
+
+	if(_un && _mun && _logo) {
+		let mun = cryptr.decrypt(_mun);
+
+		let user = await User.findOne({name: 'TEMP_' + mun});
+
+		user.name = mun;
+
+		let savedUser = await user.save();
+
 		//Set Cookie
-		let etid = cryptr.encrypt(user.integration.twitch.etid);
+		let etid = cryptr.encrypt(savedUser.integration[platform].etid);
 		
 		if(process.env.NODE_ENV === 'production') {
 			res.cookie('etid', etid, { maxAge: 4 * 60 * 60 * 1000, httpOnly: false, secure: true, domain: 'streamachievements.com' });
+			res.cookie('_ap', platform, { httpOnly: false, secure: true, domain: 'streamachievements.com' });
 		} else {
 			res.cookie('etid', etid, { maxAge: 4 * 60 * 60 * 1000, httpOnly: false });
+			res.cookie('_ap', platform, { httpOnly: false});
 		}
 
-		//let broadcasterTypePromise = new Promise((resolve, reject) => {
-		if(user.type !== 'user') {
-			let foundChannel = await Channel.findOne({owner: user.name});
-					
-			if(foundChannel) {
-				if(user.update && user.update.old && user.update.new) {
-					let update = {
-						old: user.update.old,
-						new: user.update.new,
-						fullAccess: foundChannel.gold || false
-					};
+		//Remove Cookies
+		if(process.env.NODE_ENV === 'production') {
+			res.clearCookie('_un', { domain: 'streamachievements.com' });
+			res.clearCookie('_mun', { domain: 'streamachievements.com' });
+			res.clearCookie('_logo', { domain: 'streamachievements.com' });
+		} else {
+			res.clearCookie('_un');
+			res.clearCookie('_mun');
+			res.clearCookie('_logo');
+		}
 
-					emitChannelUpdate(req, update);
-				}
+		if(redirect) {
+			res.redirect(process.env.WEB_DOMAIN + 'home');
+		} else {
+			res.json({
+				link: false
+			});
+		}
+	} else if(req.cookies._link) {
+		if(process.env.NODE_ENV === 'production') {
+			res.clearCookie('_link', { domain: 'streamachievements.com' });
+		} else {
+			res.clearCookie('_link');
+		}
 
-				if(foundChannel.broadcaster_type) {
-					if(foundChannel.broadcaster_type.twitch !== user.broadcaster_type) {
-						foundChannel.broadcaster_type.twitch = user.broadcaster_type;
-						let savedChannel = await foundChannel.save();
-					}
-				} else {
-					foundChannel.broadcaster_type = {
-						twitch: user.broadcaster_type
-					};
+		res.redirect(process.env.WEB_DOMAIN + 'profile?tab=integration');
+	} else {
+		res.json({
+			error: true,
+			message: 'Error occured'
+		});
+	}
+}
 
-					let savedChannel = await foundChannel.save();
-				}
+let mergeProfiles = async (req, res, existingUser, currentUser) => {
+	let existingEarned = await Earned.countDocuments({userID: existingUser._id});
+	let currentEarned = await Earned.countDocuments({userID: currentUser._id});
+
+	let existingChannel = await Channel.findOne({ownerID: existingUser._id});
+	let currentChannel = await Channel.findOne({ownerID: currentUser._id});
+
+	if(existingChannel && !currentChannel) {
+		//merge into existing user
+	} else if(!existingChannel && currentChannel) {
+		//merge into current user
+	} else {
+		//dig further
+
+	}
+
+}
+
+let checkPatreonStatus = async (req, res, user) => {
+	//Check if user is a patron, and call out if so
+	let patreonInfo = user.integration.patreon;
+	let patreonPromise;
+
+	if(patreonInfo && patreonInfo.status !== 'lifetime') {
+		let {at, rt, id, expires} = patreonInfo;
+
+		let refreshPromise;
+
+		if(isExpired(expires)) {
+			let newTokens = await refreshPatreonToken(req, patreonInfo.rt);
+				
+			if(newTokens) {
+				at = newTokens.at;
+				rt = newTokens.rt;
+				expires = newTokens.expires;
 			}
 		}
 
-		//Check if user is a patron, and call out if so
-		let patreonInfo = user.integration.patreon;
-		let patreonPromise;
+		let patreon_access_token = cryptr.decrypt(at);
+		
+		if(!id) {
+			id = user.integration.patreon.id;
 
-		if(patreonInfo && patreonInfo.status !== 'lifetime') {
-			let {at, rt, id, expires} = patreonInfo;
-
-			let refreshPromise;
-
-			if(isExpired(expires)) {
-				let newTokens = await refreshPatreonToken(req, patreonInfo.rt);
-					
-				if(newTokens) {
-					at = newTokens.at;
-					rt = newTokens.rt;
-					expires = newTokens.expires;
-				}
-			}
-
-			let patreon_access_token = cryptr.decrypt(at);
-			
 			if(!id) {
-				id = user.integration.patreon.id;
+				user.lastLogin = Date.now();
+				
+				let savedUser = await user.save();
+				
+				handleRedirect(req, res);
+			}
+		} else {
+			try {
 
-				if(!id) {
-					user.lastLogin = Date.now();
-					
-					let savedUser = await user.save();
-					
-					handleRedirect(req, res);
-				}
-			} else {
-				try {
-
-					let patreonResponse = await axios.get(`https://www.patreon.com/api/oauth2/v2/members/${id}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
-						headers: {
-							Authorization: `Bearer ${patreon_access_token}`
-						}
-					});
-
-					//active_patron, declined_patron, former_patron, null
-					let patron_status = patreonResponse.data.data.attributes.patron_status;
-					let is_follower = patreonResponse.data.data.attributes.is_follower;
-					let tiers = patreonResponse.data.data.relationships.currently_entitled_tiers;
-					let isGold = tiers.data.map(tier => tier.id).indexOf(GOLD_TIER_ID) >= 0;
-
-					let patreonUpdate = {
-						id: patreonInfo.id,
-						thumb_url: patreonInfo.thumb_url,
-						vanity: patreonInfo.vanity,
-						at: at,
-						rt: rt,
-						is_follower,
-						status: patron_status,
-						is_gold: isGold,
-						expires
-					};
-
-					if(user.integration.patreon) {
-						if(!user.integration.patreon.is_gold && isGold) {
-							//user became gold, enable on IRC side
-							emitBecomeGold(req, user.name);
-							new Notice({
-								user: process.env.NOTICE_USER,
-								logo: user.logo,
-								message: `${user.name} just backed on Patreon!!`,
-								date: Date.now(),
-								type: 'achievement',
-								channel: user.name,
-								status: 'new'
-							}).save();
-						} else if(user.integration.patreon.is_gold && !isGold) {
-							//user lost gold status, disable on IRC side
-							new Notice({
-								user: process.env.NOTICE_USER,
-								logo: user.logo,
-								message: `${user.name} stopped backing on Patreon`,
-								date: Date.now(),
-								type: 'achievement',
-								channel: user.name,
-								status: 'new'
-							}).save();
-							emitRemoveGold(req, user.name);
-						} 	
-					} else {
-						if(isGold) {
-							//user became gold, enable on IRC side
-							new Notice({
-								user: process.env.NOTICE_USER,
-								logo: user.logo,
-								message: `${user.name} just backed on Patreon!!`,
-								date: Date.now(),
-								type: 'achievement',
-								channel: user.name,
-								status: 'new'
-							}).save();
-							emitBecomeGold(req, user.name);
-						} else {
-							//user lost gold status, disable on IRC side
-							new Notice({
-								user: process.env.NOTICE_USER,
-								logo: user.logo,
-								message: `${user.name} stopped backing on Patreon`,
-								date: Date.now(),
-								type: 'achievement',
-								channel: user.name,
-								status: 'new'
-							}).save();
-							emitRemoveGold(req, user.name);
-						} 
+				let patreonResponse = await axios.get(`https://www.patreon.com/api/oauth2/v2/members/${id}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
+					headers: {
+						Authorization: `Bearer ${patreon_access_token}`
 					}
+				});
+
+				//active_patron, declined_patron, former_patron, null
+				let patron_status = patreonResponse.data.data.attributes.patron_status;
+				let is_follower = patreonResponse.data.data.attributes.is_follower;
+				let tiers = patreonResponse.data.data.relationships.currently_entitled_tiers;
+				let isGold = tiers.data.map(tier => tier.id).indexOf(GOLD_TIER_ID) >= 0;
+
+				let patreonUpdate = {
+					id: patreonInfo.id,
+					thumb_url: patreonInfo.thumb_url,
+					vanity: patreonInfo.vanity,
+					at: at,
+					rt: rt,
+					is_follower,
+					status: patron_status,
+					is_gold: isGold,
+					expires
+				};
+
+				if(user.integration.patreon) {
+					if(!user.integration.patreon.is_gold && isGold) {
+						//user became gold, enable on IRC side
+						emitBecomeGold(req, user.name);
+						new Notice({
+							user: process.env.NOTICE_USER,
+							logo: user.logo,
+							message: `${user.name} just backed on Patreon!!`,
+							date: Date.now(),
+							type: 'achievement',
+							channel: user.name,
+							status: 'new'
+						}).save();
+					} else if(user.integration.patreon.is_gold && !isGold) {
+						//user lost gold status, disable on IRC side
+						new Notice({
+							user: process.env.NOTICE_USER,
+							logo: user.logo,
+							message: `${user.name} stopped backing on Patreon`,
+							date: Date.now(),
+							type: 'achievement',
+							channel: user.name,
+							status: 'new'
+						}).save();
+						emitRemoveGold(req, user.name);
+					} 	
+				} else {
+					if(isGold) {
+						//user became gold, enable on IRC side
+						new Notice({
+							user: process.env.NOTICE_USER,
+							logo: user.logo,
+							message: `${user.name} just backed on Patreon!!`,
+							date: Date.now(),
+							type: 'achievement',
+							channel: user.name,
+							status: 'new'
+						}).save();
+						emitBecomeGold(req, user.name);
+					} else {
+						//user lost gold status, disable on IRC side
+						new Notice({
+							user: process.env.NOTICE_USER,
+							logo: user.logo,
+							message: `${user.name} stopped backing on Patreon`,
+							date: Date.now(),
+							type: 'achievement',
+							channel: user.name,
+							status: 'new'
+						}).save();
+						emitRemoveGold(req, user.name);
+					} 
+				}
+
+				let integration = Object.assign({}, user.integration);
+
+				integration.patreon = {...patreonUpdate};
+
+				user.integration = integration;
+				user.lastLogin = Date.now();
+				
+				let savedUser = await user.save();
+
+				if(savedUser.type === 'verified' || savedUser.type === "admin") {
+					let foundChannel = await Channel.findOne({owner: user.name});
+					if(foundChannel.gold !== savedUser.integration.patreon.is_gold) {
+						foundChannel.gold = savedUser.integration.patreon.is_gold;
+						foundChannel.save();
+					}
+				}
+
+				handleRedirect(req, res);
+
+			} catch (error) {
+				console.log(error.response);
+				if(error.response.status === 401 || error.response.status === 403) {
+					res.redirect('/auth/patreon');
+				} else if(error.response.status === 404) {
+					//Member used to follow, but now doesn't. Clear info
 
 					let integration = Object.assign({}, user.integration);
+
+					let patreonUpdate = {
+						id: null,
+						thumb_url: integration.patreon.thumb_url,
+						vanity: integration.patreon.vanity,
+						at: integration.patreon.at,
+						rt: integration.patreon.rt,
+						is_follower: null,
+						status: null,
+						is_gold: null,
+						expires: integration.patreon.expires
+					};
 
 					integration.patreon = {...patreonUpdate};
 
 					user.integration = integration;
 					user.lastLogin = Date.now();
-					
-					let savedUser = await user.save();
+					let savedUser = await user.save()
 
 					if(savedUser.type === 'verified' || savedUser.type === "admin") {
 						let foundChannel = await Channel.findOne({owner: user.name});
 						if(foundChannel.gold !== savedUser.integration.patreon.is_gold) {
-							foundChannel.gold = savedUser.integration.patreon.is_gold;
+							foundChannel.gold = false;
 							foundChannel.save();
 						}
 					}
 
 					handleRedirect(req, res);
-
-				} catch (error) {
-					console.log(error.response);
-					if(error.response.status === 401 || error.response.status === 403) {
-						res.redirect('/auth/patreon');
-					} else if(error.response.status === 404) {
-						//Member used to follow, but now doesn't. Clear info
-
-						let integration = Object.assign({}, user.integration);
-
-						let patreonUpdate = {
-							id: null,
-							thumb_url: integration.patreon.thumb_url,
-							vanity: integration.patreon.vanity,
-							at: integration.patreon.at,
-							rt: integration.patreon.rt,
-							is_follower: null,
-							status: null,
-							is_gold: null,
-							expires: integration.patreon.expires
-						};
-
-						integration.patreon = {...patreonUpdate};
-
-						user.integration = integration;
-						user.lastLogin = Date.now();
-						let savedUser = await user.save()
-
-						if(savedUser.type === 'verified' || savedUser.type === "admin") {
-							let foundChannel = await Channel.findOne({owner: user.name});
-							if(foundChannel.gold !== savedUser.integration.patreon.is_gold) {
-								foundChannel.gold = false;
-								foundChannel.save();
-							}
-						}
-
-						handleRedirect(req, res);
-					}
 				}
 			}
-			
-		} else {
-			user.lastLogin = Date.now();
-
-			let savedUser = user.save();
-			handleRedirect(req, res);
 		}
+		
+	} else {
+		user.lastLogin = Date.now();
+
+		let savedUser = user.save();
+		handleRedirect(req, res);
 	}
-})
+}
 
 router.get('/streamlabs', isAuthorized, (req, res) => {
 	let streamlabsURL = 'https://www.streamlabs.com/api/v1.0/authorize?';
@@ -568,6 +1090,12 @@ router.post('/twitch/sync', isAuthorized, (req, res) => {
 	});
 })
 
+router.post('/mixer/sync', isAuthorized, (req, res) => {
+	mixerSync(req, req.user, req.cookies.etid).then(mixerData => {
+		res.json(mixerData);
+	});
+})
+
 router.post('/patreon/sync', isAuthorized, (req, res) => {
 	
 	patreonSync(req, req.cookies.etid).then((patreonData) => {
@@ -704,6 +1232,12 @@ let refreshPatreonToken = (req, refreshToken) => {
 			});
 		
 	});
+}
+
+let mixerSync = async (req, user, etid) => {
+	if(user.integration.mixer) {
+
+	}
 }
 
 let twitchSync = (req, user, etid) => {
