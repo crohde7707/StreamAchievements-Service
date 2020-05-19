@@ -3,7 +3,8 @@ const Schema = mongoose.Schema;
 
 const listenerSchema = new Schema({
 	uid: String,
-	channel: String,
+	ownerID: String,
+	platforms: Array,
 	achType: String,
 	resubType: String,
 	bot: String,

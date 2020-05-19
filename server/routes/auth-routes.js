@@ -154,7 +154,7 @@ router.get('/mixer/redirect', async (req, res) => {
 
 				user = await existingUser.save();
 
-				let foundChannel = await Channel.findOne({mixerID: user.integration.mixer.etid});
+				let foundChannel = await Channel.findOne({'platforms.mixer.etid': user.integration.mixer.etid});
 
 				if(foundChannel) {
 					let ownerUpdate = false;
@@ -649,6 +649,16 @@ let confirmPlatformAuth = async (req, res, existingUser, redirect, platform) => 
 			currentUser.integration[platform] = existingUser;
 
 			currentUser.save();
+
+			let foundChannel = await Channel.findOne({ownerID: currentUser.id});
+
+			if(foundChannel) {
+				foundChannel.platforms = foundChannel.platforms || {};
+
+				foundChannel.platforms[platform] = existingUser;
+
+				await foundChannel.save();
+			}
 
 			if(process.env.NODE_ENV === 'production') {
 				res.clearCookie('_link', { domain: 'streamachievements.com' });

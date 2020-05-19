@@ -492,7 +492,7 @@ router.get('/dashboard', isAuthorized, async (req, res) => {
 	if(existingChannel) {
 
 		let achievementsPromise = new Promise((resolve, reject) => {
-			Achievement.find({channel: existingChannel.ownerID}).then((achievements) => { 
+			Achievement.find({ownerID: existingChannel.ownerID}).then((achievements) => { 
 
 				if(achievements) {
 					let listenerIds = achievements.map(achievement => {
@@ -520,7 +520,8 @@ router.get('/dashboard', isAuthorized, async (req, res) => {
 									secret: achievement.secret,
 									order: achievement.order,
 									unlocked: listenerData.unlocked || false,
-									achType: listenerData.achType
+									achType: listenerData.achType,
+									platforms: listenerData.platforms
 								}
 								
 								return merge;
