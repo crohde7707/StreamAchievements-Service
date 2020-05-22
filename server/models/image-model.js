@@ -4,7 +4,7 @@ const Schema = mongoose.Schema;
 const imageSchema = new Schema({
 	name: String,
 	type: String,
-	channel: String,
+	ownerID: String,
 	cloudID: String,
 	url: String,
 	achievementID: String

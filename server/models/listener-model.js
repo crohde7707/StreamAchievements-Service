@@ -4,7 +4,7 @@ const Schema = mongoose.Schema;
 const listenerSchema = new Schema({
 	uid: String,
 	ownerID: String,
-	platforms: Array,
+	platforms: Object,
 	achType: String,
 	resubType: String,
 	bot: String,

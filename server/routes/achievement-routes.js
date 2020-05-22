@@ -305,7 +305,7 @@ router.post("/mod/create", isModAuthorized, (req, res) => {
 });
 
 router.post("/create", isAuthorized, (req, res) => {
-	
+
 	Channel.findOne({ownerID: req.user.id}).then((existingChannel) => {
 		if(existingChannel) {
 			createAchievement(req, res, existingChannel, false);
@@ -379,11 +379,12 @@ let createAchievement = async (req, res, existingChannel, isMod) => {
 
 				let listenerData = {
 					ownerID: existingChannel.ownerID,
-					achType: req.body.achType,
-					uid: uuid()
+					achType: req.body.achType
 				};
 
-				listenerData.condition = req.body.condition;
+				if(req.body.condition) {
+					listenerData.condition = req.body.condition;
+				}
 
 				if(listenerData.achType === "4" || listenerData.achType === "5") {
 					listenerData.bot = req.body.bot;
@@ -402,6 +403,8 @@ let createAchievement = async (req, res, existingChannel, isMod) => {
 				} else {
 					let newAchievement;
 
+					listenerData.uid = uuid();
+
 					if(req.body.icon) {
 						let imgResult = await uploadImage(req.body.icon, req.body.iconName, existingChannel.ownerID);
 						achData.icon = imgResult.url;
@@ -417,16 +420,14 @@ let createAchievement = async (req, res, existingChannel, isMod) => {
 					listenerData.achievement = newAchievement.id;
 					listenerData.aid = newAchievement.uid;
 
-					if(req.body.platforms) {
-						listenerData.platforms = req.body.platforms
-					} else {
-						
-						let platform = Object.keys(existingChannel.platforms.toJSON())[0];
+					let platforms = Object.keys(existingChannel.platforms.toJSON());
 
-						listenerData.platforms = [platform];
-				
-					}
-					
+					listenerData.platforms = {};
+
+					platforms.forEach(platform => {
+						listenerData.platforms[platform] = req.body[platform];
+					});
+
 					existingChannel.nextUID = newAchievement.uid + 1;
 					let updatedChannel = await existingChannel.save();
 
@@ -463,77 +464,81 @@ let createAchievement = async (req, res, existingChannel, isMod) => {
 	}
 }
 
-router.post("/delete", isAuthorized, (req, res) => {
+router.post("/delete", isAuthorized, async (req, res) => {
 
-	Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
-		if(existingChannel) {
+	let existingChannel = await Channel.findOne({ownerID: req.user.id});
+
+	if(existingChannel) {
+		
+		//Check if achievement of same name exists
+		let query = {ownerID: existingChannel.ownerID, uid: req.body.achievementID};
+
+		let existingAchievement = await Achievement.findOne(query);
+		
+		if(existingAchievement) {
+			//time to delete
+			let achievementID = existingAchievement.id;
+			let listenerID = existingAchievement.listener;
+			let uid = existingAchievement.uid;
+
+			let achievementDelError = await Achievement.deleteOne(query);
+				
+			let listenerQuery = {
+				"_id": listenerID,
+				ownerID: existingChannel.ownerID
+			};
+
+			let existingListener = await Listener.findOne(listenerQuery);
 			
-			//Check if achievement of same name exists
-			let query = {};
-			query['_id'] = req.body.achievementID;
-			query.channel = existingChannel.owner;
+			if(existingListener) {
 
-			Achievement.findOne(query).then(existingAchievement => {
-				if(existingAchievement) {
-					//time to delete
-					let listenerID = existingAchievement.listener;
-					let uid = existingAchievement.uid;
+				emitRemoveListener(req, {
+					uid: existingListener.uid,
+					channel: existingChannel,
+					achievement: existingListener.achievement,
+					achType: existingListener.achType,
+					query: existingListener.query,
+					bot: existingListener.bot,
+					condition: existingListener.condition
+				});
 
-					Achievement.deleteOne(query).then(err => {
-						let listenerQuery = {
-							"_id": listenerID,
-							channel: existingAchievement.channel
-						};
+				let listenerDelError = await Listener.deleteOne(listenerQuery)
+				
+				let updatedImage = await Image.findOneAndUpdate({
+					ownerID: existingChannel.ownerID,
+					achievementID: achievementID
+				}, { $set: {achievementID: ''}})
+					
+				let earnedDelError = await Earned.deleteMany({ownerID: existingChannel.ownerID, achievementID: uid})
+				
+				res.json({
+					deleted:true
+				});
+			} else {
+				let updatedImage = await Image.findOneAndUpdate({
+					ownerID: existingChannel.ownerID,
+					achievementID: achievementID
+				}, { $set: {achievementID: ''}})
+					
+				let earnedDelError = await Earned.deleteMany({ownerID: existingChannel.ownerID, achievementID: uid})
+				
+				res.json({
+					deleted:true
+				});
+			}
 
-						Listener.findOne(listenerQuery).then(existingListener => {
-							if(existingListener) {
-
-								emitRemoveListener(req, {
-									uid: existingListener.uid,
-									channel: existingChannel.owner,
-									achievement: existingListener.achievement,
-									achType: existingListener.achType,
-									query: existingListener.query,
-									bot: existingListener.bot,
-									condition: existingListener.condition
-								});
-
-								Listener.deleteOne(listenerQuery).then(err => {
-									Image.findOneAndUpdate({achievementID: req.body.achievementID}, { $set: {achievementID: ''}}).then(updatedImage => {
-										
-										Earned.deleteMany({channelID: existingChannel.id, achievementID: uid}).then(err => {
-											res.json({
-												deleted:true
-											});
-										})
-									});
-								});
-							} else {
-								Image.findOneAndUpdate({achievementID: req.body.achievementID}, { $set: {achievementID: ''}}).then(updatedImage => {
-									Earned.deleteMany({channelID: existingChannel.id, achievementID: uid}).then(err => {
-										res.json({
-											deleted:true
-										});
-									})
-								});
-							}
-						});
-					});
-
-				} else {
-					res.json({
-						deleted: false,
-						message: "The achievement you requested to delete doesn't exist!"
-					})
-				}
-			});
 		} else {
 			res.json({
-				delete: false,
-				message: "This channel you are deleting for doesn't exist!"
-			});
+				deleted: false,
+				message: "The achievement you requested to delete doesn't exist!"
+			})
 		}
-	});
+	} else {
+		res.json({
+			delete: false,
+			message: "This channel you are deleting for doesn't exist!"
+		});
+	}
 });
 
 router.post("/enable", isAuthorized, (req, res) => {
@@ -1077,7 +1082,8 @@ let getIcons = (req, res, existingChannel, isMod) => {
 			images: retImages,
 			defaultIcons: existingChannel.icons,
 			channel: {
-				integrations: existingChannel.integrations
+				integrations: Object.keys(existingChannel.integrations.toJSON()),
+				platforms: Object.keys(existingChannel.platforms.toJSON())
 			}
 		}
 
