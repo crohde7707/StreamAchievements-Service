@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const User = require('../models/user-model');
 const Listener = require('../models/listener-model');
+const Channel = require('../models/channel-model');
 const Token = require('../models/token-model');
 const Irc = require('../models/irc-model');
 const mongoose = require('mongoose');
@@ -52,15 +53,16 @@ router.put('/init', (req, res) => {
 })
 
 router.get('/channels', (req, res) => {
+	let platform = req.query.platform;
 	let offset = parseInt(req.query.offset) || 0;
 	let limit = parseInt(req.query.limit) || 50;
 	let total = parseInt(req.query.total) || undefined;
 
 	if(!total) {
-		total = User.estimatedDocumentCount().exec().then(count => {
+		total = Channel.estimatedDocumentCount().exec().then(count => {
 			total = count;
 			
-			getChannels(offset, limit, total).then(channels => {
+			getChannels(platform, offset, limit, total).then(channels => {
 				if(channels.err) {
 					res.status(500);
 					res.json({
@@ -73,7 +75,7 @@ router.get('/channels', (req, res) => {
 			});
 		});
 	} else {
-		getChannels(offset, limit, total).then(channels => {
+		getChannels(platform, offset, limit, total).then(channels => {
 			if(channels.err) {
 				res.status(500);
 				res.json({
@@ -90,6 +92,7 @@ router.get('/channels', (req, res) => {
 router.get('/listeners', (req, res) => {
 	//pagination: limit, start
 	//Find all listeners, and return back the limit, + handle offset of data if there is more
+	let platform = req.query.platform;
 	let offset = parseInt(req.query.offset) || 0;
 	let limit = parseInt(req.query.limit) || 50;
 	let total = parseInt(req.query.total) || undefined;
@@ -100,7 +103,7 @@ router.get('/listeners', (req, res) => {
 		total = Listener.estimatedDocumentCount().exec().then(count => {
 			total = count;
 
-			getListeners(offset, limit, total, channels).then(listeners => {
+			getListeners(platform, offset, limit, total, channels).then(listeners => {
 
 				if(listeners.err) {
 					res.status(500);
@@ -114,7 +117,7 @@ router.get('/listeners', (req, res) => {
 			});
 		});
 	} else {
-		getListeners(offset, limit, total, channels).then(listeners => {
+		getListeners(platform, offset, limit, total, channels).then(listeners => {
 
 			if(listeners.err) {
 				res.status(500);
@@ -130,91 +133,108 @@ router.get('/listeners', (req, res) => {
 
 });
 
-let getListeners = (offset, limit, total, channels) => {
+let getListeners = (platform, offset, limit, total, channels) => {
 	return new Promise((resolve, reject) => {
+		if(isApprovedPlatform(platform)) {
 
-		let query = {};
+			let query = {
+				[`platforms.${platform}`]: true
+			};
 
-		if(channels) {
-			query.channel = { '$in': channels}
-		}
-
-		Listener.find(query).sort({'_id': -1}).skip(offset).limit(limit).exec((err, doc) => {
-			if(err) {
-				resolve({err: 'Issue retrieving from Listener sets'});
-			} else {
-				let listeners = doc.map(listener => {
-
-					return {
-						channel: listener.channel,
-						achievement: listener.achievement,
-						achType: listener.achType,
-						resubType: listener.resubType,
-						query: listener.query,
-						bot: listener.bot,
-						condition: listener.condition,
-						unlocked: listener.unlocked || false
-					}
-				});
-
-				let response = {
-					listeners: listeners,
-					total: total
-				}
-				
-				if(listeners.length === limit) {
-					response.offset = offset + listeners.length;
-				}
-
-				resolve(response);
+			if(channels) {
+				query.channel = { '$in': channels}
 			}
-		});
+
+			Listener.find(query).sort({'_id': -1}).skip(offset).limit(limit).exec((err, foundListeners) => {
+				
+				if(err) {
+					resolve({err: 'Issue retrieving from Listener sets'});
+				} else {
+					let listeners = foundListeners.map(listener => {
+
+						return {
+							channel: listener.ownerID,
+							achievement: listener.achievement,
+							achType: listener.achType,
+							resubType: listener.resubType,
+							query: listener.query,
+							bot: listener.bot,
+							condition: listener.condition,
+							unlocked: listener.unlocked || false
+						}
+					});
+
+					let response = {
+						listeners: listeners,
+						total: total
+					}
+					
+					if(listeners.length === limit) {
+						response.offset = offset + listeners.length;
+					}
+
+					console.log(response);
+
+					resolve(response);
+				}
+			});
+		} else {
+			resolve({ err: true });
+		}
 	});
 }
 
-let getChannels = (offset, limit, total) => {
+let getChannels = (platform, offset, limit, total) => {
 	return new Promise((resolve, reject) => {
-		User.find({ $or: [{type: 'verified'},{type:'admin'}]}).sort({'_id': -1}).skip(offset).limit(limit).exec((err, doc) => {
-			if(err) {
-				resolve({err: 'Issue retrieving from User sets'});
-			} else {
-				let channels = doc.map(user => {
-					let channel = {
-						name: user.name,
-						'full-access': false
-					};
+		if(isApprovedPlatform(platform)) {
 
-					let {patreon, streamlabs} = user.integration;
+			let query = {[`platforms.${platform}`]: { $exists : true}};
 
-					if(patreon) {
-						if(patreon.forever || patreon.is_gold) {
-							channel['full-access'] = true;
+			Channel.find(query).sort({'_id': -1}).skip(offset).limit(limit).exec((err, foundChannels) => {
+				if(err) {
+					resolve({err: 'Issue retrieving from User sets'});
+				} else {
+					let retChannels = foundChannels.map(foundChannel => {
+						
+						let channel = {
+							id: foundChannel.ownerID,
+							name: foundChannel.platforms.twitch.name, 
+							'full-access': false,
+							gold: foundChannel.gold
+						};
+
+						let streamlabs = foundChannel.integrations.streamlabs;
+
+						if(streamlabs) {
+							channel.bot = {
+								bot: 'streamlabs',
+								st: streamlabs.st
+							}
 						}
+
+						return channel;
+					});
+
+					let response = {
+						channels: retChannels,
+						total: total
+					}
+					
+					if(retChannels.length === limit) {
+						response.offset = offset + retChannels.length;
 					}
 
-					if(streamlabs) {
-						channel.bot = {
-							bot: 'streamlabs',
-							st: streamlabs.st
-						}
-					}
-
-					return channel;
-				});
-
-				let response = {
-					channels: channels,
-					total: total
+					resolve(response);
 				}
-				
-				if(channels.length === limit) {
-					response.offset = offset + channels.length;
-				}
-
-				resolve(response);
-			}
-		});
+			});
+		} else {
+			resolve({ err: true })
+		}
 	});
+}
+
+let isApprovedPlatform = (platform) => {
+	return (platform === 'twitch' || platform === 'mixer');
 }
 
 module.exports = router;

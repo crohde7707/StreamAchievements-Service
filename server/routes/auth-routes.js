@@ -16,7 +16,8 @@ const {
 	emitRemoveGold,
 	emitConnectBot,
 	emitDisconnectBot,
-	emitChannelUpdate
+	emitChannelUpdate,
+	emitDeleteChannel
 } = require('../utils/socket-utils');
 
 //patreon
@@ -658,6 +659,19 @@ let confirmPlatformAuth = async (req, res, existingUser, redirect, platform) => 
 				foundChannel.platforms[platform] = existingUser;
 
 				await foundChannel.save();
+
+				let listeners = await Listener.find({ownerID: foundChannel.ownerID});
+
+				listeners.forEach(listener => {
+
+					let platforms = Object.assign({}, listener.platforms);
+
+					platforms[platform] = true;
+
+					listener.platforms = platforms;
+
+					listener.save();
+				});
 			}
 
 			if(process.env.NODE_ENV === 'production') {
@@ -1112,6 +1126,122 @@ router.post('/patreon/sync', isAuthorized, (req, res) => {
 		res.json(patreonData);
 	});
 });
+
+router.post('/mixer/unlink', isAuthorized, async (req, res) => {
+	let platform = 'mixer';
+	let logoff = false;
+	let identity = req.user.integration.mixer.etid;
+
+	if(req.cookies._ap === platform) {
+		logoff = true;
+
+		if(process.env.NODE_ENV === 'production') {
+			res.clearCookie('etid', { domain: 'streamachievements.com' });
+			res.clearCookie('_ap', { domain: 'streamachievements.com' });
+		} else {
+			res.clearCookie('etid');
+			res.clearCookie('_ap');
+		}
+	}
+
+	let integration = Object.assign({}, req.user.integration);
+
+	delete integration[platform];
+
+	req.user.integration = integration;
+
+	let savedUser = await req.user.save();
+
+	let foundChannel = await Channel.findOne({ownerID: req.user.id});
+
+	if(foundChannel) {
+		let platforms = Object.assign({}, foundChannel.platforms);
+
+		delete platforms[platform];
+
+		foundChannel.platforms = platforms;
+
+		let savedChannel = await foundChannel.save();
+
+		let listeners = await Listener.find({ownerID: req.user.id});
+
+		listeners.forEach(listener => {
+			let listenerPlatforms = Object.assign({}, listener.platforms);
+
+			delete listenerPlatforms[platform];
+
+			listener.platforms = listenerPlatforms;
+
+			listener.save();
+		});
+
+		emitDeleteChannel(req, identity, ["mixer"]);
+	}
+
+	res.json({
+		success: true,
+		platform,
+		logoff
+	});
+})
+
+router.post('/twitch/unlink', isAuthorized, async (req, res) => {
+	let platform = 'twitch';
+	let logoff = false;
+	let identity = req.user.integration.twitch.name;
+
+	if(req.cookies._ap === platform) {
+		logoff = true;
+
+		if(process.env.NODE_ENV === 'production') {
+			res.clearCookie('etid', { domain: 'streamachievements.com' });
+			res.clearCookie('_ap', { domain: 'streamachievements.com' });
+		} else {
+			res.clearCookie('etid');
+			res.clearCookie('_ap');
+		}
+	}
+
+	let integration = Object.assign({}, req.user.integration);
+
+	delete integration[platform];
+
+	req.user.integration = integration;
+
+	let savedUser = await req.user.save();
+
+	let foundChannel = await Channel.findOne({ownerID: req.user.id});
+
+	if(foundChannel) {
+		let platforms = Object.assign({}, foundChannel.platforms);
+
+		delete platforms[platform];
+
+		foundChannel.platforms = platforms;
+
+		let savedChannel = await foundChannel.save();
+
+		let listeners = await Listener.find({ownerID: req.user.id});
+
+		listeners.forEach(listener => {
+			let listenerPlatforms = Object.assign({}, listener.platforms);
+
+			delete listenerPlatforms[platform];
+
+			listener.platforms = listenerPlatforms;
+
+			listener.save();
+		});
+
+		emitDeleteChannel(req, identity, ["twitch"]);
+	}
+
+	res.json({
+		success: true,
+		platform,
+		logoff
+	});
+})
 
 router.post('/streamlabs/unlink', isAuthorized, (req, res) => {
 	let integration = Object.assign({}, req.user.integration);

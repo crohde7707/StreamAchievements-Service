@@ -1068,7 +1068,7 @@ router.get("/user", isAuthorized, (req, res) => {
 					Earned.countDocuments({userID: req.user.id, channelID: channel.id}).then(achCount => {
 						let percentage = 0;
 
-						Achievement.countDocuments({channel: channel.owner}).then(count => {
+						Achievement.countDocuments({ownerID: channel.ownerID}).then(count => {
 
 							if(count > 0) {
 								percentage = Math.round((achCount / count) * 100);
@@ -1076,7 +1076,7 @@ router.get("/user", isAuthorized, (req, res) => {
 
 							resolve2({
 					     		logo: channel.logo,
-					     		owner: channel.platform.twitch.alias,
+					     		owner: channel.platforms.twitch.alias,
 					     		percentage: percentage,
 					     		favorite: true
 					     	});
@@ -1104,7 +1104,7 @@ router.get("/user", isAuthorized, (req, res) => {
 					Earned.countDocuments({userID: req.user.id, channelID: channel.id}).then(achCount => {
 						let percentage = 0;
 
-						Achievement.countDocuments({channel: channel.owner}).then(count => {
+						Achievement.countDocuments({ownerID: channel.ownerID}).then(count => {
 
 							if(count > 0) {
 								percentage = Math.round((achCount / count) * 100);
@@ -1112,7 +1112,8 @@ router.get("/user", isAuthorized, (req, res) => {
 
 							resolve2({
 					     		logo: channel.logo,
-					     		owner: channel.owner,
+					     		//owner: channel.owner,
+					     		owner: "",
 					     		percentage: percentage,
 					     		favorite: false
 					     	});

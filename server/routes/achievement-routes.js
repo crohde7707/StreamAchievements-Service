@@ -100,15 +100,25 @@ let updateAchievement = (req, channel, existingAchievement, updates, listenerUpd
 						Listener.findOne({ _id: updatedAchievement.listener }).then(existingListener => {
 							if(existingListener) {
 
+								let platformData = [];
+
+								let platforms = Object.keys(existingListener.platforms);
+
+								platforms.forEach(platform => {
+									if(existingListener.platforms[platform]) {
+										platformData.push(platform);
+									}
+								});
+
 								emitRemoveListener(req, {
 									uid: existingListener.uid,
-									channel,
+									channel: existingListener.ownerID,
 									achievement: existingListener.achievement,
 									achType: existingListener.achType,
 									query: existingListener.query,
 									bot: existingListener.bot,
 									condition: existingListener.condition
-								});
+								}, platformData);
 
 								Listener.deleteOne({ _id : updatedAchievement.listener}).then(err => {
 									updatedAchievement.listener = undefined;
@@ -133,16 +143,26 @@ let updateAchievement = (req, channel, existingAchievement, updates, listenerUpd
 						};
 
 						new Listener(listenerData).save().then(newListener => {
+
+							let platformData = [];
+
+							let platforms = Object.keys(newListener.platforms);
+
+							platforms.forEach(platform => {
+								if(newListener.platforms[platform]) {
+									platformData.push(platform);
+								}
+							});
 														
 							emitNewListener(req, {
 								uid: newListener.uid,
-								channel: newListener.channel,
+								channel: newListener.ownerID,
 								achievement: newListener.achievement,
 								achType: newListener.achType,
 								query: newListener.query,
 								bot: newListener.bot,
 								condition: newListener.condition
-							});
+							}, platformData);
 
 							updatedAchievement.listener = newListener.id;
 							updatedAchievement.save().then(savedAchievement => {
@@ -154,9 +174,23 @@ let updateAchievement = (req, channel, existingAchievement, updates, listenerUpd
 						});
 					} else {
 
-						Listener.findOneAndUpdate({ _id: updatedAchievement.listener }, { $set: listenerUpdates }, { new: true }).then((updatedListener) => {
+						let updatePlatforms = listenerUpdates.platforms;
+
+						delete listenerUpdates.platforms;
+
+						Listener.findOneAndUpdate({ _id: updatedAchievement.listener }, { $set: listenerUpdates }, { new: true }).then( async (updatedListener) => {
 
 							if(updatedListener) {
+
+								if(updatePlatforms && Object.keys(updatePlatforms).length > 0) {
+									let oldPlatforms = updatedListener.platforms;
+
+									let platforms = Object.assign({...oldPlatforms, ...updatePlatforms});
+
+									updatedListener.platforms = platforms;
+
+									updatedListener = await updatedListener.save();
+								}
 
 								let listenerData = {
 									uid: updatedListener.uid,
@@ -166,7 +200,8 @@ let updateAchievement = (req, channel, existingAchievement, updates, listenerUpd
 									query: updatedListener.query,
 									bot: updatedListener.bot,
 									condition: updatedListener.condition,
-									unlocked: updatedListener.unlocked
+									unlocked: updatedListener.unlocked,
+									platforms: updatedListener.platforms
 								};
 
 								emitUpdateListener(req, listenerData);
@@ -231,7 +266,7 @@ router.post('/mod/update', isModAuthorized, (req, res) => {
 
 router.post('/update', isAuthorized, (req, res) => {
 	
-	Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
+	Channel.findOne({ownerID: req.user.id}).then((existingChannel) => {
 		if(existingChannel) {
 			handleUpdate(req, res, existingChannel, false);
 		} else {
@@ -244,11 +279,11 @@ router.post('/update', isAuthorized, (req, res) => {
 });
 
 let handleUpdate = (req, res, existingChannel, isMod) => {
-	Achievement.findOne({['_id']: req.body.id, channel: existingChannel.owner}).then((existingAchievement) => {
+	Achievement.findOne({'_id': req.body.id, ownerID: existingChannel.ownerID}).then((existingAchievement) => {
 		if(existingAchievement) {
 			let updates = req.body;
 
-			let {achType, query, bot, condition} = updates;
+			let {achType, query, bot, condition, twitch, mixer} = updates;
 
 			let listenerUpdates = {};
 
@@ -268,6 +303,21 @@ let handleUpdate = (req, res, existingChannel, isMod) => {
 				listenerUpdates.condition = condition;
 				delete updates.condition;
 			}
+
+			let platforms = {};
+
+			//Platform updates
+			if(twitch !== undefined) {
+				platforms.twitch = twitch;
+				delete updates.twitch;
+			}
+
+			if(mixer !== undefined) {
+				platforms.mixer = mixer;
+				delete updates.mixer;
+			}
+
+			listenerUpdates.platforms = platforms
 
 			//If new image, upload it
 			if(updates.icon && updates.iconName) {
@@ -434,16 +484,29 @@ let createAchievement = async (req, res, existingChannel, isMod) => {
 					//create listener for achievement
 					if(req.body.achType !== "3") {
 						let newListener = await new Listener(listenerData).save();
+						delete listenerData.platforms;
+
+						let platformData = [];
+
+						platforms = Object.keys(newListener.platforms);
+
+						platforms.forEach(platform => {
+							if(newListener.platforms[platform]) {
+								platformData.push(platform);
+							}
+						});
+						
 							
 						emitNewListener(req, {
 							uid: listenerData.uid,
-							channel: listenerData.channel,
+							channel: listenerData.ownerID,
 							achievement: listenerData.achievement,
 							achType: listenerData.achType,
 							query: listenerData.query,
 							bot: listenerData.bot,
-							condition: listenerData.condition
-						});
+							condition: listenerData.condition,
+							platforms: listenerData.platforms
+						}, platformData);
 
 						newAchievement.listener = newListener.id;
 
@@ -488,19 +551,31 @@ router.post("/delete", isAuthorized, async (req, res) => {
 				ownerID: existingChannel.ownerID
 			};
 
+			console.log(listenerQuery);
+
 			let existingListener = await Listener.findOne(listenerQuery);
 			
 			if(existingListener) {
 
+				let platformData = [];
+
+				platforms = Object.keys(existingListener.platforms);
+
+				platforms.forEach(platform => {
+					if(existingListener.platforms[platform]) {
+						platformData.push(platform);
+					}
+				});
+
 				emitRemoveListener(req, {
 					uid: existingListener.uid,
-					channel: existingChannel,
+					channel: existingChannel.ownerID,
 					achievement: existingListener.achievement,
 					achType: existingListener.achType,
 					query: existingListener.query,
 					bot: existingListener.bot,
 					condition: existingListener.condition
-				});
+				}, platformData);
 
 				let listenerDelError = await Listener.deleteOne(listenerQuery)
 				
@@ -676,7 +751,10 @@ let getAchievementData = async (req, res, existingChannel, achievement) => {
 			isGoldChannel: ((req.channel && req.channel.gold)),
 			customAllowed: responses[2],
 			referred: existingChannel.referral.referred > 0,
-			channel: existingChannel
+			channel: {
+				integrations: Object.keys(existingChannel.integrations.toJSON()),
+				platforms: Object.keys(existingChannel.platforms.toJSON())
+			}
 		});
 	});
 }

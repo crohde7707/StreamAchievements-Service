@@ -26,7 +26,7 @@ let emitNewChannel = (req, channel) => {
 	emit(req, 'new-channel', channel);
 }
 
-let emitDeleteChannel = (req, user, platforms) => {
+let emitDeleteChannel = (req, identity, platforms) => {
 	let ws, sid;
 
 	platforms.forEach(platform => {
@@ -34,12 +34,12 @@ let emitDeleteChannel = (req, user, platforms) => {
 			case 'twitch':
 				ws = req.app.get('ws');
 				sid = req.app.get('IRCSOCKET');
-				data = user.integration.twitch.name;
+				data = identity;
 				break;
 			case 'mixer':
 				ws = req.app.get('mws');
 				sid = req.app.get('MIXER-IRCSOCKET');
-				data = user.integration.mixer.etid;
+				data = identity;
 				break;
 			default:
 				break;
@@ -55,8 +55,30 @@ let emitChannelUpdate = (req, channelUpdates) => {
 	emit(req, 'channel-update', channelUpdates);
 }
 
-let emitNewListener = (req, listener) => {
-	emit(req, 'new-listener', listener);
+let emitNewListener = (req, listener, platforms) => {
+
+	platforms.forEach(platform => {
+		switch(platform) {
+			case 'twitch':
+				ws = req.app.get('ws');
+				sid = req.app.get('IRCSOCKET');
+				data = listener;
+				break;
+			case 'mixer':
+				ws = req.app.get('mws');
+				sid = req.app.get('MIXER-IRCSOCKET');
+				data = listener;
+				break;
+			default:
+				break;
+		}
+
+		if(ws && sid && data) {
+			ws.to(sid).emit('new-listener', data);
+		}	
+	});
+
+	//emit(req, 'new-listener', listener);
 }
 
 let emitUpdateListener = (req, listener) => {
