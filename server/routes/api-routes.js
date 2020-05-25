@@ -330,6 +330,14 @@ router.get("/profile", isAuthorized, (req, res) => {
 
 	Channel.find({'_id': { $in: channelArray}}).then((channels) => {
 
+		let platform;
+
+		if(!req.user.preferences || !req.user.preferences.platform) {
+			platform = req.cookies._ap || 'twitch';
+		} else {
+			platform = req.user.preferences.platform;
+		}
+
 		let promises = channels.map(channel => {
 			//TODO: Get count from Earned table
 			let earnedAchievements = req.user.channels.filter(userChannel => (userChannel.channelID === channel.id));
@@ -356,6 +364,8 @@ router.get("/profile", isAuthorized, (req, res) => {
 		});
 
 		let notificationPromise = new Promise((resolve, reject) => {
+
+			//TODO: Convert ownerIDs to channel names
 			Notice.countDocuments({user: req.user._id}).exec().then(count => {
 				Notice.find({user: req.user._id}).sort({'date': -1}).limit(notificationLimit).exec((err, notifications) => {
 					if(notifications) {
@@ -391,9 +401,12 @@ router.get("/profile", isAuthorized, (req, res) => {
 		Promise.all(promises).then(responseData => {
 
 			notificationPromise.then(data => {
-				if(!req.user.preferences) {
+				
+				if(!req.user.preferences.autojoin || !req.user.preferences.platform) {
+
 					req.user.preferences = {
-						autojoin: false
+						autojoin: req.user.preferences.autojoin || false,
+						platform: req.user.preferences.platform || req.cookies._ap.toLowerCase()
 					};
 
 					req.user.save().then((savedUser) => {
@@ -401,7 +414,10 @@ router.get("/profile", isAuthorized, (req, res) => {
 							channels: responseData,
 							preferences: savedUser.preferences,
 							notifications: data.notifications,
-							next: data.next
+							next: data.next,
+							platform,
+							name: savedUser.integration[req.user.preferences.platform].name,
+							logo: savedUser.integration[req.user.preferences.platform].logo
 						});
 					});
 				} else {
@@ -409,7 +425,10 @@ router.get("/profile", isAuthorized, (req, res) => {
 						channels: responseData,
 						preferences: req.user.preferences,
 						notifications: data.notifications,
-						next: data.next
+						next: data.next,
+						platform,
+						name: req.user.integration[req.user.preferences.platform].name,
+						logo: req.user.integration[req.user.preferences.platform].logo
 					});
 				}
 			})

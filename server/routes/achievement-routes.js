@@ -36,7 +36,7 @@ let combineAchievementAndListeners = (achievement, listener) => {
 	if(achievement && listener) {
 		let merge = {
 			"_id": achievement['_id'],
-			channel: achievement.owner,
+			channel: achievement.ownerID,
 			title: achievement.title,
 			description: achievement.description,
 			shortDescription: achievement.shortDescription,
@@ -61,175 +61,250 @@ let combineAchievementAndListeners = (achievement, listener) => {
 }
 
 let updateAchievement = (req, channel, existingAchievement, updates, listenerUpdates, iconImg) => {
-	return new Promise((resolve, reject) => {
-
-		let imgPromise;
+	return new Promise(async (resolve, reject) => {
 
 		if(iconImg) {
 			//New image has been uploaded
-			imgPromise = new Promise((innerResolve, innerReject) => {
-				Image.findOne({achievementID: existingAchievement._id}).then(existingImg => {
-					if(existingImg) {
-						existingImg.achievementID = "";
-						existingImg.save().then(() => {
-							iconImg.achievementID = existingAchievement._id;
-							iconImg.save().then(savedImg => {
-								innerResolve();
-							});
-						});	
-					} else {
-						iconImg.achievementID = existingAchievement._id;
-						iconImg.save().then(savedImg => {
-							innerResolve();
-						});
-					}
+			
+			let existingImg = await	Image.findOne({achievementID: existingAchievement._id});
+			
+			if(existingImg) {
+				existingImg.achievementID = "";
+				await existingImg.save();
 					
-				});
-
+				iconImg.achievementID = existingAchievement._id;
 				
-			});
-		} else {
-			imgPromise = Promise.resolve();
+				await iconImg.save();
+			} else {
+				iconImg.achievementID = existingAchievement._id;
+				await iconImg.save();
+			}
 		}
 
-		imgPromise.then(() => {
-			Achievement.findOneAndUpdate({ _id: existingAchievement._id }, { $set: updates }, {new:true}).then((updatedAchievement) => {
-				if(Object.keys(listenerUpdates).length > 0) {
-					if(listenerUpdates.achType && listenerUpdates.achType === "3" && updatedAchievement.listener) {
-						//updated to manual achievement, delete listener
-						Listener.findOne({ _id: updatedAchievement.listener }).then(existingListener => {
-							if(existingListener) {
-
-								let platformData = [];
-
-								let platforms = Object.keys(existingListener.platforms);
-
-								platforms.forEach(platform => {
-									if(existingListener.platforms[platform]) {
-										platformData.push(platform);
-									}
-								});
-
-								emitRemoveListener(req, {
-									uid: existingListener.uid,
-									channel: existingListener.ownerID,
-									achievement: existingListener.achievement,
-									achType: existingListener.achType,
-									query: existingListener.query,
-									bot: existingListener.bot,
-									condition: existingListener.condition
-								}, platformData);
-
-								Listener.deleteOne({ _id : updatedAchievement.listener}).then(err => {
-									updatedAchievement.listener = undefined;
-									updatedAchievement.save().then(savedAchievement => {
-
-										resolve({
-											update: true,
-											achievement: savedAchievement
-										});
-									});
-								});
-							}
-						});
-					} else if(listenerUpdates.achType && listenerUpdates.achType !== "3" && !existingAchievement.listener) {
-						//Listener didnt exist before, create one now
-						let listenerData = {
-							channel,
-							uid: uuid(),
-							...listenerUpdates,
-							achievement: updatedAchievement.id,
-							aid: updatedAchievement.uid
-						};
-
-						new Listener(listenerData).save().then(newListener => {
+		Achievement.findOneAndUpdate({ _id: existingAchievement._id }, { $set: updates }, {new:true}).then(async (updatedAchievement) => {
+			if(Object.keys(listenerUpdates).length > 0) {
+				if(listenerUpdates.achType && listenerUpdates.achType === "3" && updatedAchievement.listener) {
+					//updated to manual achievement, delete listener
+					Listener.findOne({ _id: updatedAchievement.listener }).then(existingListener => {
+						if(existingListener) {
 
 							let platformData = [];
 
-							let platforms = Object.keys(newListener.platforms);
+							let platforms = Object.keys(existingListener.platforms);
 
 							platforms.forEach(platform => {
-								if(newListener.platforms[platform]) {
+								if(existingListener.platforms[platform]) {
 									platformData.push(platform);
 								}
 							});
-														
-							emitNewListener(req, {
-								uid: newListener.uid,
-								channel: newListener.ownerID,
-								achievement: newListener.achievement,
-								achType: newListener.achType,
-								query: newListener.query,
-								bot: newListener.bot,
-								condition: newListener.condition
+
+							emitRemoveListener(req, {
+								uid: existingListener.uid,
+								channel: existingListener.ownerID,
+								achievement: existingListener.achievement,
+								achType: existingListener.achType,
+								query: existingListener.query,
+								bot: existingListener.bot,
+								condition: existingListener.condition
 							}, platformData);
 
-							updatedAchievement.listener = newListener.id;
-							updatedAchievement.save().then(savedAchievement => {
-								resolve({
-									created: true,
-									achievement: savedAchievement
+							Listener.deleteOne({ _id : updatedAchievement.listener}).then(err => {
+								updatedAchievement.listener = undefined;
+								updatedAchievement.save().then(savedAchievement => {
+
+									resolve({
+										update: true,
+										achievement: savedAchievement
+									});
 								});
 							});
-						});
-					} else {
+						}
+					});
+				} else if(listenerUpdates.achType && listenerUpdates.achType !== "3" && !existingAchievement.listener) {
+					//Listener didnt exist before, create one now
+					let listenerData = {
+						ownerID: channel,
+						uid: uuid(),
+						...listenerUpdates,
+						achievement: updatedAchievement.id,
+						aid: updatedAchievement.uid
+					};
 
-						let updatePlatforms = listenerUpdates.platforms;
+					new Listener(listenerData).save().then(newListener => {
 
-						delete listenerUpdates.platforms;
+						let platformData = [];
 
-						Listener.findOneAndUpdate({ _id: updatedAchievement.listener }, { $set: listenerUpdates }, { new: true }).then( async (updatedListener) => {
+						let platforms = Object.keys(newListener.platforms);
 
-							if(updatedListener) {
-
-								if(updatePlatforms && Object.keys(updatePlatforms).length > 0) {
-									let oldPlatforms = updatedListener.platforms;
-
-									let platforms = Object.assign({...oldPlatforms, ...updatePlatforms});
-
-									updatedListener.platforms = platforms;
-
-									updatedListener = await updatedListener.save();
-								}
-
-								let listenerData = {
-									uid: updatedListener.uid,
-									channel: channel,
-									achievement: updatedListener.achievement,
-									achType: updatedListener.achType,
-									query: updatedListener.query,
-									bot: updatedListener.bot,
-									condition: updatedListener.condition,
-									unlocked: updatedListener.unlocked,
-									platforms: updatedListener.platforms
-								};
-
-								emitUpdateListener(req, listenerData);
-
-								let merge = combineAchievementAndListeners(updatedAchievement, updatedListener);
-
-								resolve({
-									update: true,
-									achievement: merge
-								});
-							} else {
-								resolve({
-									update: false
-								});
+						platforms.forEach(platform => {
+							if(newListener.platforms[platform]) {
+								platformData.push(platform);
 							}
 						});
-					}
+													
+						emitNewListener(req, {
+							uid: newListener.uid,
+							channel: newListener.ownerID,
+							achievement: newListener.achievement,
+							achType: newListener.achType,
+							query: newListener.query,
+							bot: newListener.bot,
+							condition: newListener.condition
+						}, platformData);
+
+						updatedAchievement.listener = newListener.id;
+						updatedAchievement.save().then(savedAchievement => {
+							resolve({
+								created: true,
+								achievement: savedAchievement
+							});
+						});
+					});
 				} else {
-					Listener.findOne({ _id: updatedAchievement.listener }).then(foundListener => {
-						let merge = combineAchievementAndListeners(updatedAchievement, foundListener);
+
+					let updatePlatforms = listenerUpdates.platforms;
+					let unset;
+
+					delete listenerUpdates.platforms;
+
+					let oldPlatforms, oldType, oldBot, platformUpdate = false;
+
+					if(listenerUpdates.achType) {
+
+						let oldListener = await Listener.findOne({ _id: updatedAchievement.listener}, 'achType bot platforms', {lean: true});
+
+						if(oldListener) {
+							oldType = oldListener.achType;
+							oldBot = oldListener.bot;
+							oldPlatforms = oldListener.platforms;
+						}
+
+						switch(listenerUpdates.achType) {
+							case "0":
+							case "1":
+							case "2":
+								unset = {
+									bot: "",
+									query: ""
+								};
+								break;
+							case "3":
+							case "6":
+							case "7":
+								unset = {
+									bot: "",
+									query: "",
+									condition: ""
+								};
+								break;
+							case "4":
+								if(!listenerUpdates.condition) {
+									unset = {condition: ""};
+								}
+								break;
+							case "5":
+								unset = {condition: ""};
+								break;
+							default:
+								break;
+						}
+					}
+
+					if(updatePlatforms && Object.keys(updatePlatforms).length > 0) {
+						platformUpdate = true
+						
+						if(!listenerUpdates.achType) {
+							let oldListener = await Listener.findOne({ _id: updatedAchievement.listener}, 'platforms', {lean: true});
+
+							if(oldListener) {
+								oldPlatforms = oldListener.platforms;
+							}
+						}
+						
+						if(!oldPlatforms) {
+							oldPlatforms = {
+								twitch: true,
+								mixer: true
+							}
+						}
+						
+
+						let platforms = Object.assign({...oldPlatforms, ...updatePlatforms});
+
+						listenerUpdates.platforms = platforms;
+					}
+
+					let listenerPromise;
+
+					if(unset) {
+						listenerPromise = Listener.findOneAndUpdate({ _id: updatedAchievement.listener }, { $set: listenerUpdates, $unset: unset }, { new: true })
+					} else {
+						listenerPromise = Listener.findOneAndUpdate({ _id: updatedAchievement.listener }, { $set: listenerUpdates }, { new: true })
+					}
+
+					listenerPromise.then( async (updatedListener) => {
+
+						let listenerData = {
+							uid: updatedListener.uid,
+							channel: updatedListener.ownerID,
+							achievement: updatedListener.achievement,
+							achType: updatedListener.achType,
+							query: updatedListener.query,
+							bot: updatedListener.bot,
+							condition: updatedListener.condition,
+							unlocked: updatedListener.unlocked
+						};
+
+						if(oldType) {
+							listenerData.oldType = oldType;
+
+							if(oldBot) {
+								listenerData.oldBot = oldBot;
+							}
+						}
+
+						if(platformUpdate) {
+							Object.keys(updatedListener.platforms).forEach(platform => {
+								if(updatedListener[platform] === undefined || oldPlatforms[platform] === updatedListener[platform]) {
+									emitUpdateListener(req, listenerData, [platform]);
+								} else if(oldPlatforms[platform] !== undefined && !oldPlatforms[platform] && updatedListener[platform]) {
+									emitNewListener(req, listenerData, [platform]);
+								} else {
+									emitRemoveListener(req, listenerData, [platform]);
+								}
+							})
+						} else {
+
+							let platformData = [];
+
+							platforms = Object.keys(updatedListener.platforms);
+
+							platforms.forEach(platform => {
+								if(updatedListener.platforms[platform]) {
+									platformData.push(platform);
+								}
+							});
+							emitUpdateListener(req, listenerData, platformData);
+						}
+
+						let merge = combineAchievementAndListeners(updatedAchievement, updatedListener);
 
 						resolve({
 							update: true,
 							achievement: merge
 						});
-					});
+					})
 				}
-			});
+			} else {
+				Listener.findOne({ _id: updatedAchievement.listener }).then(foundListener => {
+					let merge = combineAchievementAndListeners(updatedAchievement, foundListener);
+
+					resolve({
+						update: true,
+						achievement: merge
+					});
+				});
+			}
 		});
 	});
 }
@@ -278,49 +353,116 @@ router.post('/update', isAuthorized, (req, res) => {
 	});
 });
 
-let handleUpdate = (req, res, existingChannel, isMod) => {
-	Achievement.findOne({'_id': req.body.id, ownerID: existingChannel.ownerID}).then((existingAchievement) => {
-		if(existingAchievement) {
-			let updates = req.body;
+let handleUpdate = async (req, res, existingChannel, isMod) => {
+	let update = true;
+	let existingAchievement = await Achievement.findOne({'_id': req.body.id, ownerID: existingChannel.ownerID});
 
-			let {achType, query, bot, condition, twitch, mixer} = updates;
+	if(existingAchievement) {
+		let updates = req.body;
 
-			let listenerUpdates = {};
+		let {achType, query, bot, condition, twitch, mixer} = updates;
 
-			if(achType) {
-				listenerUpdates.achType = achType;
-				delete updates.achType;
-			}
-			if(query) {
-				listenerUpdates.query = query;
-				delete updates.query;
-			}
-			if(bot) {
-				listenerUpdates.bot = bot;
-				delete updates.bot;
-			}
-			if(condition) {
-				listenerUpdates.condition = condition;
-				delete updates.condition;
-			}
+		let listenerUpdates = {};
 
-			let platforms = {};
+		if(achType) {
+			listenerUpdates.achType = achType;
+			delete updates.achType;
+		}
+		if(query) {
+			listenerUpdates.query = query;
+			delete updates.query;
+		}
+		if(bot) {
+			listenerUpdates.bot = bot;
+			delete updates.bot;
+		}
+		if(condition) {
+			listenerUpdates.condition = condition + "";
+			delete updates.condition;
+		}
 
-			//Platform updates
-			if(twitch !== undefined) {
-				platforms.twitch = twitch;
-				delete updates.twitch;
-			}
+		let platforms;
 
-			if(mixer !== undefined) {
-				platforms.mixer = mixer;
-				delete updates.mixer;
+		//Platform updates
+		if(twitch !== undefined) {
+			platforms = {
+				twitch
 			}
 
+			delete updates.twitch;
+		}
+
+		if(mixer !== undefined) {
+			platforms = platforms || {};
+
+			platforms.mixer = mixer;
+			delete updates.mixer;
+		}
+
+		if(platforms) {
 			listenerUpdates.platforms = platforms
+		}
+
+		let existingType;
+
+		//check if update will cause a duplicate
+		console.log('listenerUpdates', listenerUpdates);
+		//check if updates will be a duplicate of existing
+		if(achType) {
+			existingType = achType
+		} else if(existingAchievement.listener) {
+			let existingListener = await Listener.findOne({ownerID: existingChannel.ownerID, achievement: existingAchievement.id});
+
+			if(existingListener) {
+				existingType = existingListener.achType;
+			}
+		}
+
+		console.log('type:',existingType)
+
+		if(existingType) {
+
+			let updatesToCheck = Object.assign({}, listenerUpdates);
+
+			console.log(updatesToCheck);
+			
+			delete updatesToCheck.twitch;
+			delete updatesToCheck.mixer;
+			delete updatesToCheck.platforms;
+
+			let foundListener = await Listener.findOne({ownerID: existingChannel.ownerID, ...updatesToCheck, achType: existingType});
+
+			if(foundListener) {
+				
+				console.log(foundListener);
+
+				let foundAchievement = await Achievement.findOne({_id: foundListener.achievement});
+
+				update = false;
+
+				if(foundAchievement.id === req.body.id) {
+					//updating to the same thing, just return
+					res.json({
+						update:true
+					});
+				} else {
+					res.json({
+						update: false,
+						message: "The conditions you selected are already taken by the \"" + foundAchievement.title + "\" achievement!"
+					});
+				}
+			} else if (achType === "3") {
+				res.json({
+					update:true
+				});
+			}
+		}
+
+		if(update) {
 
 			//If new image, upload it
 			if(updates.icon && updates.iconName) {
+
 				uploadImage(updates.icon, updates.iconName, updates.iconType, existingChannel.owner).then(iconImg => {
 					if(iconImg.error) {
 						res.json({
@@ -334,9 +476,10 @@ let handleUpdate = (req, res, existingChannel, isMod) => {
 							res.json(response);
 						});
 					}
+
 				});
 			} else {
-				updateAchievement(req, existingChannel.owner, existingAchievement, updates, listenerUpdates).then(response => {
+				updateAchievement(req, existingChannel.ownerID, existingAchievement, updates, listenerUpdates).then(response => {
 					res.json(response);
 				});
 			}
@@ -347,7 +490,13 @@ let handleUpdate = (req, res, existingChannel, isMod) => {
 				error: "The achievement you tried to update doesn't exist!"
 			});
 		}
-	});
+
+	} else {
+		res.json({
+			update: false,
+			message: "The achievement you tried to update doesn't exist!"
+		});
+	}
 }
 
 router.post("/mod/create", isModAuthorized, (req, res) => {
@@ -624,7 +773,7 @@ router.post("/enable", isAuthorized, (req, res) => {
 			enabledListener.unlocked = false;
 			enabledListener.save().then(nowDisabledListener => {
 				emitUpdateListener(req, {
-					channel: nowDisabledListener.channel,
+					channel: nowDisabledListener.ownerID,
 					achievement: nowDisabledListener.achievement,
 					achType: nowDisabledListener.achType,
 					query: nowDisabledListener.query,
@@ -639,7 +788,7 @@ router.post("/enable", isAuthorized, (req, res) => {
 			disabledListener.unlocked = true;
 			disabledListener.save().then(nowEnabledListener => {
 				emitUpdateListener(req, {
-					channel: nowEnabledListener.channel,
+					channel: nowEnabledListener.ownerID,
 					achievement: nowEnabledListener.achievement,
 					achType: nowEnabledListener.achType,
 					query: nowEnabledListener.query,
@@ -706,56 +855,46 @@ router.get("/retrieve", isAuthorized, (req, res) => {
 });
 
 let getAchievementData = async (req, res, existingChannel, achievement) => {
-	let achievementPromise = new Promise((resolve, reject) => {
-		Achievement.findOne({uid: achievement, ownerID: existingChannel.ownerID}).then(existingAchievement => {
+	let mergedAchievement;
 
-			if(existingAchievement) {
-				
-				let listenerID = existingAchievement.listener;
-				
-				Listener.findOne({"_id": existingAchievement.listener, ownerID: existingAchievement.ownerID}).then(existingListener => {
+	let existingAchievement = await Achievement.findOne({uid: achievement, ownerID: existingChannel.ownerID});
 
-					if(existingListener) {
-						let listenerData = Object.assign({}, existingListener['_doc']);
-						let achievementData = Object.assign({}, existingAchievement['_doc']);
+	if(existingAchievement) {
+		
+		let existingListener = await Listener.findOne({"_id": existingAchievement.listener, ownerID: existingAchievement.ownerID});
 
-						delete listenerData._id;
+		if(existingListener) {
+			let listenerData = Object.assign({}, existingListener['_doc']);
+			let achievementData = Object.assign({}, existingAchievement['_doc']);
 
-						let mergedAchievement = Object.assign(achievementData, listenerData);
+			delete listenerData._id;
 
-						if(!mergedAchievement.unlocked) {
-							mergedAchievement.unlocked = false;
-						}
+			mergedAchievement = Object.assign(achievementData, listenerData);
 
-						resolve(mergedAchievement);
-					} else {
-						resolve(existingAchievement);
-					}
-				})
-
-			} else {
-				resolve(null);
+			if(!mergedAchievement.unlocked) {
+				mergedAchievement.unlocked = false;
 			}
-		})
-	});
 
-	let imagePromise = retrieveImages(existingChannel.ownerID);
+		} else {
+			mergedAchievement = existingAchievement;
+		}
+	}
 
-	let customAllowed = isCustomAllowed(existingChannel);
+	let images = await retrieveImages(existingChannel.ownerID);
 
-	Promise.all([achievementPromise, imagePromise, customAllowed]).then(responses => {
-		res.json({
-			achievement: responses[0],
-			images: responses[1],
-			defaultIcons: existingChannel.icons,
-			isGoldChannel: ((req.channel && req.channel.gold)),
-			customAllowed: responses[2],
-			referred: existingChannel.referral.referred > 0,
-			channel: {
-				integrations: Object.keys(existingChannel.integrations.toJSON()),
-				platforms: Object.keys(existingChannel.platforms.toJSON())
-			}
-		});
+	let customAllowed = await isCustomAllowed(existingChannel);
+
+	res.json({
+		achievement: mergedAchievement,
+		images: images,
+		defaultIcons: existingChannel.icons,
+		isGoldChannel: ((req.channel && req.channel.gold)),
+		customAllowed: customAllowed,
+		referred: existingChannel.referral.referred > 0,
+		channel: {
+			integrations: Object.keys(existingChannel.integrations.toJSON()),
+			platforms: Object.keys(existingChannel.platforms.toJSON())
+		}
 	});
 }
 
@@ -766,7 +905,7 @@ router.post('/mod/award', isModAuthorized, (req, res) => {
 router.post('/award', isAuthorized, (req, res) => {	
 
 	Channel.findOne({ownerID: req.user.id}).then((existingChannel) => {
-		manualAward(req, res, existingChannel);
+		manualAward(req, res, existingChannel, req.user.name);
 	});
 });
 
@@ -785,12 +924,12 @@ let buildAchievementMessage = (channel, achievementData) => {
 	}
 
 	return {
-		channel: channel.owner,
+		channel: channel.ownerID,
 		message: chatMessage
 	}
 }
 
-let manualAward = (req, res, existingChannel) => {
+let manualAward = (req, res, existingChannel, channelName) => {
 	let members = req.body.members;
 	let nonMember;
 	let achievementID = req.body.aid;
@@ -803,119 +942,156 @@ let manualAward = (req, res, existingChannel) => {
 		nonMember = members.splice(nonMemberIdx, 1)[0]; 
 	}
 
-	Achievement.findOne({uid: achievementID, channel: existingChannel.owner}).then(foundAchievement => {
-		members = members.map(member => member.name);
-		
-		User.find({'name': { $in: members}}).then(foundMembers => {
-			let promises;
+	Achievement.findOne({uid: achievementID, ownerID: existingChannel.ownerID}).then(foundAchievement => {
 
-			if(foundMembers.length > 0) {
-				Earned.find({channelID: existingChannel.id, achievementID: foundAchievement.uid}).limit(1).exec((err, earnedDocs) => {
-					first = (earnedDocs.length === 0);
-				
-					foundMembers.map((member, idx) => {
-						let earnedObj = {
-							userID: member.id,
-							channelID: existingChannel.id,
-							achievementID: foundAchievement.uid
+		let platformData = [];
+		let listenerPromise;
+
+		if(foundAchievement.listener) {
+			listenerPromise = new Promise((resolve, reject) => {
+				Listener.findOne({'_id': foundAchievement.listener}).then(foundListener => {
+
+					let platforms = Object.keys(foundListener.platforms);
+
+					platforms.forEach(platform => {
+						if(foundListener.platforms[platform]) {
+							platformData.push(platform);
 						}
-
-						Earned.findOne(earnedObj).then(foundEarned => {
-							if(!foundEarned) {
-								new Earned({
-									...earnedObj,
-									earned: Date.now(),
-									first
-								}).save().then(savedEarned => {
-									
-									first = false;
-
-									if(existingChannel.overlay.chat) {
-										let alertData = {
-											'channel':existingChannel.owner,
-											'member': member.name,
-											'achievement': foundAchievement.title
-										};
-
-										emitAwardedAchievement(req, buildAchievementMessage(existingChannel, alertData));
-
-										emitExtensionAchievementEarned(req, {
-											user: member.integration.twitch.etid,
-											aid: foundAchievement.uid
-										});
-
-										logChannelEvent(req, existingChannel, member, foundAchievement);
-									}
-
-									new Notice({
-										user: member._id,
-										logo: existingChannel.logo,
-										message: `You have earned the "${foundAchievement.title}" achievement!`,
-										date: currentDate,
-										type: 'achievement',
-										channel: existingChannel.owner,
-										status: 'new'
-									}).save().then(savedNotice => {
-										emitNotificationsUpdate(req, {
-											notification: {
-												id: savedNotice._id,
-												logo: savedNotice.logo,
-												message: savedNotice.message,
-												date: savedNotice.date,
-												type: savedNotice.type,
-												channel: savedNotice.channel,
-												status: savedNotice.status
-											},
-											user: member.name
-										});
-									});
-									
-									let shouldAlert = foundAchievement.alert || true;
-									let unlocked = false;
-
-									if(existingChannel.gold) {
-										unlocked = true
-									}
-
-									if(shouldAlert) {
-										emitOverlayAlert(req, {
-											user: member.name,
-											channel: existingChannel.owner,
-											title: foundAchievement.title,
-											icon: foundAchievement.icon,
-											unlocked
-										});	
-									}
-
-								})
-							}
-						})
 					});
 
+					resolve();
+				});
+			})
+		} else {
+
+			let platforms = Object.keys(existingChannel.platforms.toJSON());
+
+			platforms.forEach(platform => {
+				if(existingChannel.platforms[platform]) {
+					platformData.push(platform);
+				}
+			});
+
+			listenerPromise = Promise.resolve();
+		}
+
+		members = members.map(member => member.name);
+		
+		listenerPromise.then(() => {
+
+			console.log(platformData);
+			User.find({'name': { $in: members}}).then(foundMembers => {
+				let promises;
+
+				if(foundMembers.length > 0) {
+					Earned.find({channelID: existingChannel.id, achievementID: foundAchievement.uid}).limit(1).exec((err, earnedDocs) => {
+						first = (earnedDocs.length === 0);
+					
+						foundMembers.map((member, idx) => {
+							let earnedObj = {
+								userID: member.id,
+								channelID: existingChannel.id,
+								achievementID: foundAchievement.uid
+							}
+
+							Earned.findOne(earnedObj).then(foundEarned => {
+								if(!foundEarned) {
+									new Earned({
+										...earnedObj,
+										earned: Date.now(),
+										first
+									}).save().then(savedEarned => {
+										
+										first = false;
+
+										if(existingChannel.overlay.chat) {
+											let alertData = {
+												'channel':existingChannel.ownerID,
+												'member': member.name,
+												'achievement': foundAchievement.title
+											};
+
+											emitAwardedAchievement(req, buildAchievementMessage(existingChannel, alertData), platformData);
+
+											//TODO: handle dual platforms
+											emitExtensionAchievementEarned(req, {
+												user: member.integration.twitch.etid,
+												aid: foundAchievement.uid
+											});
+
+											logChannelEvent(req, existingChannel, member, foundAchievement);
+										}
+
+										new Notice({
+											user: member._id,
+											logo: existingChannel.logo,
+											message: `You have earned the "${foundAchievement.title}" achievement!`,
+											date: currentDate,
+											type: 'achievement',
+											channel: channelName,
+											status: 'new'
+										}).save().then(savedNotice => {
+											emitNotificationsUpdate(req, {
+												notification: {
+													id: savedNotice._id,
+													logo: savedNotice.logo,
+													message: savedNotice.message,
+													date: savedNotice.date,
+													type: savedNotice.type,
+													channel: savedNotice.channel,
+													status: savedNotice.status
+												},
+												user: member.name
+											});
+										});
+										
+										let shouldAlert = foundAchievement.alert || true;
+										let unlocked = false;
+
+										if(existingChannel.gold) {
+											unlocked = true
+										}
+
+										if(shouldAlert) {
+											emitOverlayAlert(req, {
+												user: member.name,
+												channel: existingChannel.ownerID,
+												title: foundAchievement.title,
+												icon: foundAchievement.icon,
+												unlocked
+											});	
+										}
+
+									})
+								}
+							})
+						});
+
+						if(nonMember) {
+							handleNonMemberAward(req, res, existingChannel, foundAchievement, nonMember, platformData);
+						}
+
+						res.json({
+							award: true
+						});
+					});
+				} else {
+				
+					//Check if nonMember to award
 					if(nonMember) {
-						handleNonMemberAward(req, res, existingChannel, foundAchievement, nonMember);
+						handleNonMemberAward(req, res, existingChannel, foundAchievement, nonMember, platformData);
 					}
 
 					res.json({
 						award: true
 					});
-				});
-			} else {
-			
-				//Check if nonMember to award
-				if(nonMember) {
-					handleNonMemberAward(req, res, existingChannel, foundAchievement, nonMember);
 				}
-
-				res.json({
-					award: true
-				});
-			}
+			})
 		})
 	});
 }
 
-let handleNonMemberAward = (req, res, foundChannel, foundAchievement, nonMember) => {
+let handleNonMemberAward = (req, res, foundChannel, foundAchievement, nonMember, platforms) => {
 	let currentDate = Date.now();
 	let first = false;
 
@@ -954,7 +1130,7 @@ let handleNonMemberAward = (req, res, foundChannel, foundAchievement, nonMember)
 												message: `You have earned the "${foundAchievement.title}" achievement!`,
 												date: currentDate,
 												type: 'achievement',
-												channel: foundChannel.owner,
+												channel: foundChannel.ownerID,
 												status: 'new'
 											}).save().then(savedNotice => {
 												emitNotificationsUpdate(req, {
@@ -970,7 +1146,7 @@ let handleNonMemberAward = (req, res, foundChannel, foundAchievement, nonMember)
 													user: savedUser.name
 												});
 
-												alertAchievement(req, foundChannel, savedUser, foundAchievement);
+												alertAchievement(req, foundChannel, savedUser, foundAchievement, platforms);
 											});	
 										});
 									}
@@ -983,15 +1159,15 @@ let handleNonMemberAward = (req, res, foundChannel, foundAchievement, nonMember)
 					new Notice({
 						user: process.env.NOTICE_USER,
 						logo: DEFAULT_ICON,
-						message: `Issue awarding ${foundChannel.owner}'s '${foundAchievement.title}' to ${foundUser.name}`,
+						message: `Issue awarding ${foundChannel.ownerID}'s '${foundAchievement.title}' to ${foundUser.name}`,
 						date: currentDate,
 						type: 'admin',
 						status: 'new'
 					}).save();
 
-					User.findOne({name: foundChannel.owner}).then(foundOwner => {
+					User.findOne({name: foundChannel.ownerID}).then(foundOwner => {
 						new Notice({
-							user: foundOwner._id,
+							user: foundOwner.id,
 							logo: DEFAULT_ICON,
 							message: `Issue awarding '${foundAchievement.title}' to ${foundUser.name}! We are looking into the issue, feel free to manually award the achievement!`,
 							date: currentDate,
@@ -1023,7 +1199,7 @@ let handleNonMemberAward = (req, res, foundChannel, foundAchievement, nonMember)
 									message: `You have earned the "${foundAchievement.title}" achievement!`,
 									date: currentDate,
 									type: 'achievement',
-									channel: foundChannel.owner,
+									channel: foundChannel.ownerID,
 									status: 'new'
 								}).save().then(savedNotice => {
 									emitNotificationsUpdate(req, {
@@ -1040,7 +1216,7 @@ let handleNonMemberAward = (req, res, foundChannel, foundAchievement, nonMember)
 									});
 								});
 
-								alertAchievement(req, foundChannel, foundUser, foundAchievement);
+								alertAchievement(req, foundChannel, foundUser, foundAchievement, platforms);
 							});
 						}
 					});
@@ -1088,12 +1264,12 @@ let handleNonMemberAward = (req, res, foundChannel, foundAchievement, nonMember)
 
 									if(foundChannel.overlay.chat) {
 										let alertData = {
-											'channel': foundChannel.owner,
+											'channel': foundChannel.ownerID,
 											'member': userObj.name,
 											'achievement': foundAchievement.title
 										};
 										
-										emitAwardedAchievementNonMember(req, buildAchievementMessage(foundChannel, alertData));
+										emitAwardedAchievementNonMember(req, buildAchievementMessage(foundChannel, alertData), platforms);
 
 										emitExtensionAchievementEarned(req, {
 											user: userObj.userID,
@@ -1113,7 +1289,7 @@ let handleNonMemberAward = (req, res, foundChannel, foundAchievement, nonMember)
 									if(shouldAlert) {
 										emitOverlayAlert(req, {
 											user: userObj.name,
-											channel: foundChannel.owner,
+											channel: foundChannel.ownerID,
 											title: foundAchievement.title,
 											icon: foundAchievement.icon,
 											unlocked
@@ -1295,15 +1471,15 @@ let logChannelEvent = (req, channel, user, achievement) => {
 	}).save();
 }
 
-let alertAchievement = (req, foundChannel, savedUser, foundAchievement) => {
+let alertAchievement = (req, foundChannel, savedUser, foundAchievement, platforms) => {
 	if(foundChannel.overlay.chat) {
 		let alertData = {
-			'channel': foundChannel.owner,
+			'channel': foundChannel.ownerID,
 			'member': savedUser.name,
 			'achievement': foundAchievement.title
 		};
 		
-		emitAwardedAchievement(req, buildAchievementMessage(foundChannel, alertData));
+		emitAwardedAchievement(req, buildAchievementMessage(foundChannel, alertData), platforms);
 
 		let etid = "";
 		if(savedUser.integration && savedUser.integration.twitch) {
@@ -1332,7 +1508,7 @@ let alertAchievement = (req, foundChannel, savedUser, foundAchievement) => {
 	if(shouldAlert) {
 		emitOverlayAlert(req, {
 			user: savedUser.name,
-			channel: foundChannel.owner,
+			channel: foundChannel.ownerID,
 			title: foundAchievement.title,
 			icon: foundAchievement.icon,
 			unlocked

@@ -21,12 +21,7 @@ let emit = (req, event, data) => {
 	}
 }
 
-let emitNewChannel = (req, channel) => {
-	console.log('emitting new channel to IRC bot');
-	emit(req, 'new-channel', channel);
-}
-
-let emitDeleteChannel = (req, identity, platforms) => {
+let emitPlatforms = (req, event, data, platforms) => {
 	let ws, sid;
 
 	platforms.forEach(platform => {
@@ -34,87 +29,76 @@ let emitDeleteChannel = (req, identity, platforms) => {
 			case 'twitch':
 				ws = req.app.get('ws');
 				sid = req.app.get('IRCSOCKET');
-				data = identity;
 				break;
 			case 'mixer':
 				ws = req.app.get('mws');
 				sid = req.app.get('MIXER-IRCSOCKET');
-				data = identity;
 				break;
 			default:
 				break;
 		}
 
 		if(ws && sid && data) {
-			ws.to(sid).emit('delete-channel', data);
+			ws.to(sid).emit(event, data);
 		}
 	});
+}
+
+let emitNewChannel = (req, channel, platforms) => {
+
+	platforms.forEach(platform => {
+		emitPlatforms(req, 'new-channel', channel[platform], [platform]);
+	});
+
+	//emitPlatforms(req, 'new-channel', channel, platforms)
+}
+
+let emitDeleteChannel = (req, identity, platforms) => {
+	emitPlatforms(req, 'delete-channel', identity, platforms);
 }
 
 let emitChannelUpdate = (req, channelUpdates) => {
-	emit(req, 'channel-update', channelUpdates);
+	emitPlatforms(req, 'channel-update', channelUpdates, platforms);
 }
 
 let emitNewListener = (req, listener, platforms) => {
-
-	platforms.forEach(platform => {
-		switch(platform) {
-			case 'twitch':
-				ws = req.app.get('ws');
-				sid = req.app.get('IRCSOCKET');
-				data = listener;
-				break;
-			case 'mixer':
-				ws = req.app.get('mws');
-				sid = req.app.get('MIXER-IRCSOCKET');
-				data = listener;
-				break;
-			default:
-				break;
-		}
-
-		if(ws && sid && data) {
-			ws.to(sid).emit('new-listener', data);
-		}	
-	});
-
-	//emit(req, 'new-listener', listener);
+	emitPlatforms(req, 'new-listener', listener, platforms);
 }
 
-let emitUpdateListener = (req, listener) => {
-	emit(req, 'update-listener', listener);
+let emitUpdateListener = (req, listener, platforms) => {
+	emitPlatforms(req, 'update-listener', listener, platforms);
 }
 
-let emitRemoveListener = (req, listener) => {
-	emit(req, 'remove-listener', listener);
+let emitRemoveListener = (req, listener, platforms) => {
+	emitPlatforms(req, 'remove-listener', listener, platforms);
 }
 
-let emitBecomeGold = (req, channel) => {
-	emit(req, 'become-gold', channel);
+let emitBecomeGold = (req, channel, platforms) => {
+	emitPlatforms(req, 'become-gold', channel, platforms);
 }
 
-let emitRemoveGold = (req, channel) => {
-	emit(req, 'remove-gold', channel);
+let emitRemoveGold = (req, channel, platforms) => {
+	emitPlatforms(req, 'remove-gold', channel, platforms);
 }
 
-let emitConnectBot = (req, channelData) => {
-	emit(req, 'connect-bot', channelData);
+let emitConnectBot = (req, channelData, platforms) => {
+	emitPlatforms(req, 'connect-bot', channelData, platforms);
 }
 
-let emitDisconnectBot = (req, channelData) => {
-	emit(req, 'disconnect-bot', channelData);	
+let emitDisconnectBot = (req, channelData, platforms) => {
+	emitPlatforms(req, 'disconnect-bot', channelData, platforms);	
 }
 
-let emitAwardedAchievement = (req, achievement) => {
-	emit(req, 'achievement-awarded', achievement);
+let emitAwardedAchievement = (req, achievement, platforms) => {
+	emitPlatforms(req, 'achievement-awarded', achievement, platforms);
 }
 
-let emitAwardedAchievementNonMember = (req, achievement) => {
-	emit(req, 'achievement-awarded-nonMember', achievement);
+let emitAwardedAchievementNonMember = (req, achievement, platforms) => {
+	emitPlatforms(req, 'achievement-awarded-nonMember', achievement, platforms);
 }
 
-let emitTestListener = (req, data) => {
-	emit(req, 'test', data);
+let emitTestListener = (req, data, platforms) => {
+	emitPlatforms(req, 'test', data, platforms);
 }
 
 let emitOverlayAlert = (req, data) => {

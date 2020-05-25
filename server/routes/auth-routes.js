@@ -615,6 +615,29 @@ let confirmPlatformAuth = async (req, res, existingUser, redirect, platform) => 
 
 		let delError = await User.deleteOne({name: 'TEMP_' + mun});
 
+		let foundChannel = await Channel.findOne({ownerID: savedUser.id});
+		
+		if(foundChannel) {
+			foundChannel.platforms = foundChannel.platforms || {};
+
+			foundChannel.platforms[_ap] = existingUser.integration[_ap];
+
+			await foundChannel.save();
+
+			let listeners = await Listener.find({ownerID: foundChannel.ownerID});
+
+			listeners.forEach(listener => {
+
+				let platforms = Object.assign({}, listener.platforms);
+
+				platforms[_ap] = true;
+
+				listener.platforms = platforms;
+
+				listener.save();
+			});
+		}
+
 		//Remove Cookies
 		if(process.env.NODE_ENV === 'production') {
 			res.clearCookie('_un', { domain: 'streamachievements.com' });
@@ -827,14 +850,14 @@ let checkPatreonStatus = async (req, res, user) => {
 				if(user.integration.patreon) {
 					if(!user.integration.patreon.is_gold && isGold) {
 						//user became gold, enable on IRC side
-						emitBecomeGold(req, user.name);
+						emitBecomeGold(req, user.id);
 						new Notice({
 							user: process.env.NOTICE_USER,
 							logo: user.logo,
 							message: `${user.name} just backed on Patreon!!`,
 							date: Date.now(),
 							type: 'achievement',
-							channel: user.name,
+							channel: user.id,
 							status: 'new'
 						}).save();
 					} else if(user.integration.patreon.is_gold && !isGold) {
@@ -845,10 +868,10 @@ let checkPatreonStatus = async (req, res, user) => {
 							message: `${user.name} stopped backing on Patreon`,
 							date: Date.now(),
 							type: 'achievement',
-							channel: user.name,
+							channel: user.id,
 							status: 'new'
 						}).save();
-						emitRemoveGold(req, user.name);
+						emitRemoveGold(req, user.id);
 					} 	
 				} else {
 					if(isGold) {
@@ -859,10 +882,10 @@ let checkPatreonStatus = async (req, res, user) => {
 							message: `${user.name} just backed on Patreon!!`,
 							date: Date.now(),
 							type: 'achievement',
-							channel: user.name,
+							channel: user.id,
 							status: 'new'
 						}).save();
-						emitBecomeGold(req, user.name);
+						emitBecomeGold(req, user.id);
 					} else {
 						//user lost gold status, disable on IRC side
 						new Notice({
@@ -871,10 +894,10 @@ let checkPatreonStatus = async (req, res, user) => {
 							message: `${user.name} stopped backing on Patreon`,
 							date: Date.now(),
 							type: 'achievement',
-							channel: user.name,
+							channel: user.id,
 							status: 'new'
 						}).save();
-						emitRemoveGold(req, user.name);
+						emitRemoveGold(req, user.id);
 					} 
 				}
 
@@ -888,7 +911,7 @@ let checkPatreonStatus = async (req, res, user) => {
 				let savedUser = await user.save();
 
 				if(savedUser.type === 'verified' || savedUser.type === "admin") {
-					let foundChannel = await Channel.findOne({owner: user.name});
+					let foundChannel = await Channel.findOne({ownerID: user.id});
 					if(foundChannel.gold !== savedUser.integration.patreon.is_gold) {
 						foundChannel.gold = savedUser.integration.patreon.is_gold;
 						foundChannel.save();
@@ -898,7 +921,7 @@ let checkPatreonStatus = async (req, res, user) => {
 				handleRedirect(req, res);
 
 			} catch (error) {
-				console.log(error.response);
+				console.log(error);
 				if(error.response.status === 401 || error.response.status === 403) {
 					res.redirect('/auth/patreon');
 				} else if(error.response.status === 404) {
@@ -1081,12 +1104,29 @@ router.get('/patreon/redirect', isAuthorized, (req, res) => {
 
 		integration.patreon = {id, thumb_url, vanity, at, rt, is_follower, status, is_gold, expires};
 
+		let platformData = [];
+
+		let platforms = Object.keys(req.user.integration.toJSON());
+
+		platforms.forEach(platform => {
+			switch(platform) {
+				case 'twitch':
+					platformData.push(platform)
+					break;
+				case 'mixer':
+					platformData.push(platform)
+					break;
+				default:
+					break;
+			}
+		});
+
 		if(is_gold) {
 			//user became gold, enable on IRC side
-			emitBecomeGold(req, req.user.name);
+			emitBecomeGold(req, req.user.name, platformData);
 		} else {
 			//user lost gold status, disable on IRC side
-			emitRemoveGold(req, req.user.name);
+			emitRemoveGold(req, req.user.name, platformData);
 		} 
 
 		req.user.integration = integration;
@@ -1094,7 +1134,7 @@ router.get('/patreon/redirect', isAuthorized, (req, res) => {
 		req.user.save().then(savedUser => {
 			
 			if(savedUser.type === 'verified') {
-				Channel.findOne({owner: req.user.name}).then(foundChannel => {
+				Channel.findOne({ownerID: req.user.id}).then(foundChannel => {
 					if(foundChannel.gold !== is_gold) {
 						foundChannel.gold = is_gold;
 						foundChannel.save();

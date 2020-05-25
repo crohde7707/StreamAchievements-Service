@@ -9,14 +9,16 @@ let SearchChannels = (socket, value) => {
 	let strippedValue = value.replace(/[^\w\s]/gi, '');
 	let regex = new RegExp(strippedValue, 'gi');
 	
-	Channel.find({ owner: regex }).sort({'_id': -1}).limit(25).exec((err, docs) => {
+	Channel.find({ $or: [{'platforms.twitch.name': regex}, {'platforms.mixer.name': regex}] }, 'platforms', {lean: true}).sort({'_id': -1}).limit(25).exec((err, docs) => {
 
 		let results = docs.map((doc) => {
+			
 			return {
-				owner: doc.owner,
-				logo: doc.logo
+				platforms: doc.platforms
 			}
 		});
+
+		console.log(results);
 		
 		socket.emit('channel-results', results);
 	});
@@ -112,7 +114,7 @@ let StoreSocket = (socket, app) => {
 	if(socket.handshake.query.uid) {
 		Channel.findOne({oid: socket.handshake.query.uid}).then(foundChannel => {
 			if(foundChannel) {
-				let sockets = app.get(foundChannel.owner + "-OVERLAYS");
+				let sockets = app.get(foundChannel.ownerID + "-OVERLAYS");
 				let socketLookup = app.get('SOCKET-LOOKUP');
 
 				if(!socketLookup) {
@@ -125,10 +127,10 @@ let StoreSocket = (socket, app) => {
 					sockets = [socket.id];
 				}
 				
-				app.set(foundChannel.owner + "-OVERLAYS", sockets);
+				app.set(foundChannel.ownerID + "-OVERLAYS", sockets);
 				
 				socketLookup[socket.id] = {
-					name: foundChannel.owner,
+					name: foundChannel.ownerID,
 					type: 'OVERLAYS'
 				}
 

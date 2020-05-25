@@ -286,7 +286,7 @@ router.get('/extension/list', isExtensionAuthorized, (req, res) => {
 	});
 });
 
-router.get('/retrieve', isAuthorized, (req, res) => {
+router.get('/retrieve', isAuthorized, async (req, res) => {
 	let channel = req.query.channel;
 	let bb = req.query.bb;
 
@@ -307,115 +307,115 @@ router.get('/retrieve', isAuthorized, (req, res) => {
 	if(channel) {
 		let favorited = false;
 
-		Channel.findOne({owner: channel}).then((foundChannel) => {
-			if(foundChannel) {
-				
-				if(req.user.favorites) {
+		let foundChannel = await findChannelByName(channel);
 
-					let favIdx = req.user.favorites.findIndex(fav => fav === foundChannel.id);
-					
-					if(favIdx >= 0) {
-						favorited = true;
-					}
+		if(foundChannel) {
+			
+			if(req.user.favorites) {
+
+				let favIdx = req.user.favorites.findIndex(fav => fav === foundChannel.id);
+				
+				if(favIdx >= 0) {
+					favorited = true;
+				}
+			}
+
+			let foundAchievements = await Achievement.find({ownerID: foundChannel.ownerID});
+
+			console.log(foundAchievements);
+
+			let joined = foundChannel.members.includes(req.user.id);
+			let earned, retAchievements, banned;
+
+			let achPromise;
+
+			achPromise = new Promise((resolve, reject) => {
+				let channelIDX = req.user.channels.findIndex((channel) => {
+					return (channel.channelID === foundChannel.id)
+				});
+
+				banned = (channelIDX >= 0) ? req.user.channels[channelIDX].banned : false;
+
+				let earnedQuery = {
+					userID: req.user.id,
+					channelID: foundChannel.id
+				};
+
+				if(req.user.new) {
+					earnedQuery.userID = { $in: [req.user.id, req.user.integration.twitch.etid]};
 				}
 
-				Achievement.find({channel: channel}).then((foundAchievements) => {
+				Earned.find(earnedQuery).then(foundEarneds => {
+					earned = foundEarneds.map(found => {
+						return {
+							aid: found.achievementID,
+							date: found.earned
+						}
+					});
 
-					let joined = foundChannel.members.includes(req.user.id);
-					let earned, retAchievements, banned;
+					retAchievements = foundAchievements.map(achievement => {
+						let ach = Object.assign({}, achievement._doc);
 
-					let achPromise;
+						let aIdx = earned.findIndex(a => a.aid === ach.uid);
 
-					achPromise = new Promise((resolve, reject) => {
-						let channelIDX = req.user.channels.findIndex((channel) => {
-							return (channel.channelID === foundChannel.id)
-						});
-
-						banned = (channelIDX >= 0) ? req.user.channels[channelIDX].banned : false;
-
-						let earnedQuery = {
-							userID: req.user.id,
-							channelID: foundChannel.id
-						};
-
-						if(req.user.new) {
-							earnedQuery.userID = { $in: [req.user.id, req.user.integration.twitch.etid]};
+						if(aIdx >= 0) {
+							ach.earned = true;
+							ach.earnedDate = earned[aIdx].date;
+						} else {
+							ach.earned = false;
 						}
 
-						Earned.find(earnedQuery).then(foundEarneds => {
-							earned = foundEarneds.map(found => {
-								return {
-									aid: found.achievementID,
-									date: found.earned
-								}
-							});
-
-							retAchievements = foundAchievements.map(achievement => {
-								let ach = Object.assign({}, achievement._doc);
-
-								let aIdx = earned.findIndex(a => a.aid === ach.uid);
-
-								if(aIdx >= 0) {
-									ach.earned = true;
-									ach.earnedDate = earned[aIdx].date;
-								} else {
-									ach.earned = false;
-								}
-
-								return ach
-							})
-
-							resolve();
-						});
+						return ach
 					})
 
-					achPromise.then(() => {
-						let strippedAchievements = retAchievements.map(ach => {
-							let tempAch = (ach['_doc']) ? {...ach['_doc']} : ach;
-							delete tempAch['__v'];
-							delete tempAch['_id'];
-
-							return tempAch;
-						});
-
-						strippedAchievements.sort((a, b) => (a.order > b.order) ? 1 : -1);
-
-						//check if patreon active, return full access or not
-						User.findOne({name: channel}).then((foundUser) => {
-							if(foundUser) {
-								let fullAccess = false;
-
-								if(foundUser.integration.patreon && foundUser.integration.patreon.is_gold) {
-									fullAccess = true;
-								}
-
-								let retChannel = {...foundChannel['_doc']};
-								delete retChannel['__v'];
-								delete retChannel['_id'];
-
-								res.json({
-									channel: retChannel,
-									achievements: strippedAchievements,
-									joined: joined,
-									fullAccess,
-									favorited,
-									banned
-								});	
-							} else {
-								res.json({
-									error: "Channel doesn't exist"
-								});
-							}
-						});
-					});
-				});	
-				
-			} else {
-				res.json({
-					error: "No channel found for the name: " + channel
+					resolve();
 				});
-			}
-		});
+			})
+
+			achPromise.then(() => {
+				let strippedAchievements = retAchievements.map(ach => {
+					let tempAch = (ach['_doc']) ? {...ach['_doc']} : ach;
+					delete tempAch['__v'];
+					delete tempAch['_id'];
+
+					return tempAch;
+				});
+
+				strippedAchievements.sort((a, b) => (a.order > b.order) ? 1 : -1);
+
+				//check if patreon active, return full access or not
+				User.findOne({'_id': foundChannel.ownerID}).then((foundUser) => {
+					if(foundUser) {
+						let fullAccess = false;
+
+						if(foundUser.integration.patreon && foundUser.integration.patreon.is_gold) {
+							fullAccess = true;
+						}
+
+						let retChannel = {...foundChannel['_doc']};
+						delete retChannel['__v'];
+						delete retChannel['_id'];
+
+						res.json({
+							channel: retChannel,
+							achievements: strippedAchievements,
+							joined: joined,
+							fullAccess,
+							favorited,
+							banned
+						});	
+					} else {
+						res.json({
+							error: "Channel doesn't exist"
+						});
+					}
+				});
+			});
+		} else {
+			res.json({
+				error: "No channel found for the name: " + channel
+			});
+		}
 	}
 });
 
@@ -794,6 +794,7 @@ let updateChannelPreferences = async (req, res, existingChannel) => {
 	
 	if(req.body.hiddenIcon && validDataUrl(req.body.hiddenIcon)) {
 		//got an image to upload
+
 		img = await uploadImage(req.body.hiddenIcon, req.body.hiddenIconName, req.body.hiddenIconType, existingChannel.owner, 'hidden');
 		if(!img.error) {
 			hiddenIcon = img.url;
@@ -878,6 +879,7 @@ let updateChannelPreferences = async (req, res, existingChannel) => {
 						error: img.error
 					})
 				}
+
 			} else if(graphic && imgURLRegex.test(graphic)) {
 				overlay.graphic = graphic;
 			} else {
@@ -930,12 +932,12 @@ let updateChannelPreferences = async (req, res, existingChannel) => {
 
 	if(updateSettings) {
 		emitOverlaySettingsUpdate(req, {
-			channel: savedChannel.owner,
+			channel: savedChannel.ownerID,
 			overlay: savedChannel.overlay
 		});
 	}
 
-	let foundImages = await Image.find({channel: existingChannel.owner});
+	let foundImages = await Image.find({channel: existingChannel.ownerID});
 
 	if(foundImages) {
 		res.json({
@@ -1147,7 +1149,7 @@ router.get("/user", isAuthorized, (req, res) => {
 router.get('/member/select', isAuthorized, (req, res) => {
 	User.findOne({name: req.query.uid}).then(foundUser => {
 		if(foundUser) {
-			Channel.findOne({owner: req.query.owner}).then(foundChannel => {
+			Channel.findOne({ownerID: req.user.id}).then(foundChannel => {
 				if(foundChannel) {
 					Earned.find({userID: foundUser.id, channelID: foundChannel.id}, ['achievementID']).then(foundEarned => {
 
@@ -1174,7 +1176,7 @@ router.post('/member/save', isAuthorized, (req, res) => {
 
 	User.findOne({name: req.body.id}).then(foundUser => {
 		if(foundUser) {
-			Channel.findOne({owner: req.user.name}).then(foundChannel => {
+			Channel.findOne({ownerID: req.user.id}).then(foundChannel => {
 				if(foundChannel) {
 					let channelIdx = foundUser.channels.findIndex(channel => channel.channelID === foundChannel.id);
 					
@@ -1201,11 +1203,11 @@ router.post('/member/save', isAuthorized, (req, res) => {
 
 								new Notice({
 									user: foundUser._id,
-									logo: foundChannel.logo,
+									logo: req.user.logo,
 									message: `Your achievements have been adjusted by the owner of the channel!`,
 									date: Date.now(),
 									type: 'achievement',
-									channel: foundChannel.owner,
+									channel: req.user.name,
 									status: 'new'
 								}).save().then(savedNotice => {
 									emitNotificationsUpdate(req, {
@@ -1585,11 +1587,18 @@ router.post('/verify', isAuthorized, async (req, res) => {
 				status: 'new'
 			}).save();
 
-			emitNewChannel(req, {
-				name: newChannel.platforms[req.cookies._ap].name,
-				'full-access': fullAccess,
-				online: false
-			});
+			let botData = {};
+			let platforms = Object.keys(newChannel.platforms);
+
+			platforms.forEach(platform => {
+				botData[platform] = {
+					identity: newChannel.platforms[platform].etid,
+					'full-access': fullAccess,
+					online: false
+				}
+			})
+
+			emitNewChannel(req, botData, platforms);
 
 			req.user.type = 'verified';
 			let savedUser = await req.user.save();
@@ -1723,38 +1732,73 @@ router.get('/overlay', (req, res) => {
 	});
 })
 
-router.get('/testOverlay', isAuthorized, (req, res) => {
-	Channel.findOne({owner: req.user.name}).then(foundChannel => {
-		if(foundChannel) {
+router.get('/testOverlay', isAuthorized, async (req, res) => {
+	let foundChannel = await Channel.findOne({ownerID: req.user.id});
+	
+	if(foundChannel) {
 
-			emitOverlayAlert(req, {
-				user: 'testUser',
-				channel: foundChannel.owner,
-				title: 'Test Achievement',
-				icon: 'https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png',
-				unlocked: true
-			});
+		let aid = req.query.aid && parseInt(req.query.aid);
+		let title = 'Test Achievement';
+		let icon = foundChannel.icons.default;
 
-			let overlaySettings = foundChannel.overlay;
-			let chatMessage;
+		if(aid) {
 
-			if(overlaySettings.chatMessage && overlaySettings.chatMessage !== '') {
-				chatMessage = build({
-					chatMessage: overlaySettings.chatMessage,
-					member: 'testUser',
-					achievement: 'Test Achievement'
-				});
-			} else {
-				chatMessage = `${achievementData.member} just earned the "${achievementData.achievement}" achievement! PogChamp`;
+			let foundAchievement = await Achievement.findOne({ownerID: foundChannel.ownerID, uid: aid});
+
+			if(foundAchievement) {
+				title = foundAchievement.title;
+
+				if(foundAchievement.icon) {
+					icon = foundAchievement.icon
+				}
 			}
 
-			emitAwardedAchievement(req, {
-				channel: foundChannel.owner,
-				message: chatMessage
-			});
-
 		}
-	})
+
+		emitOverlayAlert(req, {
+			user: req.user.name,
+			channel: foundChannel.ownerID,
+			title,
+			icon,
+			unlocked: foundChannel.gold
+		});
+
+		let overlaySettings = foundChannel.overlay;
+		let chatMessage;
+
+		if(overlaySettings.chatMessage && overlaySettings.chatMessage !== '') {
+			chatMessage = build({
+				chatMessage: overlaySettings.chatMessage,
+				member: 'testUser',
+				achievement: 'Test Achievement'
+			});
+		} else {
+			chatMessage = `${achievementData.member} just earned the "${achievementData.achievement}" achievement! PogChamp`;
+		}
+
+		let platformData = [];
+
+		let platforms = Object.keys(foundChannel.platforms);
+
+		platforms.forEach(platform => {
+			switch(platform) {
+				case 'twitch':
+					platformData.push(platform)
+					break;
+				case 'mixer':
+					platformData.push(platform)
+					break;
+				default:
+					break;
+			}
+		});
+
+		emitAwardedAchievement(req, {
+			channel: foundChannel.ownerID,
+			message: chatMessage
+		}, platformData);
+
+	}
 
 	res.json({});
 })
@@ -1770,7 +1814,7 @@ router.post('/reorder', isAuthorized, (req, res) => {
 			achLookup[ach.uid] = ach.order;
 		});
 
-		Achievement.find({channel: req.user.name}).then(foundAchievements => {
+		Achievement.find({ownerID: req.user.id}).then(foundAchievements => {
 
 			if(foundAchievements) {
 				foundAchievements.forEach(achievement => {
@@ -1956,6 +2000,15 @@ let retrieveChannel = (req, res, existingChannel) => {
 			});
 		}
 	});
+}
+
+async function findChannelByName(channel) {
+	return Channel.findOne({
+		$or: [
+			{'platforms.twitch.name': channel},
+			{'platforms.mixer.name': channel}
+		]
+	})
 }
 
 async function asyncForEach(array, callback) {

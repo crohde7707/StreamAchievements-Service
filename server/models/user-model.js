@@ -29,7 +29,8 @@ const userSchema = new Schema({
 		streamlabs: Object
 	},
 	preferences: {
-		autojoin: Boolean
+		autojoin: Boolean,
+		platform: String
 	},
 	lastLogin: Date,
 	new: Boolean,
