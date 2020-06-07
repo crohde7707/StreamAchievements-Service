@@ -205,73 +205,74 @@ router.post('/setup/join', isAuthorized, (req, res) => {
 	});
 })
 
-router.post('/join', isAuthorized, (req, res) => {
-	Channel.findOne({owner: req.body.channel}).then((existingChannel) => {
-		if(existingChannel) {
-			let joinedChannels = req.user.channels;
+router.post('/join', isAuthorized, async (req, res) => {
 
-			let alreadyJoined = joinedChannels.some((channel) => (channel.channelID === existingChannel.id));
-			let memberAlready = existingChannel.members.includes(req.user.id);
+	let channel = req.body.channel;
+	let platform = req.body.platform || req.cookies._ap;
 
-			if(alreadyJoined) {
-				//This channel already joined by user
-				if(!memberAlready) {
-					existingChannel.members.push(req.user.id);
-					existingChannel.save().then((savedChannel) => {
-						res.json({
-							user: req.user,
-							channel: savedChannel
-						});
-					})
-				} else {
-					res.json({
-						user: req.user,
-						channel: existingChannel
-					});
-				}
-			} else if(memberAlready) {			
-				if(!alreadyJoined) {
-					req.user.channels.push({
-						channelID: existingChannel.id,
-						sync: true,
-						banned: false
-					});
-					req.user.save().then((savedUser) => {
-						res.json({
-							user: savedUser,
-							channel: existingChannel
-						});
-					});
-				} else {
-					res.json({
-						user: req.user,
-						channel: existingChannel
-					});
-				}
+	let existingChannel = await findChannelByName(channel, platform);
+	
+	if(existingChannel) {
+		let joinedChannels = req.user.channels;
+
+		let alreadyJoined = joinedChannels.some((channel) => (channel.channelID === existingChannel.id));
+		let memberAlready = existingChannel.members.includes(req.user.id);
+
+		if(alreadyJoined) {
+			//This channel already joined by user
+			if(!memberAlready) {
+				existingChannel.members.push(req.user.id);
+				let savedChannel = await existingChannel.save();
+				res.json({
+					user: req.user,
+					channel: savedChannel
+				});
 			} else {
-				let newChannelObj = {
+				res.json({
+					user: req.user,
+					channel: existingChannel
+				});
+			}
+		} else if(memberAlready) {			
+			if(!alreadyJoined) {
+				req.user.channels.push({
 					channelID: existingChannel.id,
 					sync: true,
 					banned: false
-				};
-				req.user.channels.push(newChannelObj);
-				req.user.save().then((savedUser) => {
-
-					existingChannel.members.push(savedUser.id);
-					existingChannel.save().then((savedChannel) => {
-
-						res.json({
-							user: savedUser,
-							channel: savedChannel
-						});
-					});
+				});
+				
+				let savedUser = await req.user.save();
+				res.json({
+					user: savedUser,
+					channel: existingChannel
+				});
+			} else {
+				res.json({
+					user: req.user,
+					channel: existingChannel
 				});
 			}
 		} else {
-			res.status(405);
-			res.send('Channel requested to join does not exist!');
+			let newChannelObj = {
+				channelID: existingChannel.id,
+				sync: true,
+				banned: false
+			};
+			req.user.channels.push(newChannelObj);
+			
+			let savedUser = await req.user.save();
+			existingChannel.members.push(savedUser.id);
+			let savedChannel = await existingChannel.save();
+
+			res.json({
+				user: savedUser,
+				channel: savedChannel
+			});
 		}
-	});
+	} else {
+		res.status(405);
+		res.send('Channel requested to join does not exist!');
+	}
 });
 
 router.get('/list', (req, res) => {
@@ -288,6 +289,7 @@ router.get('/extension/list', isExtensionAuthorized, (req, res) => {
 
 router.get('/retrieve', isAuthorized, async (req, res) => {
 	let channel = req.query.channel;
+	let platform = req.query.platform;
 	let bb = req.query.bb;
 
 	if(bb) {
@@ -307,7 +309,7 @@ router.get('/retrieve', isAuthorized, async (req, res) => {
 	if(channel) {
 		let favorited = false;
 
-		let foundChannel = await findChannelByName(channel);
+		let foundChannel = await findChannelByName(channel, platform);
 
 		if(foundChannel) {
 			
@@ -1076,9 +1078,25 @@ router.get("/user", isAuthorized, (req, res) => {
 								percentage = Math.round((achCount / count) * 100);
 							}
 
+							let logo, platforms = {};
+
+							let channelPlatforms = Object.keys(channel.platforms.toJSON());
+
+							let currentPlatform = req.cookies._ap;
+							
+							if(channel.platforms[currentPlatform]) {
+								logo = channel.platforms[currentPlatform].logo;
+							}
+
+							channelPlatforms.forEach(channelPlatform => {
+								platforms[channelPlatform] = {
+									name: channel.platforms[channelPlatform].name
+								};
+							});
+
 							resolve2({
 					     		logo: channel.logo,
-					     		owner: channel.platforms.twitch.alias,
+					     		platforms,
 					     		percentage: percentage,
 					     		favorite: true
 					     	});
@@ -1112,10 +1130,26 @@ router.get("/user", isAuthorized, (req, res) => {
 								percentage = Math.round((achCount / count) * 100);
 							}
 
+							let logo, platforms = {};
+
+							let channelPlatforms = Object.keys(channel.platforms.toJSON());
+
+							let currentPlatform = req.cookies._ap;
+							
+							if(channel.platforms[currentPlatform]) {
+								logo = channel.platforms[currentPlatform].logo;
+							}
+
+
+							channelPlatforms.forEach(channelPlatform => {
+								platforms[channelPlatform] = {
+									name: channel.platforms[channelPlatform].name
+								};
+							});
+
 							resolve2({
 					     		logo: channel.logo,
-					     		//owner: channel.owner,
-					     		owner: "",
+					     		platforms,
 					     		percentage: percentage,
 					     		favorite: false
 					     	});
@@ -1553,9 +1587,21 @@ router.post('/verify', isAuthorized, async (req, res) => {
 
 			}
 
+			let userPlatforms = Object.assign({}, req.user.integration);
+
+			if(userPlatforms.mixer) {
+				let mixerChannelID = await axios.get(`https://mixer.com/api/v1/channels/${userPlatforms.mixer.name}?fields=id`);
+
+				if(mixerChannelID.data && mixerChannelID.data.id) {
+					userPlatforms.mixer.channelID = mixerChannelID.data.id + "";
+				}
+			}
+
+			foundChannel.platforms = userPlatforms;
+
 			let newChannel = await new Channel({
 				ownerID: req.user.id,
-				platforms: req.user.integration,
+				platforms: integration,
 				theme: '',
 				logo: req.user.logo,
 				members: [],
@@ -1840,42 +1886,43 @@ router.post('/reorder', isAuthorized, (req, res) => {
 	}
 });
 
-router.post('/favorite', isAuthorized, (req, res) => {
+router.post('/favorite', isAuthorized, async (req, res) => {
 	//for now, only supporting one favorited channel, so just store off that one channel
-	let channel = req.body.channel;
-	let task = req.body.task;
+	let {channel, task} = req.body;
 
-	Channel.findOne({owner: channel}).then(foundChannel => {
-		if(foundChannel) {
-			if(task === 'add') {
+	let platform = req.body.platform || req.cookies._ap;
 
-				req.user.favorites.push(foundChannel.id);
+	let foundChannel = await findChannelByName(channel, platform);
 
-				req.user.save().then(savedUser => {
-					res.json({
-						favorited: true,
-						favorites: savedUser.favorites
-					});
+	if(foundChannel) {
+		if(task === 'add') {
+
+			req.user.favorites.push(foundChannel.id);
+
+			req.user.save().then(savedUser => {
+				res.json({
+					favorited: true,
+					favorites: savedUser.favorites
 				});
-			} else if(task === 'remove' && req.user.favorites) {
-				var index = req.user.favorites.findIndex(fav => fav === foundChannel.id);
+			});
+		} else if(task === 'remove' && req.user.favorites) {
+			var index = req.user.favorites.findIndex(fav => fav === foundChannel.id);
 
-				req.user.favorites.splice(index, 1);
+			req.user.favorites.splice(index, 1);
 
-				req.user.save().then(savedUser => {
-					res.json({
-						favorited: false,
-						favorites: savedUser.favorites
-					});
+			req.user.save().then(savedUser => {
+				res.json({
+					favorited: false,
+					favorites: savedUser.favorites
 				});
-			}
-			
-		} else {
-			res.json({
-				error: 'Channel doesn\'t exist!'
 			});
 		}
-	})
+		
+	} else {
+		res.json({
+			error: 'Channel doesn\'t exist!'
+		});
+	}
 
 });
 
@@ -2002,13 +2049,20 @@ let retrieveChannel = (req, res, existingChannel) => {
 	});
 }
 
-async function findChannelByName(channel) {
-	return Channel.findOne({
-		$or: [
-			{'platforms.twitch.name': channel},
-			{'platforms.mixer.name': channel}
-		]
-	})
+async function findChannelByName(channel, platform) {
+	console.log(channel, platform);
+	if(platform) {
+		let query = {[`platforms.${platform}.name`]: channel};
+
+		return Channel.findOne(query);
+	} else {
+		return Channel.findOne({
+			$or: [
+				{'platforms.twitch.name': channel},
+				{'platforms.mixer.name': channel}
+			]
+		})
+	}
 }
 
 async function asyncForEach(array, callback) {

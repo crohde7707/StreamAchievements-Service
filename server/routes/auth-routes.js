@@ -35,6 +35,8 @@ const GOLD_TIER_ID = '3497710';
 const DEFAULT_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811694/default-icon.png";
 const HIDDEN_ICON = "https://res.cloudinary.com/phirehero/image/upload/v1558811887/hidden-icon.png";
 
+const MIXER_DEFAULT_AVATAR = "https://mixer.com/_latest/assets/images/main/avatars/default.png";
+
 router.get('/twitch', async (req, res) => {
 	res.redirect(`https://id.twitch.tv/oauth2/authorize?response_type=code&client_id=${process.env.TCID}&redirect_uri=${process.env.TPR}&scope=user_read%20user:read:email`);
 });
@@ -100,10 +102,14 @@ router.get('/mixer/redirect', async (req, res) => {
 			let e_token = cryptr.encrypt(access_token);
 			let e_refresh = cryptr.encrypt(refresh_token);
 			
+			let logo = profile.avatarUrl || MIXER_DEFAULT_AVATAR;
+
 			let mixerIntegration = {
 				etid: profile.id.toString(),
 				token: e_token,
-				refresh: e_refresh
+				refresh: e_refresh,
+				name: profile.username,
+				logo: logo
 			};
 
 			let etid;
@@ -135,9 +141,9 @@ router.get('/mixer/redirect', async (req, res) => {
 					updated = true;
 				}
 
-				if(existingUser.logo !== profile.avatarUrl) {
-					existingUser.logo = profile.avatarUrl;
-					existingUser.integration.mixer.logo = profile.avatarUrl;
+				if(existingUser.logo !== profile.avatarUrl || existingUser.logo === null) {
+					existingUser.logo = logo;
+					existingUser.integration.mixer.logo = logo;
 					updated = true;
 				}
 
@@ -379,7 +385,9 @@ router.get('/twitch/redirect', async (req, res) => {
 			let twitchIntegration = {
 				etid: profile.id.toString(),
 				token: e_token,
-				refresh: e_refresh
+				refresh: e_refresh,
+				name: profile.login,
+				logo: profile.profile_image_url
 			};
 
 			let etid;
@@ -618,9 +626,20 @@ let confirmPlatformAuth = async (req, res, existingUser, redirect, platform) => 
 		let foundChannel = await Channel.findOne({ownerID: savedUser.id});
 		
 		if(foundChannel) {
-			foundChannel.platforms = foundChannel.platforms || {};
+			let platforms = Object.assign({}, foundChannel.platforms);
 
-			foundChannel.platforms[_ap] = existingUser.integration[_ap];
+			platforms[platform] = existingUser.integration[_ap];
+
+			if(platform === 'mixer') {
+
+				let mixerChannelID = await axios.get(`https://mixer.com/api/v1/channels/${platforms.mixer.name}?fields=id`);
+
+				if(mixerChannelID.data && mixerChannelID.data.id) {
+					platforms.mixer.channelID = mixerChannelID.data.id + "";
+				}
+			}
+
+			foundChannel.platforms = platforms;
 
 			await foundChannel.save();
 
@@ -677,9 +696,21 @@ let confirmPlatformAuth = async (req, res, existingUser, redirect, platform) => 
 			let foundChannel = await Channel.findOne({ownerID: currentUser.id});
 
 			if(foundChannel) {
-				foundChannel.platforms = foundChannel.platforms || {};
 
-				foundChannel.platforms[platform] = existingUser;
+				let platforms = Object.assign({}, foundChannel.platforms);
+
+				platforms[platform] = existingUser;
+
+				if(platform === 'mixer') {
+
+					let mixerChannelID = await axios.get(`https://mixer.com/api/v1/channels/${platforms.mixer.name}?fields=id`);
+
+					if(mixerChannelID.data && mixerChannelID.data.id) {
+						platforms.mixer.channelID = mixerChannelID.data.id + "";
+					}
+				}
+
+				foundChannel.platforms = platforms;
 
 				await foundChannel.save();
 
@@ -1154,10 +1185,11 @@ router.post('/twitch/sync', isAuthorized, (req, res) => {
 	});
 })
 
-router.post('/mixer/sync', isAuthorized, (req, res) => {
-	mixerSync(req, req.user, req.cookies.etid).then(mixerData => {
-		res.json(mixerData);
-	});
+router.post('/mixer/sync', isAuthorized, async (req, res) => {
+	let mixerData = await mixerSync(req, req.user, req.cookies.etid);
+	console.log(mixerData);
+
+	res.json(mixerData);
 })
 
 router.post('/patreon/sync', isAuthorized, (req, res) => {
@@ -1417,6 +1449,51 @@ let refreshPatreonToken = (req, refreshToken) => {
 let mixerSync = async (req, user, etid) => {
 	if(user.integration.mixer) {
 
+		let at = cryptr.decrypt(user.integration.mixer.token);
+
+		let userRes = await axios.get('https://mixer.com/api/v1/users/current', {
+			headers: {
+				'client-id': process.env.MCID,
+				Authorization: `Bearer ${at}`
+			}
+		});
+
+		let profile = userRes.data;
+		let logo = profile.avatarUrl || MIXER_DEFAULT_AVATAR;
+		
+		user.logo = logo
+		user.name = profile.username
+
+		let integration = {
+			etid: user.integration.mixer.etid,
+			token: user.integration.mixer.token,
+			refresh: user.integration.mixer.refresh,
+			name: profile.username,
+			logo
+		};
+
+		user.integration.mixer = integration;
+
+		let savedUser = await user.save();
+
+		let foundChannel = await Channel.findOne({ownerID: user.id});
+
+		if(foundChannel) {
+			console.log(savedUser.integration.mixer);
+			foundChannel.platforms.mixer = savedUser.integration.mixer;
+
+			await foundChannel.save();
+
+			return {
+				username: savedUser.name,
+				logo: savedUser.logo
+			}
+		} else {
+			return {
+				username: savedUser.name,
+				logo: savedUser.logo
+			}
+		}
 	}
 }
 

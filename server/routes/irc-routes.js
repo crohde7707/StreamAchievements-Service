@@ -54,6 +54,7 @@ router.put('/init', (req, res) => {
 
 router.get('/channels', (req, res) => {
 	let platform = req.query.platform;
+	console.log(platform);
 	let offset = parseInt(req.query.offset) || 0;
 	let limit = parseInt(req.query.limit) || 50;
 	let total = parseInt(req.query.total) || undefined;
@@ -194,11 +195,12 @@ let getChannels = (platform, offset, limit, total) => {
 				if(err) {
 					resolve({err: 'Issue retrieving from User sets'});
 				} else {
+					console.log(foundChannels);
 					let retChannels = foundChannels.map(foundChannel => {
 						
 						let channel = {
 							id: foundChannel.ownerID,
-							name: foundChannel.platforms.twitch.name, 
+							mid: foundChannel.platforms[platform].channelID, 
 							'full-access': false,
 							gold: foundChannel.gold
 						};
