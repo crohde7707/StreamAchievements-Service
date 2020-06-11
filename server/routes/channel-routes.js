@@ -805,7 +805,7 @@ let updateChannelPreferences = async (req, res, existingChannel) => {
 
 		overlay = existingChannel.overlay || {};
 
-		if(chat) {
+		if(chat !== undefined) {
 			overlay.chat = chat;
 		}
 
