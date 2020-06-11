@@ -197,10 +197,18 @@ let getChannels = (platform, offset, limit, total) => {
 				} else {
 					console.log(foundChannels);
 					let retChannels = foundChannels.map(foundChannel => {
+
+						let cid;
+
+						if(platform === 'twitch') {
+							cid = foundChannel.platforms[platform].name;
+						} else if(platform === 'mixer') {
+							cid = foundChannel.platforms[platform].channelID;
+						}
 						
 						let channel = {
 							id: foundChannel.ownerID,
-							mid: foundChannel.platforms[platform].channelID, 
+							cid,
 							'full-access': false,
 							gold: foundChannel.gold
 						};
