@@ -15,7 +15,7 @@ let uploadImage = (blob, fileName, channelName, type) => {
 			if(existingImage) {
 				console.log('\nimage already exists');
 				//Image already exists in the DB
-				resolve(existingImage.url);
+				resolve(existingImage);
 			} else {
 				//New image
 				console.log('\nnew image');
@@ -35,7 +35,7 @@ let uploadImage = (blob, fileName, channelName, type) => {
 							type: type || 'achievement'
 						}).save().then((newImage) => {
 							console.log('new image in DB');
-							resolve(newImage.url);
+							resolve(newImage);
 						});		
 
 					}

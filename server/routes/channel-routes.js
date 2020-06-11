@@ -766,10 +766,12 @@ router.post('/preferences', isAuthorized, (req, res) => {
 let updateChannelPreferences = async (req, res, existingChannel) => {
 
 	let defaultIcon, hiddenIcon, overlay;
+	let img;
 
 	if(req.body.defaultIcon && validDataUrl(req.body.defaultIcon)) {
 			//got an image to upload
-		defaultIcon = await	uploadImage(req.body.defaultIcon, req.body.defaultIconName, existingChannel.owner, 'default');
+		img =  await uploadImage(req.body.defaultIcon, req.body.defaultIconName, existingChannel.owner, 'default');
+		defaultIcon = img.url;
 	} else if(req.body.defaultImage && imgURLRegex.test(req.body.defaultImage)) {
 		defaultIcon = req.body.defaultImage;
 	}
@@ -777,7 +779,8 @@ let updateChannelPreferences = async (req, res, existingChannel) => {
 	
 	if(req.body.hiddenIcon && validDataUrl(req.body.hiddenIcon)) {
 		//got an image to upload
-		hiddenIcon = await uploadImage(req.body.hiddenIcon, req.body.hiddenIconName, existingChannel.owner, 'hidden');
+		img = await uploadImage(req.body.hiddenIcon, req.body.hiddenIconName, existingChannel.owner, 'hidden');
+		hiddenIcon = img.url;
 	} else if(req.body.hiddenImage && imgURLRegex.test(req.body.hiddenImage)) {
 		hiddenIcon = req.body.hiddenImage;
 	}
@@ -844,7 +847,7 @@ let updateChannelPreferences = async (req, res, existingChannel) => {
 
 			if(graphic && validDataUrl(graphic)) {
 				//got an image to upload
-				overlay.graphic = await uploadImage(graphic, graphicName, existingChannel.owner, 'graphic');
+				overlay.graphic = await uploadImage(graphic, graphicName, existingChannel.owner, 'graphic').url;
 			} else if(graphic && imgURLRegex.test(graphic)) {
 				overlay.graphic = graphic;
 			} else {
