@@ -271,12 +271,19 @@ let handleUpdate = (req, res, existingChannel, isMod) => {
 
 			//If new image, upload it
 			if(updates.icon && updates.iconName) {
-				uploadImage(updates.icon, updates.iconName, existingChannel.owner).then(iconImg => {
-					updates.icon = iconImg.url;
+				uploadImage(updates.icon, updates.iconName, updates.iconType, existingChannel.owner).then(iconImg => {
+					if(iconImg.error) {
+						res.json({
+							update: false,
+							error: iconImg.error
+						})
+					} else {
+						updates.icon = iconImg.url;
 
-					updateAchievement(req, existingChannel.owner, existingAchievement, updates, listenerUpdates, iconImg).then(response => {
-						res.json(response);
-					});
+						updateAchievement(req, existingChannel.owner, existingAchievement, updates, listenerUpdates, iconImg).then(response => {
+							res.json(response);
+						});
+					}
 				});
 			} else {
 				updateAchievement(req, existingChannel.owner, existingAchievement, updates, listenerUpdates).then(response => {
@@ -287,7 +294,7 @@ let handleUpdate = (req, res, existingChannel, isMod) => {
 		} else {
 			res.json({
 				update: false,
-				message: "The achievement you tried to update doesn't exist!"
+				error: "The achievement you tried to update doesn't exist!"
 			});
 		}
 	});
@@ -391,47 +398,54 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 									});
 								} else {
 									if(req.body.icon) {
-										uploadImage(req.body.icon, req.body.iconName, existingChannel.owner).then((result) => {
-											achData.icon = result.url;
-											new Achievement(achData).save().then((newAchievement) => {
-												listenerData.achievement = newAchievement.id;
-												listenerData.aid = newAchievement.uid;
-												
-												result.achievementID = newAchievement.id;
-												result.save().then(updatedImage => {
-													existingChannel.nextUID = newAchievement.uid + 1;
-													existingChannel.save().then(updatedChannel => {
-														//create listener for achievement
-														if(req.body.achType !== "3") {
-															new Listener(listenerData).save().then(newListener => {
-																
-																emitNewListener(req, {
-																	uid: listenerData.uid,
-																	channel: listenerData.channel,
-																	achievement: listenerData.achievement,
-																	achType: listenerData.achType,
-																	query: listenerData.query,
-																	bot: listenerData.bot,
-																	condition: listenerData.condition
-																});
+										uploadImage(req.body.icon, req.body.iconName, req.body.iconType, existingChannel.owner).then((result) => {
+											if(result.error) {
+												res.json({
+													created: false,
+													error: result.error
+												});
+											} else {
+												achData.icon = result.url;
+												new Achievement(achData).save().then((newAchievement) => {
+													listenerData.achievement = newAchievement.id;
+													listenerData.aid = newAchievement.uid;
+													
+													result.achievementID = newAchievement.id;
+													result.save().then(updatedImage => {
+														existingChannel.nextUID = newAchievement.uid + 1;
+														existingChannel.save().then(updatedChannel => {
+															//create listener for achievement
+															if(req.body.achType !== "3") {
+																new Listener(listenerData).save().then(newListener => {
+																	
+																	emitNewListener(req, {
+																		uid: listenerData.uid,
+																		channel: listenerData.channel,
+																		achievement: listenerData.achievement,
+																		achType: listenerData.achType,
+																		query: listenerData.query,
+																		bot: listenerData.bot,
+																		condition: listenerData.condition
+																	});
 
-																newAchievement.listener = newListener.id;
-																newAchievement.save().then(updatedAchievement => {
-																	res.json({
-																		created: true,
-																		achievement: updatedAchievement
+																	newAchievement.listener = newListener.id;
+																	newAchievement.save().then(updatedAchievement => {
+																		res.json({
+																			created: true,
+																			achievement: updatedAchievement
+																		});
 																	});
 																});
-															});
-														} else {
-															res.json({
-																created: true,
-																achievement: newAchievement
-															});
-														}
+															} else {
+																res.json({
+																	created: true,
+																	achievement: newAchievement
+																});
+															}
+														});
 													});
 												});
-											});
+											}
 										});	
 									} else {
 										new Achievement(achData).save().then((newAchievement) => {

@@ -770,8 +770,15 @@ let updateChannelPreferences = async (req, res, existingChannel) => {
 
 	if(req.body.defaultIcon && validDataUrl(req.body.defaultIcon)) {
 			//got an image to upload
-		img =  await uploadImage(req.body.defaultIcon, req.body.defaultIconName, existingChannel.owner, 'default');
-		defaultIcon = img.url;
+		img =  await uploadImage(req.body.defaultIcon, req.body.defaultIconName, req.body.defaultIconType, existingChannel.owner, 'default');
+		if(!img.error) {
+			defaultIcon = img.url;
+		} else {
+			res.json({
+				error: img.error
+			})
+		}
+		
 	} else if(req.body.defaultImage && imgURLRegex.test(req.body.defaultImage)) {
 		defaultIcon = req.body.defaultImage;
 	}
@@ -779,8 +786,14 @@ let updateChannelPreferences = async (req, res, existingChannel) => {
 	
 	if(req.body.hiddenIcon && validDataUrl(req.body.hiddenIcon)) {
 		//got an image to upload
-		img = await uploadImage(req.body.hiddenIcon, req.body.hiddenIconName, existingChannel.owner, 'hidden');
-		hiddenIcon = img.url;
+		img = await uploadImage(req.body.hiddenIcon, req.body.hiddenIconName, req.body.hiddenIconType, existingChannel.owner, 'hidden');
+		if(!img.error) {
+			hiddenIcon = img.url;
+		} else {
+			res.json({
+				error: img.error
+			})
+		}
 	} else if(req.body.hiddenImage && imgURLRegex.test(req.body.hiddenImage)) {
 		hiddenIcon = req.body.hiddenImage;
 	}
@@ -799,6 +812,7 @@ let updateChannelPreferences = async (req, res, existingChannel) => {
 			custom,
 			graphic,
 			graphicName,
+			graphicType,
 			layout,
 			textColor,
 			titleFontSize,
@@ -847,7 +861,15 @@ let updateChannelPreferences = async (req, res, existingChannel) => {
 
 			if(graphic && validDataUrl(graphic)) {
 				//got an image to upload
-				overlay.graphic = await uploadImage(graphic, graphicName, existingChannel.owner, 'graphic').url;
+				let uploadedGraphic = await uploadImage(graphic, graphicName, graphicType, existingChannel.owner, 'graphic');
+
+				if(!uploadedGraphic.error) {
+					overlay.graphic = uploadedGraphic.url;
+				} else {
+					res.json({
+						error: img.error
+					})
+				}
 			} else if(graphic && imgURLRegex.test(graphic)) {
 				overlay.graphic = graphic;
 			} else {
