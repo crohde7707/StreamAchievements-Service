@@ -543,18 +543,24 @@ router.get('/dashboard', isAuthorized, async (req, res) => {
 		});
 
 		let imagesPromise = new Promise((resolve, reject) => {
-			//Get Images
-			Image.find({channel: existingChannel.ownerID}).then(foundImages => {
-				if(foundImages) {
-					resolve({
-						gallery: foundImages
-					})
-				} else {
-					resolve({
-						gallery: []
-					});
-				}
-			});
+			if(existingChannel.gold) {
+				//Get Images
+				Image.find({ownerID: existingChannel.ownerID}).then(foundImages => {
+					if(foundImages) {
+						resolve({
+							gallery: foundImages
+						})
+					} else {
+						resolve({
+							gallery: []
+						});
+					}
+				});
+			} else {
+				resolve({
+					gallery: []
+				});
+			}
 		});
 
 		let moderatorsPromise = new Promise((resolve, reject) => {
@@ -689,7 +695,7 @@ router.post('/mod', isAuthorized, (req, res) => {
 	let mods = req.body.mods;
 	let retMods = [];
 
-	Channel.findOne({owner: req.user.name}).then(existingChannel => {
+	Channel.findOne({ownerID: req.user.id}).then(existingChannel => {
 		User.find({'name': { $in: mods}}).then(foundMembers => {
 		
 			let moderators = existingChannel.moderators;

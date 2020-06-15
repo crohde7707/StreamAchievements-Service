@@ -1342,7 +1342,24 @@ router.post('/patreon/unlink', isAuthorized, (req, res) => {
 	delete integration.patreon;
 
 	if(req.user.type === 'verified') {
-		emitRemoveGold(req, req.user.name);
+		let platformData = [];
+
+		let platforms = Object.keys(req.user.integration.toJSON());
+
+		platforms.forEach(platform => {
+			switch(platform) {
+				case 'twitch':
+					platformData.push(platform)
+					break;
+				case 'mixer':
+					platformData.push(platform)
+					break;
+				default:
+					break;
+			}
+		});
+
+		emitRemoveGold(req, req.user.name, platformData);
 	}
 
 	req.user.integration = integration;
@@ -1350,13 +1367,15 @@ router.post('/patreon/unlink', isAuthorized, (req, res) => {
 	req.user.save().then(savedUser => {
 
 		//Check if user owns a channel
-		Channel.findOne({owner: req.user.name}).then(foundChannel => {
+		Channel.findOne({ownerID: req.user.id}).then(foundChannel => {
 			if(foundChannel) {
 				//user owns a channel, update their default and hidden icons
 				foundChannel.icons = {
 					default: DEFAULT_ICON,
 					hidden: HIDDEN_ICON
 				};
+
+				foundChannel.gold = false;
 
 				foundChannel.save().then(savedChannel => {
 					res.json({
