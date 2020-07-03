@@ -7,8 +7,9 @@ const channelSchema = new Schema({
 	theme: String,
 	logo: String,
 	members: Array,
-	integrations: {
-		streamlabs: Object
+	integration: {
+		streamlabs: Object,
+		streamelements: Object
 	},
 	moderators: [
 		{

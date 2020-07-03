@@ -1452,19 +1452,11 @@ router.post("/signup", isAuthorized, (req, res) => {
 			auth: auth
 		});
 
-		let domain;
-
-		if(process.env.NODE_ENV === 'production') {
-			domain = 'https://streamachievements.com/';
-		} else {
-			domain = 'http://localhost:3000/';
-		}
-
 		const mailOptions = {
 		    from: process.env.GML, // sender address
 		    to: email, // list of receivers
 		    subject: 'Your Confirmation Code!', // Subject line
-		    html: '<div style="background:#222938;padding-bottom:30px;"><h1 style="text-align:center;background:#2f4882;padding:15px;margin-top:0;"><img style="max-width:600px;" src="https://res.cloudinary.com/phirehero/image/upload/v1557947921/sa-logo.png" /></h1><h2 style="color:#FFFFFF; text-align: center;margin-top:30px;margin-bottom:25px;font-size:22px;">Thank you for your interest in Stream Achievements!</h2><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">You are ready to start creating achievements that your community will be able to hunt for and earn!</p><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">To get started, all you need to do is <a style="color: #ecdc19;" href="' + domain + 'channel/verify?id=' + generatedToken + '&utm_medium=Email">verify your account</a>, and you\'ll be all set!</p><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">We are truly excited to see what you bring in terms of achievements, and can\'t wait to see how much your community engages and enjoys them!</p></div>'
+		    html: '<div style="background:#222938;padding-bottom:30px;"><h1 style="text-align:center;background:#2f4882;padding:15px;margin-top:0;"><img style="max-width:600px;" src="https://res.cloudinary.com/phirehero/image/upload/v1557947921/sa-logo.png" /></h1><h2 style="color:#FFFFFF; text-align: center;margin-top:30px;margin-bottom:25px;font-size:22px;">Thank you for your interest in Stream Achievements!</h2><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">You are ready to start creating achievements that your community will be able to hunt for and earn!</p><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">To get started, all you need to do is <a style="color: #ecdc19;" href="' + process.env.WEB_DOMAIN + 'channel/verify?id=' + generatedToken + '&utm_medium=Email">verify your account</a>, and you\'ll be all set!</p><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">We are truly excited to see what you bring in terms of achievements, and can\'t wait to see how much your community engages and enjoys them!</p></div>'
 		};
 
 		transporter.sendMail(mailOptions, function (err, info) {
@@ -1655,19 +1647,11 @@ router.post('/token/generate', isAuthorized, (req, res) => {
 					auth: auth
 				});
 
-				let domain;
-
-				if(process.env.NODE_ENV === 'production') {
-					domain = 'https://streamachievements.com/';
-				} else {
-					domain = 'http://localhost:3000/';
-				}
-
 				const mailOptions = {
 				    from: process.env.GML, // sender address
 				    to: email, // list of receivers
 				    subject: 'Your Confirmation Code!', // Subject line
-				    html: '<div style="background:#222938;padding-bottom:30px;"><h1 style="text-align:center;background:#2f4882;padding:15px;margin-top:0;"><img style="max-width:600px;" src="https://res.cloudinary.com/phirehero/image/upload/v1557947921/sa-logo.png" /></h1><h2 style="color:#FFFFFF; text-align: center;margin-top:30px;margin-bottom:25px;font-size:22px;">Thank you for your interest in Stream Achievements!</h2><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">You are ready to start creating achievements that your community will be able to hunt for and earn!</p><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">To get started, all you need to do is <a style="color: #ecdc19;" href="' + domain + 'channel/verify?id=' + generatedToken + '&utm_medium=Email">verify your account</a>, and you\'ll be all set!</p><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">We are truly excited to see what you bring in terms of achievements, and can\'t wait to see how much your community engages and enjoys them!</p></div>'
+				    html: '<div style="background:#222938;padding-bottom:30px;"><h1 style="text-align:center;background:#2f4882;padding:15px;margin-top:0;"><img style="max-width:600px;" src="https://res.cloudinary.com/phirehero/image/upload/v1557947921/sa-logo.png" /></h1><h2 style="color:#FFFFFF; text-align: center;margin-top:30px;margin-bottom:25px;font-size:22px;">Thank you for your interest in Stream Achievements!</h2><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">You are ready to start creating achievements that your community will be able to hunt for and earn!</p><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">To get started, all you need to do is <a style="color: #ecdc19;" href="' + process.env.WEB_DOMAIN + 'channel/verify?id=' + generatedToken + '&utm_medium=Email">verify your account</a>, and you\'ll be all set!</p><p style="color:#FFFFFF;font-weight:bold;font-size:16px; text-align: center;">We are truly excited to see what you bring in terms of achievements, and can\'t wait to see how much your community engages and enjoys them!</p></div>'
 				};
 
 				transporter.sendMail(mailOptions, function (err, info) {

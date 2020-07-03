@@ -9,7 +9,7 @@ const Notice = require('../models/notice-model');
 const Achievement = require('../models/achievement-model');
 const Earned = require('../models/earned-model');
 const mongoose = require('mongoose');
-const {isAdminAuthorized} = require('../utils/auth-utils');
+const {isAdminAuthorized, getTwitchAxiosInstance} = require('../utils/auth-utils');
 const {emitOverlayAlert} = require('../utils/socket-utils');
 
 router.post('/dedupMembers', isAdminAuthorized, (req, res) => {
@@ -396,6 +396,95 @@ async function handleMigrate() {
 
 		offset = offset + limit;
 	}
+}
+
+router.post('/cid', isAdminAuthorized, (req, res) => {
+	updateChannelIDs();
+	res.json({});
+});
+
+async function updateChannelIDs() {
+	let totalChannelCount = 0;
+	let offset = 650;
+	let limit = 50;
+	let i;
+
+	let channels;
+	let instance;
+
+	totalChannelCount = await Channel.countDocuments();
+
+	console.log("Migrating data for " + totalChannelCount + " channels...");
+
+	instance = await getTwitchAxiosInstance();
+
+	//while(offset < totalChannelCount) {
+		//i = 0;
+
+		console.log('\n\nMigrating ' + offset + ' - ' + (offset + limit + 1) + '...\n');
+		channels = await Channel.find().sort({'_id': -1}).skip(offset).limit(limit).exec();
+
+		await asyncForEach(channels, async (channel) => {
+
+			let oldName = channel.owner;
+			console.log('oldName: ' + oldName);
+			let newName;
+
+			try {
+				let response = await instance.get(`https://api.twitch.tv/helix/users/?id=${channel.twitchID}`);
+
+				if(response) {
+					let {login, profile_image_url} = response.data.data[0];
+					console.log('login: ' + login);
+
+					if(channel.owner !== login) {
+						console.log('updating ' + channel.owner + ' to ' + login);
+						newName = login;
+						channel.owner = login;
+						channel.logo = profile_image_url;
+
+						await channel.save();
+
+						let user = await User.findOne({'integration.twitch.etid': channel.twitchID});
+
+						if(user) {
+							user.name = login;
+							user.logo = profile_image_url;
+
+							await user.save();
+						}
+					}
+				}
+
+				let achievements = await Achievement.find({channel: oldName});
+				let listeners = await Listener.find({channel: oldName}); //oldName
+
+				await asyncForEach(achievements, async (achievement) => {
+					console.log('updating uid: ' + achievement.uid)
+					achievement.cid = channel.id;
+					
+					if(newName) {
+						achievement.channel = newName;
+					}
+					
+					await achievement.save();
+				});
+
+				await asyncForEach(listeners, async (listener) => {
+					console.log('updating aid: ' + listener.aid)
+					listener.cid = channel.id;
+
+					if(newName) {
+						listener.channel = newName;
+					}
+
+					await listener.save();
+				});
+			} catch (err) {
+				console.log(channel);
+			}
+		});
+	//}
 }
 
 async function asyncForEach(array, callback) {

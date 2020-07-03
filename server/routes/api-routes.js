@@ -60,9 +60,16 @@ router.get('/users', isAdminAuthorized, (req, res) => {
 	});
 });
 
+router.get("/test", (req, res) => {
+	console.log('foo');
+	res.json({
+		foo: 'bar'
+	});
+})
+
 router.get("/user", isAuthorized, (req, res) => {
 	let uid = cryptr.encrypt(req.user._id);
-	let patreonInfo, streamlabsInfo;
+	let patreonInfo, streamlabsInfo, streamElementsInfo;
 	let isMod = false;
 	let terms = true;
 	
@@ -97,12 +104,6 @@ router.get("/user", isAuthorized, (req, res) => {
 		patreonInfo = false;
 	}
 
-	if(req.user.integration.streamlabs) {
-		streamlabsInfo = true;
-	} else {
-		streamlabsInfo = false;
-	}
-
 	Notice.countDocuments({user: req.user._id, status: 'new'}).exec().then(count => {
 		Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
 
@@ -121,6 +122,10 @@ router.get("/user", isAuthorized, (req, res) => {
 						username: req.user.name,
 						logo: req.user.logo,
 						patreon: patreonInfo,
+						integration: {
+							streamlabs: existingChannel.integration.streamlabs !== undefined,
+							streamelements: existingChannel.integration.streamelements !== undefined
+						},
 						streamlabs: streamlabsInfo,
 						status: 'verified',
 						type: req.user.type,
@@ -140,7 +145,6 @@ router.get("/user", isAuthorized, (req, res) => {
 							username: req.user.name,
 							logo: req.user.logo,
 							patreon: patreonInfo,
-							streamlabs: streamlabsInfo,
 							status,
 							type: req.user.type,
 							preferences: req.user.preferences,

@@ -399,6 +399,76 @@ router.get('/twitch/redirect', async (req, res) => {
 	}
 })
 
+router.get('/set', isAuthorized, (req, res) => {
+	Channel.findOne({owner: req.user.name}).then(foundChannel => {
+		if(foundChannel) {
+			let integration = Object.assign({}, foundChannel.integration);
+
+			integration.streamelements = {
+				at: cryptr.encrypt('WjQ9yAvlRjSdwf_nrkHh-A'),
+				rt: cryptr.encrypt('eafsskqETr6juMmHdIItAA'),
+				expires: 2592000,
+				type: 'oauth2'
+			};
+
+			foundChannel.integration = integration;
+
+			foundChannel.save().then(savedChannel => {
+				res.json({});
+			});
+		}
+	})
+})
+
+router.get('/streamelements', isAuthorized, (req, res) => {
+	let streamelementsURL = 'https://api.streamelements.com/oauth2/authorize?';
+	streamelementsURL += 'client_id=' + process.env.SECID + '&';
+	streamelementsURL += 'redirect_uri=' + process.env.SECPR + '&';
+	streamelementsURL += 'response_type=code&scope=activities%3Aread';
+
+	res.redirect(streamelementsURL);
+});
+
+router.get('/streamelements/redirect', isAuthorized, (req, res) => {
+	console.log(req);
+	let streamElementsTokenURL = 'https://api.streamelements.com/oauth2/token';
+
+	axios.post(streamElementsTokenURL, {
+		'grant_type': 'authorization_code',
+		'client_id': process.env.SECID,
+		'client_secret': process.env.SECCS,
+		'code': req.query.code,
+		'redirect_uri': process.env.SECPR
+	}).then(response => {
+		console.log(response);
+		let at = cryptr.encrypt(response.data.access_token);
+
+		Channel.find({owner: req.user.name}).then(foundChannel => {
+			if(foundChannel) {
+				let integrations = Object.assign({}, foundChannel.integrations);
+
+				integrations.streamelements = {
+					at
+				};
+
+				foundChannel.integrations = integrations;
+
+				foundChannel.save().then(savedChannel => {
+					// emitConnectBot(req, {
+					// 	channel: req.user.name,
+					// 	at,
+					// 	bot: 'streamelements'
+					// });
+
+					res.redirect(process.env.WEB_DOMAIN + 'dashboard?tab=integration');
+				});
+			} else {
+				res.redirect(process.env.WEB_DOMAIN + 'dashboard?tab=integration');
+			}
+		})
+	})
+})
+
 router.get('/streamlabs', isAuthorized, (req, res) => {
 	let streamlabsURL = 'https://www.streamlabs.com/api/v1.0/authorize?';
 	streamlabsURL += 'client_id=' + process.env.SLCID + '&'; //NJWtH8OFUvAqxZcpHgsltzpJa81sQRTYQrVqDpYQ
@@ -439,7 +509,7 @@ router.get('/streamlabs/redirect', isAuthorized, (req, res) => {
 					bot: 'streamlabs'
 				});
 			 	
-			 	res.redirect(process.env.WEB_DOMAIN + 'profile?tab=integration');
+			 	res.redirect(process.env.WEB_DOMAIN + 'dashboard?tab=integration');
 			});
 		})
 	});
