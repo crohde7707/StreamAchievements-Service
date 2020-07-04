@@ -102,7 +102,8 @@ let updateAchievement = (req, channel, existingAchievement, updates, listenerUpd
 
 								emitRemoveListener(req, {
 									uid: existingListener.uid,
-									channel,
+									channel: channel.owner,
+									cid: channel.id,
 									achievement: existingListener.achievement,
 									achType: existingListener.achType,
 									query: existingListener.query,
@@ -125,7 +126,8 @@ let updateAchievement = (req, channel, existingAchievement, updates, listenerUpd
 					} else if(listenerUpdates.achType && listenerUpdates.achType !== "3" && !existingAchievement.listener) {
 						//Listener didnt exist before, create one now
 						let listenerData = {
-							channel,
+							channel: channel.owner,
+							cid: channel.id,
 							uid: uuid(),
 							...listenerUpdates,
 							achievement: updatedAchievement.id,
@@ -160,7 +162,8 @@ let updateAchievement = (req, channel, existingAchievement, updates, listenerUpd
 
 								let listenerData = {
 									uid: updatedListener.uid,
-									channel: channel,
+									channel: channel.owner,
+									cid: channel.id,
 									achievement: updatedListener.achievement,
 									achType: updatedListener.achType,
 									query: updatedListener.query,
@@ -280,13 +283,13 @@ let handleUpdate = (req, res, existingChannel, isMod) => {
 					} else {
 						updates.icon = iconImg.url;
 
-						updateAchievement(req, existingChannel.owner, existingAchievement, updates, listenerUpdates, iconImg).then(response => {
+						updateAchievement(req, existingChannel, existingAchievement, updates, listenerUpdates, iconImg).then(response => {
 							res.json(response);
 						});
 					}
 				});
 			} else {
-				updateAchievement(req, existingChannel.owner, existingAchievement, updates, listenerUpdates).then(response => {
+				updateAchievement(req, existingChannel, existingAchievement, updates, listenerUpdates).then(response => {
 					res.json(response);
 				});
 			}
@@ -362,6 +365,7 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 							let achData = {
 								uid: existingChannel.nextUID,
 								channel: existingChannel.owner,
+								cid: existingChannel.id,
 								title: req.body.title,
 								description: req.body.description,
 								shortDescription: req.body.shortDescription,
@@ -377,6 +381,7 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 
 							let listenerData = {
 								channel: existingChannel.owner,
+								cid: existingChannel.id,
 								achType: req.body.achType,
 								uid: uuid()
 							};

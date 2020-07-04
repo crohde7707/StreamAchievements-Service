@@ -4,6 +4,7 @@ const Schema = mongoose.Schema;
 const listenerSchema = new Schema({
 	uid: String,
 	channel: String,
+	cid: String,
 	achType: String,
 	resubType: String,
 	bot: String,

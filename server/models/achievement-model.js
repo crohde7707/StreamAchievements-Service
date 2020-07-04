@@ -4,6 +4,7 @@ const Schema = mongoose.Schema;
 const achievementSchema = new Schema({
 	uid: Number,
 	channel: String,
+	cid: String,
 	title: String,
 	description: String,
 	shortDescription: String,
