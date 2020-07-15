@@ -739,7 +739,7 @@ let buildAchievementMessage = (channel, achievementData) => {
 	}
 
 	return {
-		channel: channel.owner,
+		cid: channel.id,
 		message: chatMessage
 	}
 }
@@ -1432,7 +1432,7 @@ let addToEarned = (req, foundUser, foundChannel, foundAchievement, tier, alert =
 
 let handleUserAchievements = (req, res, user, retry=2) => {
 	let {channel, identifier, achievements} = user;
-
+	
 	let mapping = {};
 
 	let achievementIDs = achievements.map(achievement => {
@@ -1744,25 +1744,25 @@ router.post('/listeners', async (req, res, next) => {
 		let etidMap = {};
 
 		await asyncForEach(achievements, async (listener) => {
-			sortedListeners[listener.channel] = sortedListeners[listener.channel] || [];
-	   		sortedListeners[listener.channel].push(listener)
+			sortedListeners[listener.cid] = sortedListeners[listener.cid] || [];
+	   		sortedListeners[listener.cid].push(listener)
 		});
 
 		let channels = Object.keys(sortedListeners);
 
-		await asyncForEach(channels, async (achievementOwner) => {
+		await asyncForEach(channels, async (cid) => {
 
-			let foundChannel = await Channel.findOne({owner: achievementOwner})
+			let foundChannel = await Channel.findById(cid)
 
 			if(foundChannel) {
-				let channelListeners = sortedListeners[achievementOwner];
+				let channelListeners = sortedListeners[cid];
 
 				//sort by user
 				let userListeners = {};
 
 				await asyncForEach(channelListeners, async (achievement) => {
 					
-					let {channel, achievementID, tier, userID} = achievement;
+					let {cid, achievementID, tier, userID} = achievement;
 					let userCriteria = {};
 					let identifier;
 

@@ -44,6 +44,7 @@ router.post('/delete', isAuthorized, (req, res) => {
 
 async function handleDeleteChannel(req, res) {
 	let foundChannel = await Channel.findOne({owner: req.user.name});
+	let cid = foundChannel.id;
 
 	if(foundChannel) {
 		//delete all earned
@@ -62,7 +63,7 @@ async function handleDeleteChannel(req, res) {
 
 		let savedUser = await req.user.save();
 
-		emitDeleteChannel(req, req.user.name);
+		emitDeleteChannel(req, cid);
 
 		res.json({
 			delete: true
@@ -1596,6 +1597,8 @@ router.post('/verify', isAuthorized, (req, res) => {
 
 					emitNewChannel(req, {
 						name: newChannel.owner,
+						cid: newChannel.id,
+						tid: newChannel.twitchID,
 						'full-access': fullAccess,
 						online: false
 					});
@@ -1778,7 +1781,7 @@ router.get('/testOverlay', isAuthorized, async (req, res) => {
 			}
 
 			emitAwardedAchievement(req, {
-				channel: foundChannel.owner,
+				cid: foundChannel.id,
 				message: chatMessage
 			});
 

@@ -45,7 +45,7 @@ router.get('/twitch/redirect', async (req, res) => {
 
 		let {access_token, refresh_token} = tokenRes.data;
 
-		let user;
+		let user, foundChannel;
 
 		if(access_token && refresh_token) {
 			//call out to get profile
@@ -96,7 +96,7 @@ router.get('/twitch/redirect', async (req, res) => {
 
 				user = await existingUser.save();
 
-				let foundChannel = await Channel.findOne({twitchID: user.integration.twitch.etid});
+				foundChannel = await Channel.findOne({twitchID: user.integration.twitch.etid});
 
 				if(foundChannel) {
 					let ownerUpdate = false;
@@ -191,13 +191,17 @@ router.get('/twitch/redirect', async (req, res) => {
 
 		//let broadcasterTypePromise = new Promise((resolve, reject) => {
 		if(user.type !== 'user') {
-			let foundChannel = await Channel.findOne({owner: user.name});
+			if(!foundChannel) {
+				foundChannel = await Channel.findOne({owner: user.name});
+			}
 					
 			if(foundChannel) {
 				if(user.update && user.update.old && user.update.new) {
 					let update = {
-						old: user.update.old,
-						new: user.update.new,
+						oldName: user.update.old,
+						newName: user.update.new,
+						cid: foundChannel.id,
+						tid: foundChannel.twitchID,
 						fullAccess: foundChannel.gold || false
 					};
 
@@ -277,60 +281,64 @@ router.get('/twitch/redirect', async (req, res) => {
 						expires
 					};
 
-					if(user.integration.patreon) {
-						if(!user.integration.patreon.is_gold && isGold) {
-							//user became gold, enable on IRC side
-							emitBecomeGold(req, user.name);
-							new Notice({
-								user: process.env.NOTICE_USER,
-								logo: user.logo,
-								message: `${user.name} just backed on Patreon!!`,
-								date: Date.now(),
-								type: 'achievement',
-								channel: user.name,
-								status: 'new'
-							}).save();
-						} else if(user.integration.patreon.is_gold && !isGold) {
-							//user lost gold status, disable on IRC side
-							new Notice({
-								user: process.env.NOTICE_USER,
-								logo: user.logo,
-								message: `${user.name} stopped backing on Patreon`,
-								date: Date.now(),
-								type: 'achievement',
-								channel: user.name,
-								status: 'new'
-							}).save();
-							emitRemoveGold(req, user.name);
-						} 	
-					} else {
-						if(isGold) {
-							//user became gold, enable on IRC side
-							new Notice({
-								user: process.env.NOTICE_USER,
-								logo: user.logo,
-								message: `${user.name} just backed on Patreon!!`,
-								date: Date.now(),
-								type: 'achievement',
-								channel: user.name,
-								status: 'new'
-							}).save();
-							emitBecomeGold(req, user.name);
-						} else {
-							//user lost gold status, disable on IRC side
-							new Notice({
-								user: process.env.NOTICE_USER,
-								logo: user.logo,
-								message: `${user.name} stopped backing on Patreon`,
-								date: Date.now(),
-								type: 'achievement',
-								channel: user.name,
-								status: 'new'
-							}).save();
-							emitRemoveGold(req, user.name);
-						} 
-					}
+					if(foundChannel) {
+						if(user.integration.patreon) {
+							if(!user.integration.patreon.is_gold && isGold) {
+								//user became gold, enable on IRC side
+								emitBecomeGold(req, foundChannel.id);
 
+								new Notice({
+									user: process.env.NOTICE_USER,
+									logo: user.logo,
+									message: `${user.name} just backed on Patreon!!`,
+									date: Date.now(),
+									type: 'achievement',
+									channel: user.name,
+									status: 'new'
+								}).save();
+
+							} else if(user.integration.patreon.is_gold && !isGold) {
+								//user lost gold status, disable on IRC side
+								new Notice({
+									user: process.env.NOTICE_USER,
+									logo: user.logo,
+									message: `${user.name} stopped backing on Patreon`,
+									date: Date.now(),
+									type: 'achievement',
+									channel: user.name,
+									status: 'new'
+								}).save();
+
+								emitRemoveGold(req, foundChannel.id);
+							} 	
+						} else {
+							if(isGold) {
+								//user became gold, enable on IRC side
+								new Notice({
+									user: process.env.NOTICE_USER,
+									logo: user.logo,
+									message: `${user.name} just backed on Patreon!!`,
+									date: Date.now(),
+									type: 'achievement',
+									channel: user.name,
+									status: 'new'
+								}).save();
+								emitBecomeGold(req, foundChannel.id);
+							} else {
+								//user lost gold status, disable on IRC side
+								new Notice({
+									user: process.env.NOTICE_USER,
+									logo: user.logo,
+									message: `${user.name} stopped backing on Patreon`,
+									date: Date.now(),
+									type: 'achievement',
+									channel: user.name,
+									status: 'new'
+								}).save();
+								emitRemoveGold(req, foundChannel.id);
+							} 
+						}
+					}
 					let integration = Object.assign({}, user.integration);
 
 					integration.patreon = {...patreonUpdate};
@@ -478,7 +486,7 @@ router.get('/streamlabs', isAuthorized, (req, res) => {
 	res.redirect(streamlabsURL);
 });
 
-router.get('/streamlabs/redirect', isAuthorized, (req, res) => {
+router.get('/streamlabs/redirect', isAuthorized, async (req, res) => {
 	let streamlabsTokenURL = 'https://streamlabs.com/api/v1.0/token';
 
 	axios.post(streamlabsTokenURL, {
@@ -489,28 +497,26 @@ router.get('/streamlabs/redirect', isAuthorized, (req, res) => {
 		'redirect_uri': process.env.SLCPR
 	}).then(response => {
 
-		axios.get('https://streamlabs.com/api/v1.0/socket/token?access_token=' + response.data.access_token).then(socket => {
+		axios.get('https://streamlabs.com/api/v1.0/socket/token?access_token=' + response.data.access_token).then(async (socket) => {
 
 			let st = cryptr.encrypt(socket.data.socket_token);
 
-			let integration = Object.assign({}, req.user.integration);
+			let foundChannel = await Channel.findOne({twitchID: req.user.integration.twitch.etid});
 
-			integration.streamlabs = {
+			foundChannel.integration.streamlabs = {
 			 	st
 			};
 
-			req.user.integration = integration;
-
-			req.user.save().then(savedUser => {
+			let savedChannel = foundChannel.save()
 				
-				emitConnectBot(req, {
-					channel: savedUser.name,
-					st: savedUser.integration.streamlabs.st,
-					bot: 'streamlabs'
-				});
-			 	
-			 	res.redirect(process.env.WEB_DOMAIN + 'dashboard?tab=integration');
+			emitConnectBot(req, {
+				bot: 'streamlabs',
+				name: req.user.name,
+				cid: savedChannel.id,
+				st
 			});
+		 	
+		 	res.redirect(process.env.WEB_DOMAIN + 'dashboard?tab=integration');
 		})
 	});
 
@@ -645,25 +651,28 @@ router.post('/patreon/sync', isAuthorized, (req, res) => {
 	});
 });
 
-router.post('/streamlabs/unlink', isAuthorized, (req, res) => {
-	let integration = Object.assign({}, req.user.integration);
+router.post('/streamlabs/unlink', isAuthorized, async (req, res) => {
+	
+	let foundChannel = await Channel.findOne({twitchID: req.user.integration.twitch.etid});
 
-	delete integration.streamlabs;
+	if(foundChannel) {
+		if(foundChannel.integration && foundChannel.integration.streamlabs) {
+			foundChannel.integration.streamlabs = null;
+		}
 
-	req.user.integration = integration;
-
-	req.user.save().then(savedUser => {
+		let savedChannel = foundChannel.save()
 
 		emitDisconnectBot(req, {
-			channel: savedUser.name,
-			bot: 'streamlabs'
+			bot: 'streamlabs',
+			name: req.user.name,
+			cid: savedChannel.id
 		});
 
 		res.json({
 			success: true,
 			service: 'streamlabs'
 		});
-	});
+	}
 })
 
 router.post('/patreon/unlink', isAuthorized, (req, res) => {
@@ -822,12 +831,14 @@ let twitchSync = (req, user, etid) => {
 												});
 											}
 										})
-										
+
 										emitChannelUpdate(req, {
-											old: update,
-											new: savedUser.name,
+											oldName: update,
+											newName: savedUser.name,
+											cid: foundChannel.id,
+											tid: foundChannel.twitchID,
 											fullAccess: foundChannel.gold || false
-										});
+										})
 									}
 
 									foundChannel.save().then(savedChannel => {

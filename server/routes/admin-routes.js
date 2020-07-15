@@ -487,6 +487,30 @@ async function updateChannelIDs() {
 	//}
 }
 
+router.post('/test/achievement', isAdminAuthorized, (req, res) => {
+	let type = req.body.type;
+	let ws = req.app.get('ws');
+	let sid = req.app.get('IRCSOCKET');
+
+	ws.to(sid).emit('test', {
+		type,
+		cid: "5d068493b87afc2f80cf21d5"
+	});
+
+	res.json({});
+});
+
+router.post('/test/custom', isAdminAuthorized, (req, res) => {
+	let ws = req.app.get('ws');
+	let sid = req.app.get('IRCSOCKET');
+
+	ws.to(sid).emit('test', {
+		type: 'custom',
+		cid: "5d068493b87afc2f80cf21d5",
+		message: req.body.message
+	});
+})
+
 async function asyncForEach(array, callback) {
   for (let index = 0; index < array.length; index++) {
     await callback(array[index], index, array);

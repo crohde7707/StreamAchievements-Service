@@ -123,8 +123,8 @@ router.get("/user", isAuthorized, (req, res) => {
 						logo: req.user.logo,
 						patreon: patreonInfo,
 						integration: {
-							streamlabs: existingChannel.integration.streamlabs !== undefined,
-							streamelements: existingChannel.integration.streamelements !== undefined
+							streamlabs: existingChannel.integration.streamlabs !== null,
+							streamelements: existingChannel.integration.streamelements !== null
 						},
 						streamlabs: streamlabsInfo,
 						status: 'verified',
