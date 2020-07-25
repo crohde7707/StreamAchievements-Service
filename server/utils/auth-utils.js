@@ -188,12 +188,11 @@ const getTwitchAxiosInstance = () => {
 					}).catch(err => {
 						console.log('token invalid');
 						instance.post(`https://id.twitch.tv/oauth2/token?client_id=${process.env.TCID}&client_secret=${process.env.TCS}&grant_type=client_credentials`).then(response => {
-							
-							new Ttkn({
-								at: cryptr.encrypt(response.data.access_token),
-								expires_in: response.data.expires_in,
-								env: env
-							}).save().then(savedTtkn => {
+
+							foundTtkn.at = cryptr.encrypt(response.data.access_token);
+							foundTtkn.expires_in = response.data.expires_in;
+
+							foundTtkn.save().then(savedTtkn => {
 								console.log('new token retrieved');
 								instance.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`
 
