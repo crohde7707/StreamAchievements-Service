@@ -507,8 +507,11 @@ router.post('/test/custom', isAdminAuthorized, (req, res) => {
 	ws.to(sid).emit('test', {
 		type: 'custom',
 		cid: "5d068493b87afc2f80cf21d5",
+		bot: req.body.bot,
 		message: req.body.message
 	});
+
+	res.json({})
 })
 
 async function asyncForEach(array, callback) {

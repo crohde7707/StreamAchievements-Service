@@ -419,65 +419,38 @@ router.post('/update', async (req, res) => {
 	let updatedChannels = [];
 
 	await asyncForEach(channels, async (channel) => {
-		let updatedChannel = false;
-		let foundUser = await User.findOne({name: channel});
 		
-		if(foundUser) {
+		let foundChannel = await Channel.findById(channel);
+		
+		if(foundChannel) {
+			let oldName = foundChannel.owner;
 			let instance = await getTwitchAxiosInstance();
 
-			let response = await instance.get(`https://api.twitch.tv/helix/users/?id=${foundUser.integration.twitch.etid}`);
+			let response = await instance.get(`https://api.twitch.tv/helix/users/?id=${foundChannel.twitchID}`);
+
+			foundChannel.owner = response.data.data[0].login;
+			foundChannel.logo = response.data.data[0].profile_image_url;
+
+			let savedChannel = await foundChannel.save();
+
+			let foundUser = await User.findOne({'integration.twitch.etid': savedChannel.twitchID})
 
 			foundUser.name = response.data.data[0].login;
 			foundUser.logo = response.data.data[0].profile_image_url;
 
 			let savedUser = await foundUser.save();
 
-			let foundChannel = await Channel.findOne({twitchID: savedUser.integration.twitch.etid});
-				
-			if(foundChannel) {
-				if(foundChannel.owner !== savedUser.name) {
-					updatedChannel = true;
-					foundChannel.owner = savedUser.name;
-				}
-
-				if(foundChannel.logo !== savedUser.logo) {
-					updatedChannel = true;
-					foundChannel.logo = savedUser.logo;
-				}
-
-				if(updatedChannel) {
-					let savedChannel = await foundChannel.save();
-				}
-
-				let foundAchievements = await Achievement.find({channel: channel});
-
-				if(foundAchievements.length > 0) {
-					asyncForEach(foundAchievements, ach => {
-						ach.channel = savedUser.name;
-						ach.save();
-					});
-				}
-
-				let foundListeners = await Listener.find({channel: channel});
-					
-				if(foundListeners.length > 0) {
-					asyncForEach(foundListeners, list => {
-						list.channel = savedUser.name;
-						list.save();
-					});
-				}
-
-				updatedChannels.push({
-					old: channel,
-					new: savedUser.name
-				});
-			}
+			updatedChannels.push({
+				cid: channel,
+				old: oldName,
+				new: savedUser.name
+			});
 		}
 	});
 
 	res.json({
 		updatedChannels
-	})
+	});
 })
 
 router.get('/dashboard', isAuthorized, (req, res) => {

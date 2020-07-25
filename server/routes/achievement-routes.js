@@ -247,7 +247,7 @@ router.post('/update', isAuthorized, (req, res) => {
 });
 
 let handleUpdate = (req, res, existingChannel, isMod) => {
-	Achievement.findOne({['_id']: req.body.id, channel: existingChannel.owner}).then((existingAchievement) => {
+	Achievement.findOne({['_id']: req.body.id, channel: existingChannel.id}).then((existingAchievement) => {
 		if(existingAchievement) {
 			let updates = req.body;
 
@@ -322,15 +322,15 @@ router.post("/create", isAuthorized, (req, res) => {
 });
 
 let createAchievement = (req, res, existingChannel, isMod) => {
-	let query = {};
+	let query = {
+		cid: existingChannel.cid
+	};
 
 	if(req.body.id) {
 		query['_id'] = req.body.id
 	} else {
 		query.title = req.body.title
 	}
-
-	query.channel = existingChannel.owner
 
 	let customAllowed = isCustomAllowed(existingChannel);
 
@@ -360,7 +360,7 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 						});
 					} else {
 
-						Achievement.countDocuments({channel: existingChannel.owner}).then(preCount => {
+						Achievement.countDocuments({cid: existingChannel.cid}).then(preCount => {
 
 							let achData = {
 								uid: existingChannel.nextUID,
@@ -425,7 +425,7 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 																	
 																	emitNewListener(req, {
 																		uid: listenerData.uid,
-																		channel: listenerData.channel,
+																		cid: updatedChannel.id,
 																		achievement: listenerData.achievement,
 																		achType: listenerData.achType,
 																		query: listenerData.query,
@@ -465,7 +465,7 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 														
 														emitNewListener(req, {
 															uid: listenerData.uid,
-															channel: listenerData.channel,
+															cid: updatedChannel.id,
 															achievement: listenerData.achievement,
 															achType: listenerData.achType,
 															query: listenerData.query,
@@ -500,88 +500,87 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 	}
 }
 
-router.post("/delete", isAuthorized, (req, res) => {
+router.post("/delete", isAuthorized, async (req, res) => {
 
-	Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
-		if(existingChannel) {
-			
-			//Check if achievement of same name exists
-			let query = {};
-			query['_id'] = req.body.achievementID;
-			query.channel = existingChannel.owner;
+	let existingChannel = await Channel.findOne({twitchID: req.user.integration.twitch.etid});
 
-			Achievement.findOne(query).then(existingAchievement => {
-				if(existingAchievement) {
-					//time to delete
-					let listenerID = existingAchievement.listener;
-					let uid = existingAchievement.uid;
+	if(existingChannel) {
+		
+		//Check if achievement of same name exists
+		let query = {
+			'_id': req.body.achievementID,
+			cid: existingChannel.id
+		};
 
-					Achievement.deleteOne(query).then(err => {
-						let listenerQuery = {
-							"_id": listenerID,
-							channel: existingAchievement.channel
-						};
+		let existingAchievement = await Achievement.findOne(query);
 
-						Listener.findOne(listenerQuery).then(existingListener => {
-							if(existingListener) {
+		if(existingAchievement) {
+			//time to delete
+			let listenerID = existingAchievement.listener;
+			let uid = existingAchievement.uid;
 
-								emitRemoveListener(req, {
-									uid: existingListener.uid,
-									channel: existingChannel.owner,
-									achievement: existingListener.achievement,
-									achType: existingListener.achType,
-									query: existingListener.query,
-									bot: existingListener.bot,
-									condition: existingListener.condition
-								});
+			Achievement.deleteOne(query).then(err => {
+				
+				let existingListener = await Listener.findById(listenerID);
 
-								Listener.deleteOne(listenerQuery).then(err => {
-									Image.findOneAndUpdate({achievementID: req.body.achievementID}, { $set: {achievementID: ''}}).then(updatedImage => {
-										
-										Earned.deleteMany({channelID: existingChannel.id, achievementID: uid}).then(err => {
-											res.json({
-												deleted:true
-											});
-										})
-									});
-								});
-							} else {
-								Image.findOneAndUpdate({achievementID: req.body.achievementID}, { $set: {achievementID: ''}}).then(updatedImage => {
-									Earned.deleteMany({channelID: existingChannel.id, achievementID: uid}).then(err => {
-										res.json({
-											deleted:true
-										});
-									})
-								});
-							}
-						});
+				if(existingListener) {
+
+					emitRemoveListener(req, {
+						uid: existingListener.uid,
+						cid: existingChannel.id,
+						achievement: existingListener.achievement,
+						achType: existingListener.achType,
+						query: existingListener.query,
+						bot: existingListener.bot,
+						condition: existingListener.condition
 					});
 
+					Listener.deleteOne(listenerQuery).then(err => {
+						Image.findOneAndUpdate({achievementID: req.body.achievementID}, { $set: {achievementID: ''}}).then(updatedImage => {
+							
+							Earned.deleteMany({channelID: existingChannel.id, achievementID: uid}).then(err => {
+								res.json({
+									deleted:true
+								});
+							})
+						});
+					});
 				} else {
-					res.json({
-						deleted: false,
-						message: "The achievement you requested to delete doesn't exist!"
-					})
+					Image.findOneAndUpdate({achievementID: req.body.achievementID}, { $set: {achievementID: ''}}).then(updatedImage => {
+						Earned.deleteMany({channelID: existingChannel.id, achievementID: uid}).then(err => {
+							res.json({
+								deleted:true
+							});
+						})
+					});
 				}
 			});
+
 		} else {
 			res.json({
-				delete: false,
-				message: "This channel you are deleting for doesn't exist!"
-			});
+				deleted: false,
+				message: "The achievement you requested to delete doesn't exist!"
+			})
 		}
-	});
+	} else {
+		res.json({
+			delete: false,
+			message: "This channel you are deleting for doesn't exist!"
+		});
+	}
 });
 
-router.post("/enable", isAuthorized, (req, res) => {
+router.post("/enable", isAuthorized, async (req, res) => {
 	let achievement = req.body.aid;
 
-	Listener.findOne({channel: req.user.name, unlocked: true}).then(enabledListener => {
+	let foundChannel = Channel.findOne({twitchID: req.user.integration.twitch.etid});
+
+	Listener.findOne({cid: foundChannel.id, unlocked: true}).then(enabledListener => {
 		if(enabledListener) {
 			enabledListener.unlocked = false;
 			enabledListener.save().then(nowDisabledListener => {
 				emitUpdateListener(req, {
-					channel: nowDisabledListener.channel,
+					cid: nowDisabledListener.cid,
 					achievement: nowDisabledListener.achievement,
 					achType: nowDisabledListener.achType,
 					query: nowDisabledListener.query,
@@ -592,11 +591,11 @@ router.post("/enable", isAuthorized, (req, res) => {
 			});
 		}
 
-		Listener.findOne({channel: req.user.name, aid: achievement}).then(disabledListener => {
+		Listener.findOne({cid: foundChannel.id, aid: achievement}).then(disabledListener => {
 			disabledListener.unlocked = true;
 			disabledListener.save().then(nowEnabledListener => {
 				emitUpdateListener(req, {
-					channel: nowEnabledListener.channel,
+					cid: nowEnabledListener.cid,
 					achievement: nowEnabledListener.achievement,
 					achType: nowEnabledListener.achType,
 					query: nowEnabledListener.query,
@@ -618,24 +617,26 @@ router.get("/mod/retrieve", isModAuthorized, (req, res) => {
 	getAchievementData(req, res, req.channel, achievement);
 });
 
-router.get("/retrieve", isAuthorized, (req, res) => {
-	let channel = req.user.name;
+//TODO: HERE
+
+router.get("/retrieve", isAuthorized, async (req, res) => {
 	let achievement = req.query.aid;
+	let existingChannel = await Channel.findOne({twitchID: req.user.integration.twitch.etid});
 
 	if(achievement) {
-		Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
-			if(existingChannel) {
-				getAchievementData(req, res, existingChannel, achievement);
-			} else {
-				//Current user isn't verified
-				res.json({
-					error: "User isn't a verified channel owner"
-				})
-			}
-		});
+	
+		if(existingChannel) {
+			getAchievementData(req, res, existingChannel, achievement);
+		} else {
+			//Current user isn't verified
+			res.json({
+				error: "User isn't a verified channel owner"
+			})
+		}
 
-	} else if(channel) {
-		Achievement.find({channel: channel}).then((achievements) => { 
+	} else {
+		
+		Achievement.find({cid: existingChannel.id}).then((achievements) => { 
 			if(achievements) {
 				let listenerIds = achievements.map(achievement => {
 					return achievement.listener
@@ -656,8 +657,6 @@ router.get("/retrieve", isAuthorized, (req, res) => {
 				res.json(achievements);	
 			}
 		});
-	} else {
-
 	}
 
 });
@@ -757,7 +756,7 @@ let manualAward = (req, res, existingChannel) => {
 		nonMember = members.splice(nonMemberIdx, 1)[0]; 
 	}
 
-	Achievement.findOne({uid: achievementID, channel: existingChannel.owner}).then(foundAchievement => {
+	Achievement.findOne({uid: achievementID, cid: existingChannel.id}).then(foundAchievement => {
 		members = members.map(member => member.name);
 		
 		User.find({'name': { $in: members}}).then(foundMembers => {
@@ -1165,7 +1164,7 @@ router.get('/listeners', (req, res) => {
 		channelArray = channelArray.split(',');
 	}
 
-	Achievement.find({'owner': { $in: channelArray}})
+	Achievement.find({'cid': { $in: channelArray}})
 		.then(achievements => {
 			let earnableAchievements = achievements.map(achievement => {
 				if(achievement.earnable && achievement.listener) {
@@ -1174,7 +1173,7 @@ router.get('/listeners', (req, res) => {
 			});
 		})
 
-	Listener.find({'channel': { $in: channelArray}})
+	Listener.find({'cid': { $in: channelArray}})
 		.then((listeners) => {
 			if(listeners.length > 0) {
 				res.json(listeners);
@@ -1336,7 +1335,7 @@ let handleTieredBackfill = (req, tier, foundChannel, savedUser, currentDate, que
 
 				achievementPromise.then(() => {
 					if(achievementsToAward.length > 0) {
-						Achievement.find({channel: foundChannel.owner, uid: { $in: achievementsToAward}}).then(tieredAchievements => {
+						Achievement.find({cid: foundChannel.id, uid: { $in: achievementsToAward}}).then(tieredAchievements => {
 							if(tieredAchievements) {
 
 								tieredAchievements.forEach(tierAch => {
