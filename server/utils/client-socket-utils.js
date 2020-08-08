@@ -23,89 +23,104 @@ let SearchChannels = (socket, value) => {
 }
 
 let SearchMembers = (socket, data) => {
-	let strippedValue = data.value.replace(/[^\w\s]/gi, '');
-	let regex = new RegExp(strippedValue, 'gi');
+	if(data && data.value) {
+		let strippedValue = data.value.replace(/[^\w\s]/gi, '');
+		let regex = new RegExp(strippedValue, 'gi');
 
-	Channel.findOne({owner: data.owner}).then(foundChannel => {
-		if(foundChannel) {
-			User.find({'_id': { $in: foundChannel.members}, name: regex}).sort({'_id': -1}).limit(25).exec((err, docs) => {
-				//Filter out member data: name, logo, achievements
+		Channel.findOne({owner: data.owner}).then(foundChannel => {
+			if(foundChannel) {
+				User.find({'_id': { $in: foundChannel.members}, name: regex}).sort({'_id': -1}).limit(25).exec((err, docs) => {
+					//Filter out member data: name, logo, achievements
 
-				let members = docs.map(member => member.id);
-				let earnedLookup = {};
+					let members = docs.map(member => member.id);
+					let earnedLookup = {};
 
-				Earned.find({userID: { $in: members }, channelID: foundChannel.id, achievementID: data.aid}).then(foundEarneds => {
-					foundEarneds.forEach(earned => {
-						earnedLookup[earned.userID] = true;
-					});
+					Earned.find({userID: { $in: members }, channelID: foundChannel.id, achievementID: data.aid}).then(foundEarneds => {
+						foundEarneds.forEach(earned => {
+							earnedLookup[earned.userID] = true;
+						});
+
+						let resMembers = docs.map(member => {
+							let earned = earnedLookup[member.id] || false;
+
+							return {
+								name: member.name,
+								logo: member.logo,
+								earned
+							}
+						});
+
+						socket.emit('members-retrieved', resMembers);
+					})
+					
+				});
+			}
+		})
+	} else {
+		console.log('> Issue in SearchMembers');
+		console.log(data);
+	}
+}
+
+let SearchMembersDetailed = (socket, data) => {
+	if(data && data.value) {
+		let strippedValue = data.value.replace(/[^\w\s]/gi, '');
+		let regex = new RegExp(strippedValue, 'gi');
+
+		Channel.findOne({owner: data.owner}).then(foundChannel => {
+			if(foundChannel) {
+				User.find({'_id': { $in: foundChannel.members}, name: regex}).sort({'_id': -1}).limit(25).exec((err, docs) => {
+					//Filter out member data: name, logo, achievements
 
 					let resMembers = docs.map(member => {
-						let earned = earnedLookup[member.id] || false;
+
+						let channelIndex = member.channels.findIndex(channel => (channel.channelID === foundChannel.id));
 
 						return {
 							name: member.name,
 							logo: member.logo,
-							earned
+							banned: member.channels[channelIndex].banned || false
+						}
+					});
+
+					socket.emit('member-results', resMembers);
+				});
+			}
+		})
+	} else {
+		console.log('> Issue in SearchMembersDetailed');
+		console.log(data);
+	}
+}
+
+let SearchMod = (socket, data) => {
+	if(data && data.value) {
+		let strippedValue = data.value.replace(/[^\w\s]/gi, '');
+		let regex = new RegExp(strippedValue, 'gi');
+		
+		Channel.findOne({owner: data.owner}).then(foundChannel => {
+			if(foundChannel) {
+				User.find({'_id': { $in: foundChannel.members}, name: regex}).sort({'_id': -1}).limit(25).exec((err, docs) => {
+					
+					let resMembers = docs.map(member => {
+
+						let modIdx = foundChannel.moderators.findIndex(mod => mod.uid === member.id);
+
+						return {
+							name: member.name,
+							logo: member.logo,
+							isMod: modIdx >= 0
 						}
 					});
 
 					socket.emit('members-retrieved', resMembers);
-				})
-				
-			});
-		}
-	})
-}
-
-let SearchMembersDetailed = (socket, data) => {
-	let strippedValue = data.value.replace(/[^\w\s]/gi, '');
-	let regex = new RegExp(strippedValue, 'gi');
-
-	Channel.findOne({owner: data.owner}).then(foundChannel => {
-		if(foundChannel) {
-			User.find({'_id': { $in: foundChannel.members}, name: regex}).sort({'_id': -1}).limit(25).exec((err, docs) => {
-				//Filter out member data: name, logo, achievements
-
-				let resMembers = docs.map(member => {
-
-					let channelIndex = member.channels.findIndex(channel => (channel.channelID === foundChannel.id));
-
-					return {
-						name: member.name,
-						logo: member.logo,
-						banned: member.channels[channelIndex].banned || false
-					}
 				});
-
-				socket.emit('member-results', resMembers);
-			});
-		}
-	})
-}
-
-let SearchMod = (socket, data) => {
-	let strippedValue = data.value.replace(/[^\w\s]/gi, '');
-	let regex = new RegExp(strippedValue, 'gi');
-	
-	Channel.findOne({owner: data.owner}).then(foundChannel => {
-		if(foundChannel) {
-			User.find({'_id': { $in: foundChannel.members}, name: regex}).sort({'_id': -1}).limit(25).exec((err, docs) => {
-				
-				let resMembers = docs.map(member => {
-
-					let modIdx = foundChannel.moderators.findIndex(mod => mod.uid === member.id);
-
-					return {
-						name: member.name,
-						logo: member.logo,
-						isMod: modIdx >= 0
-					}
-				});
-
-				socket.emit('members-retrieved', resMembers);
-			});
-		}
-	})
+			}
+		})
+	} else {
+		console.log('> Issue in SearchMod');
+		console.log(data);
+	}
 }
 
 let StoreSocket = (socket, app) => {
