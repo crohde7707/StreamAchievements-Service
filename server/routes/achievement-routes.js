@@ -360,8 +360,8 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 						});
 					} else {
 
-						Achievement.countDocuments({cid: existingChannel.cid}).then(preCount => {
-
+						Achievement.countDocuments({cid: existingChannel.id}).then(preCount => {
+							console.log(preCount);
 							let achData = {
 								uid: existingChannel.nextUID,
 								channel: existingChannel.owner,
@@ -519,7 +519,7 @@ router.post("/delete", isAuthorized, async (req, res) => {
 			let listenerID = existingAchievement.listener;
 			let uid = existingAchievement.uid;
 
-			Achievement.deleteOne(query).then(err => {
+			Achievement.deleteOne(query).then(async (err) => {
 				
 				let existingListener = await Listener.findById(listenerID);
 
@@ -535,7 +535,7 @@ router.post("/delete", isAuthorized, async (req, res) => {
 						condition: existingListener.condition
 					});
 
-					Listener.deleteOne(listenerQuery).then(err => {
+					Listener.deleteOne({'_id': listenerID}).then(err => {
 						Image.findOneAndUpdate({achievementID: req.body.achievementID}, { $set: {achievementID: ''}}).then(updatedImage => {
 							
 							Earned.deleteMany({channelID: existingChannel.id, achievementID: uid}).then(err => {

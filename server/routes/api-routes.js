@@ -43,12 +43,23 @@ router.get('/users', isAdminAuthorized, (req, res) => {
 		});
 
 		User.find({'_id': { $in: userIDs}}).then(users => {
+
+			let newUsers = [];
+
+			users.forEach(foundUser => {
+				if(foundUser.type === 'verified') {
+					Token.deleteMany({uid: foundUser.id});
+				} else {
+					newUsers.push(foundUser);
+				}
+			})
 			
-			let resUsers = users.map(user => {
+			let resUsers = newUsers.map(user => {
 
 				return {
 					name: user.name,
 					logo: user.logo,
+					uid: user.id,
 					status: ((tokenLookup[user.id] === "not issued")) ? "new" : "pending"
 				}
 			});

@@ -175,7 +175,7 @@ let getListeners = (offset, limit, total, channels) => {
 
 let getChannels = (offset, limit, total) => {
 	return new Promise((resolve, reject) => {
-		Channel.find({owner: 'phireheros'}).sort({'_id': -1}).skip(offset).limit(limit).exec((err, doc) => {
+		Channel.find({}).sort({'_id': -1}).skip(offset).limit(limit).exec((err, doc) => {
 		//User.find({ $or: [{type: 'verified'},{type:'admin'}]}).sort({'_id': -1}).skip(offset).limit(limit).exec((err, doc) => {
 			if(err) {
 				resolve({err: 'Issue retrieving from User sets'});
