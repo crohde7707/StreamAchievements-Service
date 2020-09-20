@@ -911,10 +911,19 @@ let updateChannelPreferences = async (req, res, existingChannel) => {
 		iconsUpdate.hidden = hiddenIcon;
 	}
 
-	if(overlay) {
+	if(overlay && Object.keys(overlay).length > 0) {
 		existingChannel.overlay = overlay;
 		updateSettings = true;
 	}
+
+	//Check for empty overlay configs
+	let overlayKeys = Object.keys(DEFAULT_OVERLAY_CONFIG);
+
+	overlayKeys.forEach(key => {
+		if(!existingChannel.overlay[key] || existingChannel.overlay[key] === undefined) {
+			existingChannel.overlay[key] = DEFAULT_OVERLAY_CONFIG[key];
+		}
+	});
 
 	existingChannel.icons = iconsUpdate;
 
