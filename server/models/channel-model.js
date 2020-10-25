@@ -20,6 +20,10 @@ const channelSchema = new Schema({
 		default: String,
 		hidden: String
 	},
+	integration: {
+		streamlabs: Object,
+		streamelements: Object
+	},
 	oid: String,
 	overlay: {
 		chat: Boolean,

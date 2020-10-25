@@ -97,14 +97,14 @@ router.get("/user", isAuthorized, (req, res) => {
 		patreonInfo = false;
 	}
 
-	if(req.user.integration.streamlabs) {
-		streamlabsInfo = true;
-	} else {
-		streamlabsInfo = false;
-	}
-
 	Notice.countDocuments({user: req.user._id, status: 'new'}).exec().then(count => {
 		Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
+
+			if(existingChannel.integration && existingChannel.integration.streamlabs) {
+				streamlabsInfo = true;
+			} else {
+				streamlabsInfo = false;
+			}
 
 			//Check if user moderates for anyone
 

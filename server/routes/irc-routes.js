@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const User = require('../models/user-model');
+const Channel = require('../models/channel-model');
 const Listener = require('../models/listener-model');
 const Token = require('../models/token-model');
 const Irc = require('../models/irc-model');
@@ -174,23 +175,23 @@ let getListeners = (offset, limit, total, channels) => {
 
 let getChannels = (offset, limit, total) => {
 	return new Promise((resolve, reject) => {
-		User.find({ $or: [{type: 'verified'},{type:'admin'}]}).sort({'_id': -1}).skip(offset).limit(limit).exec((err, doc) => {
+		Channel.find({}).sort({'_id': -1}).skip(offset).limit(limit).exec((err, doc) => {
 			if(err) {
 				resolve({err: 'Issue retrieving from User sets'});
 			} else {
-				let channels = doc.map(user => {
+				let channels = doc.map(channelDoc => {
 					let channel = {
-						name: user.name,
+						name: channelDoc.owner,
+						cid: channelDoc.id,
+						tid: channelDoc.twitchID,
 						'full-access': false
 					};
 
-					let {patreon, streamlabs} = user.integration;
-
-					if(patreon) {
-						if(patreon.forever || patreon.is_gold) {
-							channel['full-access'] = true;
-						}
+					if(channelDoc.gold) {
+						channel['full-access'] = true;
 					}
+
+					let {streamlabs, streamelements} = channelDoc.integration;
 
 					if(streamlabs) {
 						channel.bot = {

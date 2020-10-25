@@ -423,23 +423,32 @@ router.get('/streamlabs/redirect', isAuthorized, (req, res) => {
 
 			let st = cryptr.encrypt(socket.data.socket_token);
 
-			let integration = Object.assign({}, req.user.integration);
+			Channel.findOne({owner: req.user.name}).then(foundChannel => {
 
-			integration.streamlabs = {
-			 	st
-			};
+				let integration;
 
-			req.user.integration = integration;
+				if(foundChannel.integration) {
+					integration = Object.assign({}, foundChannel.integration);
+				} else {
+					integration = {};
+				}
 
-			req.user.save().then(savedUser => {
-				
-				emitConnectBot(req, {
-					channel: savedUser.name,
-					st: savedUser.integration.streamlabs.st,
-					bot: 'streamlabs'
+				integration.streamlabs = {
+				 	st
+				};
+
+				foundChannel.integration = integration;
+
+				foundChannel.save().then(savedChannel => {
+					
+					emitConnectBot(req, {
+						channel: req.user.name,
+						st: savedChannel.integration.streamlabs.st,
+						bot: 'streamlabs'
+					});
+				 	
+				 	res.redirect(process.env.WEB_DOMAIN + 'profile?tab=integration');
 				});
-			 	
-			 	res.redirect(process.env.WEB_DOMAIN + 'profile?tab=integration');
 			});
 		})
 	});
@@ -576,22 +585,25 @@ router.post('/patreon/sync', isAuthorized, (req, res) => {
 });
 
 router.post('/streamlabs/unlink', isAuthorized, (req, res) => {
-	let integration = Object.assign({}, req.user.integration);
 
-	delete integration.streamlabs;
+	Channel.findOne({owner: req.user.name}).then(foundChannel => {
+		let integration = Object.assign({}, foundChannel.integration);
 
-	req.user.integration = integration;
+		delete integration.streamlabs;
 
-	req.user.save().then(savedUser => {
+		foundChannel.integration = integration;
 
-		emitDisconnectBot(req, {
-			channel: savedUser.name,
-			bot: 'streamlabs'
-		});
+		foundChannel.save().then(savedChannel => {
 
-		res.json({
-			success: true,
-			service: 'streamlabs'
+			emitDisconnectBot(req, {
+				channel: req.user.name,
+				bot: 'streamlabs'
+			});
+
+			res.json({
+				success: true,
+				service: 'streamlabs'
+			});
 		});
 	});
 })

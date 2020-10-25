@@ -341,6 +341,48 @@ async function handleRank(req, res) {
 	//User.find({})
 }
 
+router.post('/integration', isAdminAuthorized, (req, res) => {
+	handleIntegration();
+});
+
+async function handleIntegration() {
+	let totalChannelCount = 0;
+	let offset = 0;
+	let limit = 25;
+	let i;
+
+	let channels;
+
+	totalChannelCount = await Channel.countDocuments();
+
+	console.log("Updating Integration for " + totalChannelCount + " channels...");
+
+	while (offset < totalChannelCount) {
+		i = 0;
+
+		console.log('\n\nUpdating ' + offset + ' - ' + (offset + limit - 1) + '...\n');
+		channels = await Channel.find().sort({'_id': -1}).skip(offset).limit(limit).exec();
+
+		await asyncForEach(channels, async (channel) => {
+			console.log(channel.owner);
+			let user = await User.findOne({'integration.twitch.etid': channel.twitchID});
+
+			if(user) {
+				if(user.integration.streamlabs) {
+					channel.integration = {
+						streamlabs: user.integration.streamlabs,
+						streamelements: null
+					}
+
+					channel.save();
+				}
+			}
+		});
+
+		offset = offset + limit;
+	}
+}
+
 router.post('/migrate', isAdminAuthorized, (req, res) => {
 	handleMigrate();
 });
