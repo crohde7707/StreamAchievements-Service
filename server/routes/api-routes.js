@@ -100,7 +100,7 @@ router.get("/user", isAuthorized, (req, res) => {
 	Notice.countDocuments({user: req.user._id, status: 'new'}).exec().then(count => {
 		Channel.findOne({twitchID: req.user.integration.twitch.etid}).then((existingChannel) => {
 
-			if(existingChannel.integration && existingChannel.integration.streamlabs) {
+			if(existingChannel && existingChannel.integration && existingChannel.integration.streamlabs) {
 				streamlabsInfo = true;
 			} else {
 				streamlabsInfo = false;
