@@ -343,7 +343,7 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 	} else {
 
 		User.findOne({name: existingChannel.owner}).then(foundUser => {
-			let streamlabs = foundUser.integration.streamlabs;
+			let streamlabs = existingChannel.integration.streamlabs;
 
 			if((req.body.achType === "5" || req.body.achType === "6") && !streamlabs) {
 				res.json({
