@@ -108,7 +108,10 @@ let updateAchievement = (req, channel, existingAchievement, updates, listenerUpd
 									achType: existingListener.achType,
 									query: existingListener.query,
 									bot: existingListener.bot,
-									condition: existingListener.condition
+									condition: existingListener.condition,
+									bots: existingListener.bots,
+									conditions: existingListener.conditions,
+									queries: existingListener.queries
 								});
 
 								Listener.deleteOne({ _id : updatedAchievement.listener}).then(err => {
@@ -143,7 +146,10 @@ let updateAchievement = (req, channel, existingAchievement, updates, listenerUpd
 								achType: newListener.achType,
 								query: newListener.query,
 								bot: newListener.bot,
-								condition: newListener.condition
+								condition: newListener.condition,
+								bots: newListener.bots,
+								conditions: newListener.conditions,
+								queries: newListener.queries
 							});
 
 							updatedAchievement.listener = newListener.id;
@@ -156,36 +162,45 @@ let updateAchievement = (req, channel, existingAchievement, updates, listenerUpd
 						});
 					} else {
 
-						Listener.findOneAndUpdate({ _id: updatedAchievement.listener }, { $set: listenerUpdates }, { new: true }).then((updatedListener) => {
+						Listener.findOne({ _id: updatedAchievement.listener }).then(existingListener => {
+							let prevBots = existingListener.bots || {};
 
-							if(updatedListener) {
+							Listener.findOneAndUpdate({ _id: updatedAchievement.listener }, { $set: listenerUpdates }, { new: true }).then((updatedListener) => {
 
-								let listenerData = {
-									uid: updatedListener.uid,
-									channel: channel.owner,
-									cid: channel.id,
-									achievement: updatedListener.achievement,
-									achType: updatedListener.achType,
-									query: updatedListener.query,
-									bot: updatedListener.bot,
-									condition: updatedListener.condition,
-									unlocked: updatedListener.unlocked
-								};
+								if(updatedListener) {
 
-								emitUpdateListener(req, listenerData);
+									let listenerData = {
+										uid: updatedListener.uid,
+										channel: channel.owner,
+										cid: channel.id,
+										achievement: updatedListener.achievement,
+										achType: updatedListener.achType,
+										query: updatedListener.query,
+										bot: updatedListener.bot,
+										condition: updatedListener.condition,
+										queries: updatedListener.queries,
+										bots: updatedListener.bots,
+										conditions: updatedListener.conditions,
+										unlocked: updatedListener.unlocked,
+										prevBots
+									};
 
-								let merge = combineAchievementAndListeners(updatedAchievement, updatedListener);
+									emitUpdateListener(req, listenerData);
 
-								resolve({
-									update: true,
-									achievement: merge
-								});
-							} else {
-								resolve({
-									update: false
-								});
-							}
-						});
+									let merge = combineAchievementAndListeners(updatedAchievement, updatedListener);
+
+									resolve({
+										update: true,
+										achievement: merge
+									});
+								} else {
+									resolve({
+										update: false
+									});
+								}
+							});
+
+						})
 					}
 				} else {
 					Listener.findOne({ _id: updatedAchievement.listener }).then(foundListener => {
@@ -251,7 +266,15 @@ let handleUpdate = (req, res, existingChannel, isMod) => {
 		if(existingAchievement) {
 			let updates = req.body;
 
-			let {achType, query, bot, condition} = updates;
+			let {
+				achType,
+				query,
+				bot,
+				condition,
+				queries,
+				bots,
+				conditions
+			} = updates;
 
 			let listenerUpdates = {};
 
@@ -270,6 +293,18 @@ let handleUpdate = (req, res, existingChannel, isMod) => {
 			if(condition) {
 				listenerUpdates.condition = condition;
 				delete updates.condition;
+			}
+			if(queries) {
+				listenerUpdates.queries = queries;
+				delete updates.queries;
+			}
+			if(bots) {
+				listenerUpdates.bots = bots;
+				delete updates.bots;
+			}
+			if(conditions) {
+				listenerUpdates.conditions = conditions;
+				delete updates.conditions;
 			}
 
 			//If new image, upload it
@@ -386,11 +421,33 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 								uid: uuid()
 							};
 
-							listenerData.condition = req.body.condition;
+							if(listenerData.achType === "4") {
 
-							if(listenerData.achType === "4" || listenerData.achType === "5") {
-								listenerData.bot = req.body.bot;
-								listenerData.query = req.body.query;
+								let botKeys = Object.keys(req.body.bots).length;
+								let conditionKeys = Object.keys(req.body.conditions).length;
+								let queryKeys = Object.keys(req.body.queries).length;
+
+								if(
+									botKeys === conditionKeys &&
+									botKeys === queryKeys &&
+									botKeys > 0 && botKeys <= 3
+								) {
+									listenerData.bots = req.body.bots;
+									listenerData.conditions = req.body.conditions;
+									listenerData.queries = req.body.queries;
+								} else {
+									res.json({
+										created: false,
+										message: "Issue occured when creating conditions!"
+									});
+								}
+							} else {
+								listenerData.condition = req.body.condition;
+
+								if(listenerData.achType === "5") {
+									listenerData.bot = req.body.bot;
+									listenerData.query = req.body.query;
+								}
 							}
 
 							Listener.findOne(listenerData).then(foundListener => {
@@ -430,7 +487,10 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 																		achType: listenerData.achType,
 																		query: listenerData.query,
 																		bot: listenerData.bot,
-																		condition: listenerData.condition
+																		condition: listenerData.condition,
+																		queries: listenerData.queries,
+																		conditions: listenerData.conditions,
+																		bots: listenerData.bots
 																	});
 
 																	newAchievement.listener = newListener.id;
@@ -470,7 +530,10 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 															achType: listenerData.achType,
 															query: listenerData.query,
 															bot: listenerData.bot,
-															condition: listenerData.condition
+															condition: listenerData.condition,
+															queries: listenerData.queries,
+															conditions: listenerData.conditions,
+															bots: listenerData.bots
 														});
 
 														newAchievement.listener = newListener.id;
@@ -532,7 +595,10 @@ router.post("/delete", isAuthorized, (req, res) => {
 									achType: existingListener.achType,
 									query: existingListener.query,
 									bot: existingListener.bot,
-									condition: existingListener.condition
+									condition: existingListener.condition,
+									queries: existingListener.queries,
+									conditions: existingListener.conditions,
+									bots: existingListener.bots
 								});
 
 								Listener.deleteOne(listenerQuery).then(err => {

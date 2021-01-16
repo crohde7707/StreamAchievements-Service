@@ -8,8 +8,23 @@ const listenerSchema = new Schema({
 	achType: String,
 	resubType: String,
 	bot: String,
+	bots: {
+		bot0: String,
+		bot1: String,
+		bot2: String
+	},
 	query: Schema.Types.Mixed,
 	condition: String,
+	queries: {
+		query0: Schema.Types.Mixed,
+		query1: Schema.Types.Mixed,
+		query2: Schema.Types.Mixed
+	},
+	conditions: {
+		condition0: Schema.Types.Mixed,
+		condition1: Schema.Types.Mixed,
+		condition2: Schema.Types.Mixed
+	},
 	achievement: String,
 	aid: Number,
 	unlocked: Boolean
