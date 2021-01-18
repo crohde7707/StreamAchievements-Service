@@ -32,3 +32,13 @@ module.exports = Achievement;
 	3 - Gift Sub
 	4 - Raid
 */
+
+/*
+    Rank Codes:
+    -------------
+    0 - Bronze
+    1 - Silver
+    2 - Gold
+    3 - Platnium
+    4 - Feat (not ranked)
+*/
