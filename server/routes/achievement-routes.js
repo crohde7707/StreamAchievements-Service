@@ -741,18 +741,49 @@ let getAchievementData = (req, res, existingChannel, achievement) => {
 					channel: existingAchievement.channel
 				}).then(existingListener => {
 					if(existingListener) {
-						let listenerData = Object.assign({}, existingListener['_doc']);
-						let achievementData = Object.assign({}, existingAchievement['_doc']);
+						//if custom and still in old format, update
+						if(existingListener.achType === "4" && existingListener.query !== "_updated") {
+							console.log('hello');
+							existingListener.queries = {
+								"query0": existingListener.query
+							};
+							existingListener.bots = {
+								"bot0": existingListener.bot
+							};
+							existingListener.conditions = {
+								"condition0": existingListener.condition
+							};
 
-						delete listenerData._id;
+							existingListener.query = "_updated";
 
-						let mergedAchievement = Object.assign(achievementData, listenerData);
+							existingListener.save().then(savedListener => {
+								let listenerData = Object.assign({}, savedListener['_doc']);
+								let achievementData = Object.assign({}, existingAchievement['_doc']);
 
-						if(!mergedAchievement.unlocked) {
-							mergedAchievement.unlocked = false;
+								delete listenerData._id;
+
+								let mergedAchievement = Object.assign(achievementData, listenerData);
+
+								if(!mergedAchievement.unlocked) {
+									mergedAchievement.unlocked = false;
+								}
+
+								resolve(mergedAchievement);
+							})
+						} else {
+							let listenerData = Object.assign({}, existingListener['_doc']);
+							let achievementData = Object.assign({}, existingAchievement['_doc']);
+
+							delete listenerData._id;
+
+							let mergedAchievement = Object.assign(achievementData, listenerData);
+
+							if(!mergedAchievement.unlocked) {
+								mergedAchievement.unlocked = false;
+							}
+
+							resolve(mergedAchievement);
 						}
-
-						resolve(mergedAchievement);
 					} else {
 						resolve(existingAchievement);
 					}
