@@ -140,7 +140,7 @@ router.get('/listeners', (req, res) => {
 	let total = parseInt(req.query.total) || undefined;
 	let channels = req.query.channels;
 
-	if(process.env.NODE_ENV !== 'production') {
+	if(process.env.NODE_ENV === 'production') {
 
 		if(!total) {
 			//get total count
