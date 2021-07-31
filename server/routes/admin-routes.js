@@ -12,6 +12,12 @@ const mongoose = require('mongoose');
 const {isAdminAuthorized} = require('../utils/auth-utils');
 const {emitOverlayAlert} = require('../utils/socket-utils');
 
+const Cryptr = require('cryptr');
+const cryptr = new Cryptr(process.env.SCK);
+
+
+const GOLD_TIER_ID = '3497710';
+
 router.post('/dedupMembers', isAdminAuthorized, (req, res) => {
 	Channel.findOne({owner: 'phirehero'}).then(foundChannel => {
 		console.log(foundChannel.members);
@@ -103,6 +109,63 @@ router.post('/fixit', isAdminAuthorized, (req, res) => {
 		}
 	})
 })
+
+router.post('/patreon', isAdminAuthorized, (req, res) => {
+	let user = req.body.user;
+
+	User.findOne({name: user}).then(foundUser => {
+
+		if(foundUser) {
+			let patreonInfo = foundUser.integration.patreon;
+			let patreonPromise;
+
+			if(patreonInfo && patreonInfo.status !== 'lifetime') {
+				let {at, rt, id, expires} = patreonInfo;
+
+				let refreshPromise;
+
+				let patreon_access_token = cryptr.decrypt(at);
+				
+				try {
+
+					axios.get(`https://www.patreon.com/api/oauth2/v2/members/${id}?include=currently_entitled_tiers&fields%5Bmember%5D=patron_status,full_name,is_follower,last_charge_date&fields%5Btier%5D=amount_cents,description,discord_role_ids,patron_count,published,published_at,created_at,edited_at,title,unpublished_at`, {
+						headers: {
+							Authorization: `Bearer ${patreon_access_token}`
+						}
+					}).then(patreonResponse => {
+						console.log(patreonResponse.data.data);
+
+						//active_patron, declined_patron, former_patron, null
+						// let patron_status = patreonResponse.data.data.attributes.patron_status;
+						// let is_follower = patreonResponse.data.data.attributes.is_follower;
+						let tiers = patreonResponse.data.data.relationships.currently_entitled_tiers;
+						let isGold = tiers.data.map(tier => tier.id).indexOf(GOLD_TIER_ID) >= 0;
+
+						console.log(tiers);
+
+						// let patreonUpdate = {
+						// 	id: patreonInfo.id,
+						// 	thumb_url: patreonInfo.thumb_url,
+						// 	vanity: patreonInfo.vanity,
+						// 	at: at,
+						// 	rt: rt,
+						// 	is_follower,
+						// 	status: patron_status,
+						// 	is_gold: isGold,
+						// 	expires
+						// };
+					});
+				} catch(err) {
+					console.log(err);
+				}
+			}
+		} else {
+			console.log("user not found");
+		}
+
+
+	});
+});
 
 router.post('/flush', isAdminAuthorized, (req, res) => {
 	Queue.find({}).then(queues => {

@@ -492,6 +492,10 @@ router.get('/patreon/redirect', isAuthorized, (req, res) => {
 				vanity = res.data.data.attributes.vanity;
 				thumb_url = res.data.data.attributes.thumb_url;
 
+				console.log('vvvvvvvvvvvvvvvvv');
+				console.log(res);
+				console.log('-----------------');
+
 				if(!res.data.included) {
 					//patron is not a member of the patreon
 					//set at, rt, and thumb_url in DB, display panel to follow
@@ -513,6 +517,9 @@ router.get('/patreon/redirect', isAuthorized, (req, res) => {
 							Authorization: `Bearer ${tokenResponse.access_token}`
 						}
 					}).then(res => {
+
+						console.log(res.data.data);
+						console.log('^^^^^^^^^^^^^^^^');
 						
 						//active_patron, declined_patron, former_patron, null
 						let patron_status = res.data.data.attributes.patron_status;
