@@ -409,7 +409,7 @@ let createAchievement = (req, res, existingChannel, isMod) => {
 								limited: req.body.limited,
 								secret: req.body.secret,
 								listener: req.body.listener,
-								alert: req.body.alert || true,
+								alert: (req.body.alert !== undefined) ? req.body.alert : true,
 								rank: req.body.rank || 0,
 								order: preCount
 							};
