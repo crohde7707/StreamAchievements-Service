@@ -7,13 +7,14 @@ const Irc = require('../models/irc-model');
 const mongoose = require('mongoose');
 
 router.get('/init', (req, res) => {
-	Irc.findOne().then(ircData => {
+	Irc.findOne({obtainmentTimestamp: { $exists: true }}).then(ircData => {
+		console.log(ircData);
 		if(ircData) {
 			res.json({
-				at: ircData.at,
-				rt: ircData.rt,
-				last: ircData.last,
-				expires_in: ircData.expires_in
+				accessToken: ircData.accessToken,
+				refreshToken: ircData.refreshToken,
+				expiresIn: ircData.expiresIn,
+				obtainmentTimestamp: ircData.obtainmentTimestamp
 			});
 		} else {
 			res.json({
@@ -24,13 +25,13 @@ router.get('/init', (req, res) => {
 });
 
 router.put('/init', (req, res) => {
-	Irc.findOne().then(ircData => {
+	Irc.findOne({obtainmentTimestamp: { $exists: true }}).then(ircData => {
 
 		if(ircData) {
-			ircData.at = req.body.at;
-			ircData.rt = req.body.rt;
-			ircData.last = Date.now();
-			ircData.expires_in = req.body.expires_in;
+			ircData.accessToken = req.body.accessToken;
+			ircData.refreshToken = req.body.refreshToken;
+			ircData.obtainmentTimestamp = req.body.obtainmentTimestamp;
+			ircData.expiresIn = req.body.expiresIn;
 
 			ircData.save().then(savedIRC => {
 				res.json({
@@ -39,10 +40,10 @@ router.put('/init', (req, res) => {
 			})
 		} else {
 			new Irc({
-				at: req.body.at,
-				rt: req.body.rt,
-				last: Date.now(),
-				expires_in: req.body.expires_in
+				accessToken: req.body.at,
+				refreshToken: req.body.rt,
+				expiresIn: req.body.expiresIn,
+				obtainmentTimestamp: req.body.obtainmentTimestamp
 			}).save().then(savedIRC => {
 				res.json({
 					success: true
@@ -57,7 +58,7 @@ router.get('/channels', (req, res) => {
 	let limit = parseInt(req.query.limit) || 50;
 	let total = parseInt(req.query.total) || undefined;
 
-	if(process.env.NODE_ENV === 'production') {
+	if(process.env.NODE_ENV !== 'production') {
 
 		if(!total) {
 			total = User.estimatedDocumentCount().exec().then(count => {
