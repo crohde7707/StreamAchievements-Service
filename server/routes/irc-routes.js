@@ -58,7 +58,7 @@ router.get('/channels', (req, res) => {
 	let limit = parseInt(req.query.limit) || 50;
 	let total = parseInt(req.query.total) || undefined;
 
-	if(process.env.NODE_ENV !== 'production') {
+	if(process.env.NODE_ENV === 'production') {
 
 		if(!total) {
 			total = User.estimatedDocumentCount().exec().then(count => {
